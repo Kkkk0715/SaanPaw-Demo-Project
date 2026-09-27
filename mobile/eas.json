@@ -8,15 +8,13 @@
       "distribution": "internal",
       "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://saan-paw-demo-project-backend-pied.vercel.app/api/v1",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "$MAPBOX_TOKEN"
+        "EXPO_PUBLIC_API_URL": "https://saan-paw-demo-project-backend-pied.vercel.app/api/v1"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://saan-paw-demo-project-backend-pied.vercel.app/api/v1",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "$MAPBOX_TOKEN"
+        "EXPO_PUBLIC_API_URL": "https://saan-paw-demo-project-backend-pied.vercel.app/api/v1"
       }
     }
   },
