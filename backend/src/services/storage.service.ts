@@ -19,12 +19,16 @@ const EXTENSIONS: Record<string, string> = {
 const useBlobStorage = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 
 export const localUploadDir = path.resolve(env.uploadDir);
-if (!useBlobStorage) fs.mkdirSync(localUploadDir, { recursive: true });
+let localUploadDirReady = false;
 
 /**
  * Saves an uploaded photo and returns the URL clients should use to fetch it - a Vercel Blob
  * URL when deployed there, otherwise a `/uploads/...` path served by app.ts's static route
  * (self-hosted deployments: Docker, a VPS, or plain local development).
+ *
+ * The local directory is created here, on first use, rather than at module load: creating it
+ * eagerly would crash every request (not just uploads) on a host with a read-only filesystem
+ * and no BLOB_READ_WRITE_TOKEN, instead of only failing when a photo is actually uploaded.
  */
 export async function saveUploadedPhoto(buffer: Buffer, mimeType: string): Promise<string> {
   const filename = `${crypto.randomUUID()}${EXTENSIONS[mimeType] ?? '.jpg'}`;
@@ -34,6 +38,10 @@ export async function saveUploadedPhoto(buffer: Buffer, mimeType: string): Promi
     return blob.url;
   }
 
+  if (!localUploadDirReady) {
+    fs.mkdirSync(localUploadDir, { recursive: true });
+    localUploadDirReady = true;
+  }
   await fs.promises.writeFile(path.join(localUploadDir, filename), buffer);
   return `/uploads/${filename}`;
 }
