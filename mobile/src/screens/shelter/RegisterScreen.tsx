@@ -13,6 +13,7 @@ import {
   Select,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
+import { apiRequest } from '@/services/api';
 
 /**
  * Shelter Admin Module - Register.
@@ -30,11 +31,14 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
   const [radius, setRadius] = useState(5000);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const center =
     SJDM_BARANGAYS.find((b) => b.name === barangay)?.center ?? SJDM_BARANGAYS[4].center;
 
-  const submit = () => {
+  const submit = async () => {
+    setSubmitError(null);
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Enter the shelter name.';
     if (!permit.trim()) next.permit = 'The city permit number is required for verification.';
@@ -45,7 +49,29 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
     if (!barangay) next.barangay = 'Select the barangay.';
     setErrors(next);
     if (Object.keys(next).length) return;
-    setSubmitted(true);
+
+    setBusy(true);
+    try {
+      await apiRequest('/shelter/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          barangay,
+          contactNumber: contact,
+          email,
+          address,
+          location: center,
+          operatingRadiusMeters: radius,
+          permitNumber: permit,
+          capacity: Number(capacity),
+        }),
+      });
+      setSubmitted(true);
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : 'Could not submit your application.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (submitted) {
@@ -83,6 +109,9 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
       />
 
       <View style={{ padding: theme.spacing(2.5), gap: theme.spacing(2), width: '100%', maxWidth: COLUMN, alignSelf: 'center' }}>
+        {submitError ? (
+          <Banner tone="danger" icon="alert-circle" title="Could not submit application" message={submitError} />
+        ) : null}
         <Field label="Shelter name" value={name} onChangeText={setName} placeholder="e.g. Muzon Stray Haven" icon="home-outline" error={errors.name} />
         <Field
           label="City permit / accreditation number"
@@ -117,7 +146,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           markers={[{ id: 'shelter', coordinate: center, kind: 'shelter', label: name || 'Your shelter' }]}
         />
 
-        <Button label="Submit for verification" onPress={submit} variant="accent" icon="send-outline" />
+        <Button label="Submit for verification" onPress={submit} loading={busy} variant="accent" icon="send-outline" />
         <Button label="Back to login" variant="ghost" onPress={() => navigation.goBack()} />
       </View>
     </ScrollView>

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
 import { useAuth } from '@/context/AuthContext';
+import { apiRequest } from '@/services/api';
 
 /**
  * User Module - Registration.
@@ -31,11 +32,13 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
   const [radius, setRadius] = useState(3000);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const center =
     SJDM_BARANGAYS.find((b) => b.name === barangay)?.center ?? SJDM_BARANGAYS[4].center;
 
   const submit = async () => {
+    setSubmitError(null);
     const next: Record<string, string> = {};
     if (!fullName.trim()) next.fullName = 'Enter your full name.';
     if (!/^\S+@\S+\.\S+$/.test(email)) next.email = 'Enter a valid email address.';
@@ -46,9 +49,25 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
     if (Object.keys(next).length) return;
 
     setBusy(true);
-    // The account is created locally for the demo; the API call replaces this.
-    await signIn('user', 'user@saanpaw.ph', 'saanpaw123');
-    setBusy(false);
+    try {
+      await apiRequest('/user/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          fullName,
+          email,
+          phone,
+          password,
+          barangay,
+          alertRadiusMeters: radius,
+          location: center,
+        }),
+      });
+      await signIn('user', email, password);
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : 'Could not create your account.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -63,6 +82,9 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
       />
 
       <View style={{ padding: theme.spacing(2.5), gap: theme.spacing(2), width: '100%', maxWidth: COLUMN, alignSelf: 'center' }}>
+        {submitError ? (
+          <Banner tone="danger" icon="alert-circle" title="Could not create account" message={submitError} />
+        ) : null}
         <Field
           label="Full name"
           value={fullName}
