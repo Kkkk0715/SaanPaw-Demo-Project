@@ -4,20 +4,18 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { theme } from '@/constants/theme';
 import { SJDM_CENTER } from '@saanpaw/shared';
 import type { LatLng } from '@saanpaw/shared';
-import { MAPBOX_CONFIGURED, MAPBOX_STYLE, MAPBOX_TOKEN } from '@/config/mapbox';
-import { buildMapHtml, type MapMarkerConfig } from './mapboxHtml';
+import { buildMapHtml, type MapMarkerConfig } from './osmMapHtml';
 import { MARKER_COLOR, type MapMarker } from './markerStyle';
 
 export type { MapMarker };
 
 /**
- * A real Mapbox map (Android/iOS build).
+ * A real OpenStreetMap map (Android/iOS build), rendered with Leaflet.
  *
- * Mapbox GL JS has no React Native binding, so this runs it as a web page
- * inside a WebView loaded from Mapbox's CDN, and exchanges marker taps, pin
- * drags, and location picks with it over `postMessage`. See `mapboxHtml.ts`
- * for the page itself, and `MapCanvas.web.tsx` for the browser build, which
- * runs the same library directly since there is no WebView on the web.
+ * Leaflet has no React Native binding, so this runs it as a web page inside a WebView loaded
+ * from a CDN, and exchanges marker taps, pin drags, and location picks with it over
+ * `postMessage`. See `osmMapHtml.ts` for the page itself, and `MapCanvas.web.tsx` for the browser
+ * build, which runs the same library directly since there is no WebView on the web.
  */
 
 const toMarkerConfig = (m: MapMarker): MapMarkerConfig => ({
@@ -66,12 +64,10 @@ export function MapCanvas({
   const html = useMemo(
     () =>
       buildMapHtml({
-        token: MAPBOX_TOKEN,
-        style: MAPBOX_STYLE,
         center: initialCenter,
         zoom: initialZoom,
         minZoom: 10,
-        maxZoom: 18,
+        maxZoom: 19,
         pickable,
         markers: markers.map(toMarkerConfig),
         selectedMarkerId,
@@ -118,21 +114,11 @@ export function MapCanvas({
     } else if (message.type === 'pick' && message.lat != null && message.lng != null) {
       onPickLocationRef.current?.({ latitude: message.lat, longitude: message.lng });
     } else if (message.type === 'error') {
-      // A bad/restricted token or no network reaches here as a Mapbox 'error' event inside the
-      // page, not a WebView load failure - without this the map just stays blank with no reason.
+      // The map library failing to load from its CDN reaches here as an in-page event, not a
+      // WebView load failure - without this the map just stays blank with no reason.
       setLoadError(message.message ?? 'The map failed to load.');
     }
   };
-
-  if (!MAPBOX_CONFIGURED) {
-    return (
-      <View style={[styles.wrap, styles.missingToken, { height }]}>
-        <Text style={styles.missingTokenText}>
-          Map unavailable - set EXPO_PUBLIC_MAPBOX_TOKEN to a Mapbox public token to enable it.
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.wrap, { height }]}>
@@ -142,7 +128,7 @@ export function MapCanvas({
         originWhitelist={['*']}
         onMessage={handleMessage}
         // These catch the WebView failing to load the page at all (e.g. no network), which is
-        // a different failure from the Mapbox-internal 'error' message handled above.
+        // a different failure from the in-page 'error' message handled above.
         onError={(e) => setLoadError(e.nativeEvent.description || 'The map failed to load.')}
         onHttpError={(e) => setLoadError(`The map failed to load (HTTP ${e.nativeEvent.statusCode}).`)}
         style={styles.webview}
@@ -170,7 +156,6 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   webview: { flex: 1, backgroundColor: 'transparent' },
-  missingToken: { alignItems: 'center', justifyContent: 'center', padding: 20 },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
