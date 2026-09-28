@@ -35,8 +35,9 @@ export const developerService = {
       statsService.platformStats(),
       Shelter.find().sort({ registeredAt: -1 }).lean(),
       User.find().sort({ joinedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
-      LostPetReport.find().sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
-      FoundAnimalReport.find().sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
+      // Removed reports stay out of the console, matching what "Remove" promises.
+      LostPetReport.find({ isHiddenByModeration: false }).sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
+      FoundAnimalReport.find({ isHiddenByModeration: false }).sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       ModerationFlag.find().sort({ createdAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
     ]);
 
@@ -125,6 +126,10 @@ export const developerService = {
   }) {
     const flag = await ModerationFlag.findById(params.flagId);
     if (!flag) throw ApiError.notFound('Flag not found');
+    if (flag.status !== 'open') throw ApiError.conflict('This flag has already been resolved');
+    if (params.action !== 'dismiss' && params.action !== 'remove_report') {
+      throw ApiError.badRequest('action must be "dismiss" or "remove_report"');
+    }
 
     if (params.action === 'dismiss') {
       flag.status = 'dismissed';
@@ -140,6 +145,10 @@ export const developerService = {
     flag.resolutionNote = params.note;
     await flag.save();
 
+    // An upheld flag counts against the reporter; enough of them ban the account.
+    if (params.action === 'remove_report') {
+      await User.findByIdAndUpdate(flag.reporterId, { $inc: { flaggedReportCount: 1 } });
+    }
     const escalation =
       params.action === 'remove_report'
         ? await moderationService.escalateReporter(String(flag.reporterId))

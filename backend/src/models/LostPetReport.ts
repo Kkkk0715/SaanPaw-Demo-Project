@@ -30,6 +30,7 @@ const lostPetReportSchema = new Schema(
     caseId: { type: Schema.Types.ObjectId, ref: 'AnimalCase' },
     matchedFoundReportId: { type: Schema.Types.ObjectId, ref: 'FoundAnimalReport' },
     isHiddenByModeration: { type: Boolean, default: false },
+    moderationFlagId: { type: Schema.Types.ObjectId, ref: 'ModerationFlag' },
   },
   { timestamps: { createdAt: 'reportedAt', updatedAt: 'updatedAt' } },
 );

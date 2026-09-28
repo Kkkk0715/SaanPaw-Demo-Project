@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../middleware/auth';
+import { blockBannedUser } from '../../middleware/blockBanned';
 import { geoFence } from '../../middleware/geoFence';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { userController } from './user.controller';
@@ -9,7 +10,7 @@ const router = Router();
 // Registration (public)
 router.post('/register', geoFence, asyncHandler(userController.register));
 
-router.use(authenticate, authorize('user'));
+router.use(authenticate, authorize('user'), blockBannedUser);
 
 router.get('/me', asyncHandler(userController.me));
 router.patch('/profile', geoFence, asyncHandler(userController.updateProfile));

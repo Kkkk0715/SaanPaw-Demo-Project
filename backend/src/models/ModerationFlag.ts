@@ -15,6 +15,8 @@ const moderationFlagSchema = new Schema(
       required: true,
     },
     aiConfidence: { type: Number },
+    /** What the screen found, shown to the Developer next to the flag. */
+    detail: { type: String },
     status: { type: String, enum: ['open', 'dismissed', 'actioned'], default: 'open', index: true },
     resolvedBy: { type: Schema.Types.ObjectId, ref: 'DeveloperAccount' },
     resolutionNote: { type: String },

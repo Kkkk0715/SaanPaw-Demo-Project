@@ -222,7 +222,7 @@ export function serializeFlag(doc: any, reporterName: string, reporterBanned: bo
     reporterName,
     reason: FLAG_REASON_MAP[doc.reason] ?? 'spam',
     confidence: doc.aiConfidence ?? 0,
-    detail: doc.resolutionNote || FLAG_DETAIL[doc.reason] || '',
+    detail: doc.resolutionNote || doc.detail || FLAG_DETAIL[doc.reason] || '',
     flaggedAt: doc.createdAt?.toISOString?.(),
     resolution,
   };

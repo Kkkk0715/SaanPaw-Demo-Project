@@ -120,8 +120,12 @@ export const userService = {
       reportType: 'lost',
       reportId: String(report._id),
       reporterId: String(reporterId),
-      text: `${data.breed ?? ''} ${data.color ?? ''} ${data.description ?? ''}`,
+      text: [data.name, data.breed, data.color, data.distinctMarks, data.description].filter(Boolean).join(' '),
       imageCount: report.imageUrls.length,
+      animalType: report.animalType,
+      color: data.color,
+      barangay: report.barangay,
+      description: data.description,
     });
     
     await smartAlertService.dispatchReportAlert({
@@ -183,8 +187,12 @@ export const userService = {
       reportType: 'found',
       reportId: String(report._id),
       reporterId: String(reporterId),
-      text: `${data.breed ?? ''} ${data.color ?? ''} ${data.description ?? ''}`,
+      text: [data.name, data.breed, data.color, data.distinctMarks, data.description].filter(Boolean).join(' '),
       imageCount: report.imageUrls.length,
+      animalType: report.animalType,
+      color: data.color,
+      barangay: report.barangay,
+      description: data.description,
     });
     
     await smartAlertService.dispatchReportAlert({
