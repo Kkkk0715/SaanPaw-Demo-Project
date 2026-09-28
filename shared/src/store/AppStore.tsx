@@ -55,7 +55,6 @@ import type {
  * server. A failed request surfaces in `sync.error` and the reload rolls the
  * screen back to what the server actually holds.
  *
- * Messaging has no API yet, so conversations and messages stay local.
  */
 
 const POLL_MS = 30_000;
@@ -193,7 +192,9 @@ interface AppState {
   updateShelterProfile: (patch: Partial<Shelter>) => void;
   updateUserProfile: (patch: Partial<AppUser>) => void;
   sendMessage: (conversationId: string, senderRole: Role, body: string) => void;
-  startConversation: (shelterId: string, subject: string, body: string) => string;
+  startConversation: (shelterId: string, subject: string, body: string, reportId?: string) => string;
+  /** Clears the unread count for the signed-in side of a thread. */
+  markConversationRead: (conversationId: string) => void;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: (role: Role) => void;
   resolveFlag: (flagId: string, resolution: ModerationFlag['resolution']) => void;
@@ -245,6 +246,8 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     setCases(snap.cases);
     setFlags(snap.flags);
     setNotifications(snap.notifications);
+    setConversations(snap.conversations);
+    setMessages(snap.messages);
     setServerStats(snap.stats);
     // The server does not rank matches yet, so keep the ones ranked on this device.
     setMatches((prev) => {
@@ -752,6 +755,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
 
   const sendMessage = useCallback<AppState['sendMessage']>(
     (conversationId, senderRole, body) => {
+      const session = sessionRef.current;
       const sentAt = new Date().toISOString();
       setMessages((prev) => [
         ...prev,
@@ -776,13 +780,18 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
             : c,
         ),
       );
+      if (session) send(apiActions.sendMessage(session, conversationId, body));
     },
-    [currentShelter.name, currentUser.fullName],
+    [currentShelter.name, currentUser.fullName, send],
   );
 
   const startConversation = useCallback<AppState['startConversation']>(
-    (shelterId, subject, body) => {
-      const id = uid('conv');
+    (shelterId, subject, body, reportId) => {
+      const session = sessionRef.current;
+      // The server keeps this id, so the thread can open before the request finishes.
+      const id = session
+        ? Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+        : uid('conv');
       const at = new Date().toISOString();
       setConversations((prev) => [
         {
@@ -790,6 +799,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
           shelterId,
           userId: currentUser.id,
           userName: currentUser.fullName,
+          reportId,
           subject,
           lastMessageAt: at,
           unreadForShelter: 1,
@@ -801,9 +811,26 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
         ...prev,
         { id: uid('msg'), conversationId: id, senderRole: 'user', senderName: currentUser.fullName, body, sentAt: at },
       ]);
+      if (session) send(apiActions.startConversation(session, { id, shelterId, subject, body, reportId }));
       return id;
     },
-    [currentUser],
+    [currentUser, send],
+  );
+
+  const markConversationRead = useCallback<AppState['markConversationRead']>(
+    (conversationId) => {
+      const session = sessionRef.current;
+      const asShelter = session ? session.role === 'shelter_admin' : false;
+      const target = conversations.find((c) => c.id === conversationId);
+      if (!target || (asShelter ? !target.unreadForShelter : !target.unreadForUser)) return;
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === conversationId ? { ...c, ...(asShelter ? { unreadForShelter: 0 } : { unreadForUser: 0 }) } : c,
+        ),
+      );
+      if (session) send(apiActions.markConversationRead(session, conversationId));
+    },
+    [conversations, send],
   );
 
   const markNotificationRead = useCallback<AppState['markNotificationRead']>(
@@ -913,6 +940,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       updateUserProfile,
       sendMessage,
       startConversation,
+      markConversationRead,
       markNotificationRead,
       markAllNotificationsRead,
       resolveFlag,
@@ -926,7 +954,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       messagesIn, caseForReport, runImageMatch, createReport, setReportStatus, deleteReport,
       setShelterApproval, openCase, setCaseStatus, setShelterAnimalStatus, addShelterAnimal,
       toggleAnimalPublic, updateShelterProfile, updateUserProfile, sendMessage,
-      startConversation, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,
+      startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,
     ],
   );
 

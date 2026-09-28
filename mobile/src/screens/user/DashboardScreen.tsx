@@ -98,8 +98,12 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
           <Card>
             <EmptyState
               icon="clipboard-outline"
-              title="Nothing reported yet"
-              message="Report a lost pet or a stray you found, and track it here."
+              title={myReports.length ? 'No open reports' : 'Nothing reported yet'}
+              message={
+                myReports.length
+                  ? 'All your reports are resolved. See all shows the full history.'
+                  : 'Report a lost pet or a stray you found, and track it here.'
+              }
               action="Report a lost pet"
               onAction={() => navigation.navigate('ReportLostPet' as never)}
             />

@@ -30,6 +30,7 @@ export function ShelterViewScreen() {
     messagesIn,
     sendMessage,
     startConversation,
+    markConversationRead,
   } = useApp();
 
   const [tab, setTab] = useState<'shelters' | 'animals' | 'messages'>('shelters');
@@ -176,7 +177,10 @@ export function ShelterViewScreen() {
                       label={isOpen ? 'Hide' : 'Open'}
                       variant="ghost"
                       full={false}
-                      onPress={() => setOpenThread(isOpen ? null : c.id)}
+                      onPress={() => {
+                        setOpenThread(isOpen ? null : c.id);
+                        if (!isOpen) markConversationRead(c.id);
+                      }}
                     />
                   </Row>
 

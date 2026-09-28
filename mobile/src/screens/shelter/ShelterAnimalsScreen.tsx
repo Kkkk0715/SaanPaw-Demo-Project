@@ -18,6 +18,7 @@ import {
   Sheet,
 } from '@/components/ui';
 import { ShelterAnimalCard } from '@/components/domain';
+import { shrinkPhoto } from '@/services/photo';
 import { useApp } from '@saanpaw/shared';
 import type { AnimalCaseStatus, AnimalType, ShelterAnimal } from '@saanpaw/shared';
 
@@ -45,7 +46,7 @@ export function ShelterAnimalsScreen() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
-    if (!res.canceled && res.assets[0]) setImage(res.assets[0].uri);
+    if (!res.canceled && res.assets[0]) setImage(await shrinkPhoto(res.assets[0].uri, res.assets[0].width));
   };
 
   const save = () => {

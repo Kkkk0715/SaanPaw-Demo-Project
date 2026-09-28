@@ -14,6 +14,7 @@ router.use(authenticate, authorize('user'));
 router.get('/me', asyncHandler(userController.me));
 router.patch('/profile', geoFence, asyncHandler(userController.updateProfile));
 router.get('/reports/mine', asyncHandler(userController.myReports));
+router.get('/cases', asyncHandler(userController.myCases));
 
 router.get('/dashboard', asyncHandler(userController.dashboard));
 
@@ -43,5 +44,11 @@ router.get('/reports/search', asyncHandler(userController.searchReports));
 router.get('/notifications', asyncHandler(userController.listNotifications));
 router.patch('/notifications/:id/read', asyncHandler(userController.markNotificationRead));
 router.put('/push-token', asyncHandler(userController.updatePushToken));
+
+// Message box
+router.get('/conversations', asyncHandler(userController.listConversations));
+router.post('/conversations', asyncHandler(userController.startConversation));
+router.post('/conversations/:id/messages', asyncHandler(userController.sendMessage));
+router.post('/conversations/:id/read', asyncHandler(userController.markConversationRead));
 
 export default router;

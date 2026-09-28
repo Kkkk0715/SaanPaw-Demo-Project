@@ -18,7 +18,7 @@ import { useApp } from '@saanpaw/shared';
 
 /** Shelter Admin Module - Chat with owners about their reports. */
 export function MessagesScreen() {
-  const { conversations, currentShelter, messagesIn, sendMessage, reportById } = useApp();
+  const { conversations, currentShelter, messagesIn, sendMessage, reportById, markConversationRead } = useApp();
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
 
@@ -97,6 +97,7 @@ export function MessagesScreen() {
                 onPress={() => {
                   setOpenId(isOpen ? null : c.id);
                   setDraft('');
+                  if (!isOpen) markConversationRead(c.id);
                 }}
               />
             </Row>

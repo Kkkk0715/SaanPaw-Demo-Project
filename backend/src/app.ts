@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { env } from './config/env';
 import api from './routes';
 import { errorHandler, notFoundHandler } from './middleware/error';
+import { isDatabasePhotoId, readDatabasePhoto } from './services/storage.service';
 import { logger } from './utils/logger';
 
 /** Browsers may only call the API from the listed origins. Open in development, closed by default in production. */
@@ -36,6 +37,16 @@ export function createApp() {
     (_req, res, next) => {
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       next();
+    },
+    // Photos kept in the database (Vercel without Blob) have a 24-character id; anything else is a file on disk.
+    async (req, res, next) => {
+      const name = req.path.replace(/^\//, '');
+      if (!isDatabasePhotoId(name)) return next();
+      const photo = await readDatabasePhoto(name);
+      if (!photo) return res.status(404).json({ error: 'Photo not found' });
+      res.setHeader('Content-Type', photo.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+      res.end(photo.data);
     },
     express.static(path.resolve(env.uploadDir), { maxAge: '7d', immutable: true }),
   );

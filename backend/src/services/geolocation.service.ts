@@ -20,5 +20,10 @@ export const geolocationService = {
     };
   },
 
+  /** Radius filter that, unlike $nearSphere, also works inside countDocuments. */
+  withinFilter(field: string, lng: number, lat: number, radiusMeters: number) {
+    return { [field]: { $geoWithin: { $centerSphere: [[lng, lat], radiusMeters / 6_378_100] } } };
+  },
+
   defaultCenter: SJDM_CENTER,
 };

@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { put } from '@vercel/blob';
 import { env } from '../config/env';
+import { Photo } from '../models/Photo';
+import { ApiError } from '../utils/ApiError';
 
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -11,39 +13,52 @@ const EXTENSIONS: Record<string, string> = {
 };
 
 /**
- * Serverless platforms (Vercel included) give each function invocation an ephemeral, often
- * read-only filesystem - a file written to local disk is gone, possibly before the response
- * even finishes. Vercel auto-injects this token once Blob storage is enabled for the project,
- * so its presence is what decides where a photo actually goes.
+ * Where a photo goes depends on the host:
+ *  - Vercel Blob when BLOB_READ_WRITE_TOKEN is set (Vercel injects it once Blob storage is enabled)
+ *  - the database on Vercel without Blob: its filesystem is read-only, so disk is not an option
+ *  - local disk everywhere else (Docker, a VPS, plain local development)
  */
 const useBlobStorage = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const useDatabaseStorage = !useBlobStorage && Boolean(process.env.VERCEL);
 
 export const localUploadDir = path.resolve(env.uploadDir);
 let localUploadDirReady = false;
 
+/** Ids the database storage hands out, as opposed to the UUID file names used on disk. */
+export const isDatabasePhotoId = (name: string) => /^[a-f0-9]{24}$/i.test(name.replace(/\.[a-z]+$/i, ''));
+
 /**
  * Saves an uploaded photo and returns the URL clients should use to fetch it - a Vercel Blob
- * URL when deployed there, otherwise a `/uploads/...` path served by app.ts's static route
- * (self-hosted deployments: Docker, a VPS, or plain local development).
- *
- * The local directory is created here, on first use, rather than at module load: creating it
- * eagerly would crash every request (not just uploads) on a host with a read-only filesystem
- * and no BLOB_READ_WRITE_TOKEN, instead of only failing when a photo is actually uploaded.
+ * URL, or a `/uploads/...` path served by this API (from the database or, self-hosted, from disk).
  */
 export async function saveUploadedPhoto(buffer: Buffer, mimeType: string): Promise<string> {
-  const filename = `${crypto.randomUUID()}${EXTENSIONS[mimeType] ?? '.jpg'}`;
-
   if (useBlobStorage) {
+    const filename = `${crypto.randomUUID()}${EXTENSIONS[mimeType] ?? '.jpg'}`;
     const blob = await put(filename, buffer, { access: 'public', contentType: mimeType });
     return blob.url;
   }
 
-  if (!localUploadDirReady) {
-    fs.mkdirSync(localUploadDir, { recursive: true });
-    localUploadDirReady = true;
+  if (useDatabaseStorage) {
+    const photo = await Photo.create({ contentType: mimeType, data: buffer });
+    return `/uploads/${photo._id}`;
   }
-  await fs.promises.writeFile(path.join(localUploadDir, filename), buffer);
+
+  const filename = `${crypto.randomUUID()}${EXTENSIONS[mimeType] ?? '.jpg'}`;
+  try {
+    if (!localUploadDirReady) {
+      fs.mkdirSync(localUploadDir, { recursive: true });
+      localUploadDirReady = true;
+    }
+    await fs.promises.writeFile(path.join(localUploadDir, filename), buffer);
+  } catch {
+    throw new ApiError(503, 'Photo storage is unavailable on this server. Try again later.');
+  }
   return `/uploads/${filename}`;
+}
+
+export async function readDatabasePhoto(name: string) {
+  const id = name.replace(/\.[a-z]+$/i, '');
+  return Photo.findById(id);
 }
 
 /** The mime type is client-supplied, so confirm the file really starts like the image it claims to be. */

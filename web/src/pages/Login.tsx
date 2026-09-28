@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { Banner, Button } from '@/components/ui';
-import { DEMO_DEVELOPER, useAuth } from '@/auth';
+import { DEMO_DEVELOPER, DEMO_MODE, useAuth } from '@/auth';
 
 /** Developer Module - Login. Accounts are provisioned, so there is no sign-up. */
 export function LoginPage() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState(DEMO_DEVELOPER.email);
-  const [password, setPassword] = useState(DEMO_DEVELOPER.password);
+  // Demo accounts only exist in the static demo build, so a real deployment starts blank.
+  const [email, setEmail] = useState(DEMO_MODE ? DEMO_DEVELOPER.email : '');
+  const [password, setPassword] = useState(DEMO_MODE ? DEMO_DEVELOPER.password : '');
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: FormEvent) => {
@@ -63,9 +64,11 @@ export function LoginPage() {
 
         <Button type="submit">Sign in</Button>
 
-        <Banner tone="info" title="Demo credentials pre-filled">
-          {DEMO_DEVELOPER.email} / {DEMO_DEVELOPER.password}
-        </Banner>
+        {DEMO_MODE ? (
+          <Banner tone="info" title="Demo credentials pre-filled">
+            {DEMO_DEVELOPER.email} / {DEMO_DEVELOPER.password}
+          </Banner>
+        ) : null}
 
         <p style={{ fontSize: 11.5, color: 'var(--muted)', textAlign: 'center' }}>
           The Pet Owner and Shelter Admin modules are in the SaanPaw mobile app.

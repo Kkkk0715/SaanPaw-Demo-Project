@@ -49,15 +49,20 @@ export const shelterService = {
 
   // ----- Dashboard -----
   async getDashboard(shelterId: string) {
-    const [activeReports, reunited, underRescue] = await Promise.all([
-      LostPetReport.countDocuments({
-        $or: [{ status: 'active' }, { status: 'matched' }],
-        isHiddenByModeration: false,
-      }),
+    const shelter = await Shelter.findById(shelterId).lean();
+    if (!shelter) throw ApiError.notFound('Shelter not found');
+    const [lng, lat] = shelter.location!.coordinates as number[];
+    const open = { status: { $in: ['active', 'matched'] }, isHiddenByModeration: false };
+    const radius = shelter.operatingRadiusMeters;
+
+    // Only reports inside this shelter's operating radius count as its active reports.
+    const [lostActive, foundActive, reunited, underRescue] = await Promise.all([
+      LostPetReport.countDocuments({ ...open, ...geolocationService.withinFilter('lastSeenLocation', lng, lat, radius) }),
+      FoundAnimalReport.countDocuments({ ...open, ...geolocationService.withinFilter('foundLocation', lng, lat, radius) }),
       ShelterAnimal.countDocuments({ shelterId, caseStatus: 'reunited' }),
       ShelterAnimal.countDocuments({ shelterId, caseStatus: 'under_rescue' }),
     ]);
-    return { activeReports, reunited, underRescue };
+    return { activeReports: lostActive + foundActive, reunited, underRescue };
   },
 
   // ----- Shelter Animals Management -----
@@ -90,16 +95,32 @@ export const shelterService = {
     const [lng, lat] = shelter.location!.coordinates as number[];
     const radius = shelter.operatingRadiusMeters;
     
+    // Reports this shelter has opened a case for stay listed after they are recovered or closed,
+    // otherwise the case card loses the animal it is about as soon as the case is resolved.
+    const cases = await AnimalCase.find({ shelterId }, 'lostReportId foundReportId').lean();
+    const lostCaseIds = cases.map((c) => c.lostReportId).filter(Boolean);
+    const foundCaseIds = cases.map((c) => c.foundReportId).filter(Boolean);
+
     const [lost, found] = await Promise.all([
       LostPetReport.find({
         isHiddenByModeration: false,
-        status: { $in: ['active', 'matched'] },
-        ...geolocationService.nearFilter('lastSeenLocation', lng, lat, radius),
+        $or: [
+          {
+            status: { $in: ['active', 'matched'] },
+            ...geolocationService.withinFilter('lastSeenLocation', lng, lat, radius),
+          },
+          { _id: { $in: lostCaseIds } },
+        ],
       }).lean(),
       FoundAnimalReport.find({
         isHiddenByModeration: false,
-        status: { $in: ['active', 'matched'] },
-        ...geolocationService.nearFilter('foundLocation', lng, lat, radius),
+        $or: [
+          {
+            status: { $in: ['active', 'matched'] },
+            ...geolocationService.withinFilter('foundLocation', lng, lat, radius),
+          },
+          { _id: { $in: foundCaseIds } },
+        ],
       }).lean(),
     ]);
     

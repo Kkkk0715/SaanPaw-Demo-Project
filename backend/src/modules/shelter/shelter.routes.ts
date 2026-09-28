@@ -33,4 +33,9 @@ router.patch('/profile', geoFence, asyncHandler(shelterController.updateProfile)
 router.get('/notifications', asyncHandler(shelterController.listNotifications));
 router.patch('/notifications/:id/read', asyncHandler(shelterController.markNotificationRead));
 
+// Message box
+router.get('/conversations', asyncHandler(shelterController.listConversations));
+router.post('/conversations/:id/messages', asyncHandler(shelterController.sendMessage));
+router.post('/conversations/:id/read', asyncHandler(shelterController.markConversationRead));
+
 export default router;

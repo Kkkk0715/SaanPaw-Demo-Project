@@ -3,8 +3,10 @@ import type {
   AnimalCaseStatus,
   AnimalReport,
   AppUser,
+  Conversation,
   DashboardStats,
   MatchSuggestion,
+  Message,
   ModerationFlag,
   NotificationItem,
   ReportKind,
@@ -130,6 +132,13 @@ export async function uploadImage(s: ApiSession, uri: string): Promise<string> {
 export const uploadPending = (s: ApiSession, uris: string[]) =>
   Promise.all(uris.map((uri) => (isLocalImageUri(uri) ? uploadImage(s, uri) : uri)));
 
+interface ConversationsEnvelope {
+  conversations: Conversation[];
+  messages: Message[];
+}
+
+const noConversations: ConversationsEnvelope = { conversations: [], messages: [] };
+
 interface ReportsEnvelope {
   lost: AnimalReport[];
   found: AnimalReport[];
@@ -158,6 +167,8 @@ export interface Snapshot {
   cases: AnimalCase[];
   flags: ModerationFlag[];
   notifications: NotificationItem[];
+  conversations: Conversation[];
+  messages: Message[];
   /** Server-computed counters that win over anything derivable from the loaded rows. */
   stats: Partial<DashboardStats>;
 }
@@ -172,18 +183,22 @@ const emptySnapshot = (selfId: string): Snapshot => ({
   cases: [],
   flags: [],
   notifications: [],
+  conversations: [],
+  messages: [],
   stats: {},
 });
 
 export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
   if (s.role === 'user') {
-    const [me, stats, shelters, mine, open, notifications] = await Promise.all([
+    const [me, stats, shelters, mine, open, notifications, inbox, cases] = await Promise.all([
       call<AppUser>(s, '/user/me'),
       call<DashboardStats>(s, '/user/dashboard'),
       call<Shelter[]>(s, '/user/shelters'),
       call<ReportsEnvelope>(s, '/user/reports/mine'),
       call<ReportsEnvelope>(s, '/user/reports/search'),
       call<NotificationItem[]>(s, '/user/notifications'),
+      optional(call<ConversationsEnvelope>(s, '/user/conversations'), noConversations),
+      optional(call<AnimalCase[]>(s, '/user/cases'), []),
     ]);
 
     const reports = new Map<string, AnimalReport>();
@@ -202,18 +217,22 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
       matches: matches.flat(),
       shelterAnimals: withImageHosts(s.baseUrl, animals.flat()),
       notifications,
+      cases,
+      ...inbox,
       stats,
     };
   }
 
   if (s.role === 'shelter_admin') {
-    const [me, dash, reports, animals, cases, notifications] = await Promise.all([
+    const [me, dash, reports, animals, cases, notifications, inbox] = await Promise.all([
+
       call<Shelter>(s, '/shelter/me'),
       call<{ activeReports: number; reunited: number; underRescue: number }>(s, '/shelter/dashboard'),
       call<ReportsEnvelope>(s, '/shelter/reports'),
       call<ShelterAnimal[]>(s, '/shelter/animals'),
       call<AnimalCase[]>(s, '/shelter/cases'),
       call<NotificationItem[]>(s, '/shelter/notifications'),
+      optional(call<ConversationsEnvelope>(s, '/shelter/conversations'), noConversations),
     ]);
     return {
       ...emptySnapshot(me.id),
@@ -222,6 +241,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
       shelterAnimals: withImageHosts(s.baseUrl, animals),
       cases,
       notifications,
+      ...inbox,
       stats: {
         activeReports: dash.activeReports,
         reunitedThisMonth: dash.reunited,
@@ -281,6 +301,18 @@ export const apiActions = {
 
   markNotificationRead: (s: ApiSession, id: string) =>
     call<NotificationItem>(s, `${notificationsBase(s.role)}/notifications/${id}/read`, { method: 'PATCH' }),
+
+  startConversation: (s: ApiSession, body: { id: string; shelterId: string; subject: string; body: string; reportId?: string }) =>
+    call<ConversationsEnvelope>(s, '/user/conversations', { method: 'POST', body }),
+
+  sendMessage: (s: ApiSession, conversationId: string, body: string) =>
+    call<ConversationsEnvelope>(s, `${notificationsBase(s.role)}/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: { body },
+    }),
+
+  markConversationRead: (s: ApiSession, conversationId: string) =>
+    call<ConversationsEnvelope>(s, `${notificationsBase(s.role)}/conversations/${conversationId}/read`, { method: 'POST' }),
 
   openCase: (s: ApiSession, reportId: string, note: string) =>
     call<AnimalCase>(s, '/shelter/cases', { method: 'POST', body: { reportId, note } }),

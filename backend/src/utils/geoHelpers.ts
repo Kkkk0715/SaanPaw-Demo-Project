@@ -139,9 +139,9 @@ export function serializeMatchSuggestion(doc: any) {
   return {
     id: String(doc._id),
     lostReportId: String(doc.lostReportId),
-    candidateId: String(doc.candidateId),
-    candidateSource: doc.candidateSource,
-    score: doc.score || doc.similarityScore || 0,
+    candidateId: String(doc.candidateId ?? doc.foundReportId),
+    candidateSource: doc.candidateSource ?? 'found_report',
+    score: doc.score ?? doc.similarityScore ?? 0,
     reasons: doc.reasons || [],
     createdAt: doc.createdAt?.toISOString?.(),
   };
@@ -225,5 +225,30 @@ export function serializeFlag(doc: any, reporterName: string, reporterBanned: bo
     detail: doc.resolutionNote || FLAG_DETAIL[doc.reason] || '',
     flaggedAt: doc.createdAt?.toISOString?.(),
     resolution,
+  };
+}
+
+export function serializeConversation(doc: any, userName: string) {
+  return {
+    id: String(doc._id),
+    shelterId: String(doc.shelterId),
+    userId: String(doc.userId),
+    userName,
+    reportId: doc.relatedReportId ? String(doc.relatedReportId) : undefined,
+    subject: doc.subject ?? '',
+    lastMessageAt: doc.lastMessageAt?.toISOString?.(),
+    unreadForShelter: doc.unreadForShelter ?? 0,
+    unreadForUser: doc.unreadForUser ?? 0,
+  };
+}
+
+export function serializeMessage(doc: any, senderName: string) {
+  return {
+    id: String(doc._id),
+    conversationId: String(doc.conversationId),
+    senderRole: doc.senderType === 'shelter' ? 'shelter_admin' : 'user',
+    senderName,
+    body: doc.body,
+    sentAt: doc.sentAt?.toISOString?.(),
   };
 }

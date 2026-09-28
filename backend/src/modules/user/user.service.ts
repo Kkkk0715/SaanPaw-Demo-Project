@@ -3,6 +3,7 @@ import { Shelter } from '../../models/Shelter';
 import { ShelterAnimal } from '../../models/ShelterAnimal';
 import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
+import { AnimalCase } from '../../models/AnimalCase';
 import { Notification } from '../../models/Notification';
 import { MatchSuggestion } from '../../models/MatchSuggestion';
 import { smartAlertService } from '../../services/smartAlert.service';
@@ -20,6 +21,7 @@ import {
   serializeShelterAnimal,
   serializeMatchSuggestion,
   serializeNotification,
+  serializeCase,
   latLngToGeoPoint,
 } from '../../utils/geoHelpers';
 
@@ -79,6 +81,22 @@ export const userService = {
     return { lost: lost.map(serializeLostReport), found: found.map(serializeFoundReport) };
   },
 
+  /** Shelter cases opened on this user's reports, so the owner can follow the rescue. */
+  async listMyCases(userId: string) {
+    const [lost, found] = await Promise.all([
+      LostPetReport.find({ reporterId: userId }, '_id').lean(),
+      FoundAnimalReport.find({ reporterId: userId }, '_id').lean(),
+    ]);
+    const cases = await AnimalCase.find({
+      $or: [{ lostReportId: { $in: lost.map((r) => r._id) } }, { foundReportId: { $in: found.map((r) => r._id) } }],
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+    const shelters = await Shelter.find({ _id: { $in: cases.map((c) => c.shelterId) } }, 'name').lean();
+    const nameById = new Map(shelters.map((s) => [String(s._id), s.name]));
+    return cases.map((c) => serializeCase(c, nameById.get(String(c.shelterId))));
+  },
+
   // ----- Dashboard -----
   getDashboard() {
     return statsService.platformStats();
@@ -109,6 +127,7 @@ export const userService = {
     await smartAlertService.dispatchReportAlert({
       reportType: 'lost',
       reportId: String(report._id),
+      reporterId: String(reporterId),
       lng,
       lat,
       summary: `${data.name || report.animalType} - ${data.color ?? ''} ${data.breed ?? ''}`.trim(),
@@ -171,6 +190,7 @@ export const userService = {
     await smartAlertService.dispatchReportAlert({
       reportType: 'found',
       reportId: String(report._id),
+      reporterId: String(reporterId),
       lng,
       lat,
       summary: `${report.animalType} - ${data.color ?? ''} ${data.breed ?? ''}`.trim(),

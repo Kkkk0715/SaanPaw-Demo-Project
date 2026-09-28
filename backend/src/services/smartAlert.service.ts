@@ -15,6 +15,8 @@ export const smartAlertService = {
   async dispatchReportAlert(params: {
     reportType: 'lost' | 'found';
     reportId: string;
+    /** The reporter already knows, so they are left out of the alert. */
+    reporterId?: string;
     lng: number;
     lat: number;
     summary: string;
@@ -25,6 +27,7 @@ export const smartAlertService = {
     const [users, shelters] = await Promise.all([
       User.find({
         isBanned: false,
+        ...(params.reporterId ? { _id: { $ne: params.reporterId } } : {}),
         homeLocation: {
           $geoWithin: { $centerSphere: [[params.lng, params.lat], 20_000 / 6_378_100] },
         },

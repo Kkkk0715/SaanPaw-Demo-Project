@@ -21,7 +21,7 @@ Deploy in this order: API, then the console and app that point at it.
 
 - **MongoDB 4.4+.** MongoDB Atlas is the easy option. Create a database user and allow your API host's address.
 - **HTTPS in front of it.** Phones refuse plain `http://` APIs in store builds, and passwords must not cross the network in the clear. Put a reverse proxy or your host's built-in TLS in front.
-- **Somewhere to keep photos.** By default, uploaded photos are written to disk (`UPLOAD_DIR`) — mount a persistent volume there, or they disappear on every deploy. On a serverless platform with no disk (Vercel), set `BLOB_READ_WRITE_TOKEN` instead and photos go to Vercel Blob; see [Option D](#option-d-vercel-serverless).
+- **Somewhere to keep photos.** By default, uploaded photos are written to disk (`UPLOAD_DIR`) — mount a persistent volume there, or they disappear on every deploy. On a serverless platform with no disk (Vercel), photos are kept in the database automatically, or in Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set; see [Option D](#option-d-vercel-serverless).
 
 ### Settings
 
@@ -35,7 +35,7 @@ Set these as environment variables on the host. `backend/.env.example` lists the
 | `CORS_ORIGINS` | for web | Comma-separated browser origins allowed to call the API, e.g. `https://console.example.com,https://app.example.com`. Native apps do not need it. If empty in production, browser apps are blocked. |
 | `TRUST_PROXY` | behind a proxy | Number of proxies in front of the API (usually `1`). Without it every user shares one rate limit. |
 | `UPLOAD_DIR` | no | Photo folder, used when `BLOB_READ_WRITE_TOKEN` is not set. Defaults to `uploads`; the Docker image uses `/data/uploads`. |
-| `BLOB_READ_WRITE_TOKEN` | on Vercel | Enables Vercel Blob photo storage instead of disk. Vercel injects this automatically once Blob storage is enabled for the project — you don't set it by hand. |
+| `BLOB_READ_WRITE_TOKEN` | no | Stores photos in Vercel Blob. Vercel injects this automatically once Blob storage is enabled for the project — you don't set it by hand. Without it, a Vercel deployment keeps photos in the database. |
 | `PORT` | no | Defaults to `4001`. Unused on Vercel. |
 
 In production the API **refuses to start** if `JWT_SECRET` or `MONGODB_URI` is missing, or if the secret is a known placeholder or shorter than 32 characters.
@@ -81,7 +81,7 @@ Vercel functions have no persistent disk, so photos need Vercel Blob instead of 
    - `JWT_SECRET` — output of `openssl rand -hex 32`
    - `CORS_ORIGINS` — the console's Vercel URL, e.g. `https://saanpaw-console.vercel.app` (add it after step 5, then redeploy)
    - `TRUST_PROXY=1`
-4. **Enable Blob storage**: in the project, go to the Storage tab → Create Database → Blob. This automatically adds `BLOB_READ_WRITE_TOKEN` to the project's environment variables — you don't type it in yourself.
+4. **Photo storage (optional)**: photos work out of the box — without Blob they are stored in your MongoDB database (fine for a few hundred photos on a free Atlas cluster). For object storage instead, go to the project's Storage tab → Create Database → Blob, which adds `BLOB_READ_WRITE_TOKEN` automatically.
 5. Deploy. Vercel gives you a URL like `https://saanpaw-api.vercel.app`. The API lives under `https://saanpaw-api.vercel.app/api/v1/...`.
 
 ### Create the first admin
@@ -190,8 +190,7 @@ The Pages workflow (`.github/workflows/deploy-pages.yml`) builds both apps with 
 
 Known limits of this version:
 
-- **Photos are stored on the API's disk unless `BLOB_READ_WRITE_TOKEN` is set** (see [Option D](#option-d-vercel-serverless)), in which case they go to Vercel Blob. Disk storage is fine for one server; for several servers, or for durability without Vercel, move uploads to object storage (S3, Cloudinary) behind the same `/api/v1/uploads` endpoint.
+- **Photos are stored on the API's disk** by default, in the database on Vercel, or in Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set (see [Option D](#option-d-vercel-serverless)). Disk storage is fine for one server; for several servers, or for durability off Vercel, move uploads to object storage (S3, Cloudinary) behind the same `/api/v1/uploads` endpoint.
 - **Image matching is a placeholder.** Match scores come from a colour, size and distance heuristic, not a trained model.
 - **Push notifications are not delivered yet.** Alerts appear in the app's notification list; nothing is pushed to the lock screen.
-- **The message box is local to each device.** There is no messaging API yet.
 - **Nothing removes orphaned photos** when a report is deleted.

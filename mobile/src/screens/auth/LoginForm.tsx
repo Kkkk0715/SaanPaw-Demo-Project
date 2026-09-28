@@ -10,7 +10,7 @@ import {
   Caption,
   Field,
 } from '@/components/ui';
-import { DEMO_ACCOUNTS, useAuth, type MobileRole } from '@/context/AuthContext';
+import { DEMO_ACCOUNTS, DEMO_MODE, useAuth, type MobileRole } from '@/context/AuthContext';
 
 /** One login form for both modules. Only the wording differs. */
 export function LoginForm({
@@ -27,8 +27,9 @@ export function LoginForm({
   const { signIn } = useAuth();
   const demo = DEMO_ACCOUNTS[role];
 
-  const [email, setEmail] = useState(demo.email);
-  const [password, setPassword] = useState(demo.password);
+  // Demo accounts only exist in the static demo build, so a real deployment starts blank.
+  const [email, setEmail] = useState(DEMO_MODE ? demo.email : '');
+  const [password, setPassword] = useState(DEMO_MODE ? demo.password : '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -78,12 +79,14 @@ export function LoginForm({
 
           <Button label="Sign in" onPress={submit} loading={busy} icon="log-in-outline" />
 
-          <Banner
-            tone="info"
-            icon="key-outline"
-            title="Demo credentials pre-filled"
-            message={`${demo.email} / ${demo.password} — ${demo.label}`}
-          />
+          {DEMO_MODE ? (
+            <Banner
+              tone="info"
+              icon="key-outline"
+              title="Demo credentials pre-filled"
+              message={`${demo.email} / ${demo.password} — ${demo.label}`}
+            />
+          ) : null}
 
           {footer}
 

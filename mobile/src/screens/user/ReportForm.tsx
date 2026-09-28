@@ -13,6 +13,7 @@ import {
 } from '@saanpaw/shared';
 import type { AnimalReport, AnimalType, LatLng, ReportKind } from '@saanpaw/shared';
 import { locationService } from '@/services/locationService';
+import { shrinkPhoto } from '@/services/photo';
 import {
   AnimalPhoto,
   Banner,
@@ -122,7 +123,9 @@ export function ReportForm({
         ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
         : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
     if (!result.canceled && result.assets[0]) {
-      setImages((prev) => [...prev, result.assets[0].uri].slice(0, 5));
+      const asset = result.assets[0];
+      const uri = await shrinkPhoto(asset.uri, asset.width);
+      setImages((prev) => [...prev, uri].slice(0, 5));
       setErrors((e) => ({ ...e, images: '' }));
     }
   };
