@@ -74,3 +74,50 @@ describe('scoring details', () => {
     );
   });
 });
+
+describe('the photoSignal input (Gemini\'s verdict on the report\'s own photo)', () => {
+  const wellDescribed = 'Bruno Aspin brown with white chest white paw, very friendly, answers to his name';
+
+  it('a well-described report with a normal animal photo is left alone', () => {
+    const r = assessReport({
+      text: wellDescribed,
+      imageCount: 1,
+      photoSignal: { looksLikeAnimal: true, inappropriate: false, reasoning: 'Shows a brown dog.' },
+    });
+    expect(r.confidence).toBeLessThan(REVIEW_THRESHOLD);
+  });
+
+  it('an inappropriate photo is flagged even with clean text', () => {
+    const r = assessReport({
+      text: wellDescribed,
+      imageCount: 1,
+      photoSignal: { looksLikeAnimal: false, inappropriate: true, reasoning: 'Shows explicit content.' },
+    });
+    expect(r.confidence).toBeGreaterThanOrEqual(REVIEW_THRESHOLD);
+    expect(r.reason).toBe('inappropriate');
+    expect(r.detail).toMatch(/Shows explicit content/);
+  });
+
+  it('a photo that is not an animal is a signal, but not alone enough to flag a well-described report', () => {
+    const r = assessReport({
+      text: wellDescribed,
+      imageCount: 1,
+      photoSignal: { looksLikeAnimal: false, inappropriate: false, reasoning: 'Shows a parked car.' },
+    });
+    expect(r.confidence).toBeLessThan(REVIEW_THRESHOLD);
+  });
+
+  it('a photo that is not an animal tips a borderline report over the threshold', () => {
+    const r = assessReport({
+      text: 'dog',
+      imageCount: 1,
+      photoSignal: { looksLikeAnimal: false, inappropriate: false, reasoning: 'Shows a parked car.' },
+    });
+    expect(r.confidence).toBeGreaterThanOrEqual(REVIEW_THRESHOLD);
+  });
+
+  it('an absent photoSignal (unconfigured or a failed call) behaves exactly as before', () => {
+    const withSignalSkipped = assessReport({ text: wellDescribed, imageCount: 1 });
+    expect(withSignalSkipped.confidence).toBeLessThan(REVIEW_THRESHOLD);
+  });
+});

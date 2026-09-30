@@ -3,16 +3,18 @@ import { ModerationFlag } from '../models/ModerationFlag';
 import { User } from '../models/User';
 import { LostPetReport } from '../models/LostPetReport';
 import { FoundAnimalReport } from '../models/FoundAnimalReport';
+import { assessAnimalPhoto } from './gemini.service';
 import { logger } from '../utils/logger';
 
 /**
  * Report Monitoring - automatic flagging.
  *
- * This is a transparent rule-based screen, not a trained model: every signal is a named rule with
- * a weight, and the reason the report was flagged is recorded so the Developer can see it. It
- * reads the text fields of a report, checks how many photos it has, and looks for a near-identical
- * report from the same person. Image content is not analysed (that needs a real classifier - see
- * the note in `assessReport`).
+ * This is a transparent screen, not a trained model: every signal is a named rule with a weight,
+ * and the reason the report was flagged is recorded so the Developer can see it. It reads the text
+ * fields of a report, checks how many photos it has, looks for a near-identical report from the
+ * same person, and - when GEMINI_API_KEY is configured - has Gemini look at the report's own photo
+ * for whether it shows a real animal and whether it's inappropriate (see `screenReport`). Without
+ * that key, those two checks are skipped and the screen behaves exactly as before.
  *
  * A report is flagged when its combined confidence reaches REVIEW_THRESHOLD. Flagging never hides
  * a report: the Developer reviews it, and only a Developer decision removes it. When a reporter
@@ -75,10 +77,17 @@ function normalize(text: string): string {
 const containsWord = (text: string, word: string) => new RegExp(`(^|[^a-z])${word}([^a-z]|$)`).test(text);
 
 /**
- * Scores one report. Pure, so every rule can be tested without a database.
+ * Scores one report. Pure, so every rule can be tested without a database or a network call -
+ * `photoSignal` is Gemini's already-computed verdict on the report's photo (or undefined, when
+ * unconfigured or the call failed), not something this function fetches itself.
  * `duplicate` is true when the same reporter filed a near-identical report recently.
  */
-export function assessReport(input: { text: string; imageCount: number; duplicate?: boolean }): Assessment {
+export function assessReport(input: {
+  text: string;
+  imageCount: number;
+  duplicate?: boolean;
+  photoSignal?: { looksLikeAnimal: boolean; inappropriate: boolean; reasoning: string };
+}): Assessment {
   const text = normalize(input.text);
   const signals: { reason: FlagReason; weight: number; detail: string }[] = [];
 
@@ -123,7 +132,23 @@ export function assessReport(input: { text: string; imageCount: number; duplicat
     signals.push({ reason: 'ai_false_positive', weight: 0.2, detail: 'The report has almost no description.' });
   }
 
-  // TODO: image moderation (NSFW / not-an-animal) needs a real classifier; add its score here.
+  // Gemini's verdict on the report's own photo. Weighted below the equivalent text rules: a
+  // single vision call is a less certain signal than deterministic word-matching, so it tips a
+  // borderline report over the threshold rather than deciding one on its own.
+  if (input.photoSignal?.inappropriate) {
+    signals.push({
+      reason: 'inappropriate',
+      weight: 0.5,
+      detail: `Image review: ${input.photoSignal.reasoning}`,
+    });
+  }
+  if (input.photoSignal && !input.photoSignal.looksLikeAnimal) {
+    signals.push({
+      reason: 'ai_false_positive',
+      weight: 0.35,
+      detail: `Image review: ${input.photoSignal.reasoning}`,
+    });
+  }
 
   const confidence = Math.min(1, signals.reduce((sum, s) => sum + s.weight, 0));
   const strongest = [...signals].sort((a, b) => b.weight - a.weight)[0];
@@ -183,14 +208,23 @@ export const moderationService = {
     reporterId: string;
     text: string;
     imageCount: number;
+    imageUrl?: string;
     animalType: string;
     color?: string;
     barangay: string;
     description?: string;
   }): Promise<void> {
     try {
-      const duplicate = await this.isDuplicate(params);
-      const result = assessReport({ text: params.text, imageCount: params.imageCount, duplicate });
+      const [duplicate, photoSignal] = await Promise.all([
+        this.isDuplicate(params),
+        params.imageUrl ? assessAnimalPhoto(params.imageUrl) : Promise.resolve(null),
+      ]);
+      const result = assessReport({
+        text: params.text,
+        imageCount: params.imageCount,
+        duplicate,
+        photoSignal: photoSignal ?? undefined,
+      });
       if (result.confidence < REVIEW_THRESHOLD) return;
 
       const flag = await ModerationFlag.create({
