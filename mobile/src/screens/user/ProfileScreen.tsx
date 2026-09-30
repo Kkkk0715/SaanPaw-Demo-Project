@@ -1,9 +1,26 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { RADIUS_OPTIONS, formatDistance, useApp } from '@saanpaw/shared';
+import { RADIUS_OPTIONS, SJDM_BARANGAYS, SJDM_BARANGAY_NAMES, formatDistance, useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
-import { Button, Card, Caption, Choice, ListRow, Row, Screen, SectionHeader } from '@/components/ui';
+import {
+  AnimalPhoto,
+  Button,
+  Card,
+  Caption,
+  Choice,
+  Field,
+  ListRow,
+  PhoneField,
+  Row,
+  Screen,
+  SectionHeader,
+  Select,
+  Sheet,
+} from '@/components/ui';
+import { shrinkPhoto } from '@/services/photo';
 import { useAuth } from '@/context/AuthContext';
 
 /** User Module - Account details, alert radius, and sign out. */
@@ -11,12 +28,54 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
   const { currentUser, updateUserProfile, myReports, notificationsFor } = useApp();
   const { signOut } = useAuth();
 
-  const initials = currentUser.fullName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
-    .join('');
+  const [editing, setEditing] = useState(false);
+  const [photo, setPhoto] = useState(currentUser.photoUrl);
+  const [firstName, setFirstName] = useState(currentUser.firstName);
+  const [middleName, setMiddleName] = useState(currentUser.middleName ?? '');
+  const [lastName, setLastName] = useState(currentUser.lastName);
+  const [phone, setPhone] = useState(currentUser.phone);
+  const [barangay, setBarangay] = useState(currentUser.barangay);
+  const [error, setError] = useState<string | null>(null);
+
+  const openEditor = () => {
+    setPhoto(currentUser.photoUrl);
+    setFirstName(currentUser.firstName);
+    setMiddleName(currentUser.middleName ?? '');
+    setLastName(currentUser.lastName);
+    setPhone(currentUser.phone);
+    setBarangay(currentUser.barangay);
+    setError(null);
+    setEditing(true);
+  };
+
+  const pickPhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
+    if (!res.canceled && res.assets[0]) setPhoto(await shrinkPhoto(res.assets[0].uri, res.assets[0].width));
+  };
+
+  const save = () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('Enter your first and last name.');
+      return;
+    }
+    if (phone.length !== 13) {
+      setError('Enter a complete mobile number.');
+      return;
+    }
+    const center = SJDM_BARANGAYS.find((b) => b.name === barangay)?.center;
+    updateUserProfile({
+      photoUrl: photo,
+      firstName: firstName.trim(),
+      middleName: middleName.trim(),
+      lastName: lastName.trim(),
+      phone,
+      barangay,
+      location: center,
+    });
+    setEditing(false);
+  };
 
   const activeReports = myReports.filter((r) => r.status !== 'closed').length;
   const unread = notificationsFor('user').filter((n) => !n.isRead).length;
@@ -24,9 +83,11 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
   return (
     <Screen padded={false}>
       <View style={styles.hero}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
+        <Pressable style={styles.editBtn} onPress={openEditor} hitSlop={8}>
+          <Ionicons name="create-outline" size={18} color={theme.colors.onPrimary} />
+        </Pressable>
+
+        <AnimalPhoto uri={currentUser.photoUrl} size={74} radius={37} tint="rgba(255,255,255,0.18)" iconColor="#fff" />
         <Text style={styles.name}>{currentUser.fullName}</Text>
         <Text style={styles.email}>{currentUser.email}</Text>
 
@@ -49,7 +110,7 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
       </View>
 
       <View style={styles.body}>
-        <SectionHeader title="Your details" />
+        <SectionHeader title="Your details" action="Edit" onAction={openEditor} />
         <Card>
           <Row gap={1.25}>
             <Ionicons name="location" size={17} color={theme.colors.primary} />
@@ -113,6 +174,24 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
           SaanPaw · San Jose Del Monte, Bulacan
         </Caption>
       </View>
+
+      <Sheet open={editing} onClose={() => setEditing(false)} title="Edit profile">
+        <View style={{ gap: theme.spacing(1.5) }}>
+          <Row gap={1.5} align="flex-start">
+            <AnimalPhoto uri={photo} size={72} />
+            <View style={{ flex: 1 }}>
+              <Button label="Change photo" variant="secondary" icon="camera-outline" onPress={pickPhoto} />
+            </View>
+          </Row>
+          <Field label="First name" value={firstName} onChangeText={setFirstName} icon="person-outline" />
+          <Field label="Middle name (optional)" value={middleName} onChangeText={setMiddleName} icon="person-outline" />
+          <Field label="Last name" value={lastName} onChangeText={setLastName} icon="person-outline" />
+          <PhoneField value={phone} onChangeText={setPhone} />
+          <Select label="Barangay" value={barangay} options={SJDM_BARANGAY_NAMES} onChange={setBarangay} />
+          {error ? <Caption style={{ color: theme.colors.danger }}>{error}</Caption> : null}
+          <Button label="Save changes" icon="save-outline" onPress={save} />
+        </View>
+      </Sheet>
     </Screen>
   );
 }
@@ -127,17 +206,17 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: theme.radius.xl,
     borderBottomRightRadius: theme.radius.xl,
   },
-  avatar: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.32)',
+  editBtn: {
+    position: 'absolute',
+    top: theme.spacing(2),
+    right: theme.spacing(2),
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { ...theme.type.h1, color: theme.colors.onPrimary },
   name: { ...theme.type.h1, color: theme.colors.onPrimary, marginTop: theme.spacing(1.25) },
   email: { ...theme.type.caption, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
 

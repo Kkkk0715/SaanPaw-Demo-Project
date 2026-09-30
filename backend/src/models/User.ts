@@ -11,9 +11,12 @@ const pointSchema = new Schema(
 
 const userSchema = new Schema(
   {
-    fullName: { type: String, required: true, trim: true },
+    firstName: { type: String, required: true, trim: true },
+    middleName: { type: String, trim: true },
+    lastName: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     phone: { type: String, trim: true },
+    photoUrl: { type: String, trim: true },
     passwordHash: { type: String, required: true },
     role: { type: String, default: 'user', immutable: true },
     alertRadiusMeters: { type: Number, default: () => env.alerts.defaultUserRadius },

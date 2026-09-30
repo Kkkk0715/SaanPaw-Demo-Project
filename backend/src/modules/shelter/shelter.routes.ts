@@ -28,6 +28,7 @@ router.patch('/cases/:id/status', asyncHandler(shelterController.updateCaseStatu
 
 // Shelter Profile Management
 router.patch('/profile', geoFence, asyncHandler(shelterController.updateProfile));
+router.patch('/password', asyncHandler(shelterController.changePassword));
 
 // Notification Management
 router.get('/notifications', asyncHandler(shelterController.listNotifications));

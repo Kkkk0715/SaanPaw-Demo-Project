@@ -6,9 +6,11 @@ import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
 import { ModerationFlag } from '../../models/ModerationFlag';
 import { moderationService } from '../../services/moderation.service';
+import { sendEmail, shelterCredentialsEmail } from '../../services/email.service';
 import { statsService } from '../../services/stats.service';
 import { ApiError } from '../../utils/ApiError';
 import {
+  combineName,
   serializeFlag,
   serializeFoundReport,
   serializeLostReport,
@@ -49,7 +51,7 @@ export const developerService = {
       reports: [...lost.map(serializeLostReport), ...found.map(serializeFoundReport)],
       flags: flags.map((f) => {
         const reporter = userById.get(String(f.reporterId));
-        return serializeFlag(f, reporter?.fullName ?? 'Unknown user', Boolean(reporter?.isBanned));
+        return serializeFlag(f, reporter ? combineName(reporter) : 'Unknown user', Boolean(reporter?.isBanned));
       }),
     };
   },
@@ -94,7 +96,12 @@ export const developerService = {
     shelter.adminEmail = adminEmail;
     shelter.adminPasswordHash = await bcrypt.hash(password, 10);
     await shelter.save();
-    return { shelter: serializeShelter(shelter), adminEmail, temporaryPassword: generated };
+
+    // Best-effort: the developer console still shows the password either way, so a failed or
+    // unconfigured send (see email.service.ts) never blocks the approval itself.
+    const { sent } = await sendEmail(shelterCredentialsEmail({ shelterName: shelter.name, email: adminEmail, password }));
+
+    return { shelter: serializeShelter(shelter), adminEmail, temporaryPassword: generated, emailSent: sent };
   },
 
   // ----- System Management -----
@@ -114,7 +121,7 @@ export const developerService = {
     const userById = new Map(users.map((u) => [String(u._id), u]));
     return flags.map((f) => {
       const reporter = userById.get(String(f.reporterId));
-      return serializeFlag(f, reporter?.fullName ?? 'Unknown user', Boolean(reporter?.isBanned));
+      return serializeFlag(f, reporter ? combineName(reporter) : 'Unknown user', Boolean(reporter?.isBanned));
     });
   },
 
@@ -156,7 +163,7 @@ export const developerService = {
 
     const reporter = await User.findById(flag.reporterId).lean();
     return {
-      flag: serializeFlag(flag.toObject(), reporter?.fullName ?? 'Unknown user', Boolean(reporter?.isBanned)),
+      flag: serializeFlag(flag.toObject(), reporter ? combineName(reporter) : 'Unknown user', Boolean(reporter?.isBanned)),
       escalation,
     };
   },

@@ -3,7 +3,7 @@ import { Message } from '../../models/Message';
 import { Shelter } from '../../models/Shelter';
 import { User } from '../../models/User';
 import { ApiError } from '../../utils/ApiError';
-import { serializeConversation, serializeMessage } from '../../utils/geoHelpers';
+import { combineName, serializeConversation, serializeMessage } from '../../utils/geoHelpers';
 
 type Side = 'user' | 'shelter';
 
@@ -19,11 +19,11 @@ async function ownedConversation(side: Side, ownerId: string, conversationId: st
 
 async function names(userIds: unknown[], shelterIds: unknown[]) {
   const [users, shelters] = await Promise.all([
-    User.find({ _id: { $in: userIds } }, 'fullName').lean(),
+    User.find({ _id: { $in: userIds } }, 'firstName middleName lastName').lean(),
     Shelter.find({ _id: { $in: shelterIds } }, 'name').lean(),
   ]);
   return {
-    userName: new Map(users.map((u) => [String(u._id), u.fullName])),
+    userName: new Map(users.map((u) => [String(u._id), combineName(u)])),
     shelterName: new Map(shelters.map((s) => [String(s._id), s.name])),
   };
 }

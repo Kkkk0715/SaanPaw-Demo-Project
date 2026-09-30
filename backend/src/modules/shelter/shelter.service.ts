@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { Shelter } from '../../models/Shelter';
 import { ShelterAnimal } from '../../models/ShelterAnimal';
 import { AnimalCase } from '../../models/AnimalCase';
@@ -26,7 +27,9 @@ export const shelterService = {
     barangay: string;
     contactNumber?: string;
     email?: string;
-    address?: string;
+    houseUnitNo?: string;
+    street?: string;
+    subdivision?: string;
     location: { latitude: number; longitude: number };
     operatingRadiusMeters: number;
     permitNumber?: string;
@@ -37,7 +40,9 @@ export const shelterService = {
       barangay: input.barangay,
       contactNumber: input.contactNumber,
       email: input.email,
-      address: input.address,
+      houseUnitNo: input.houseUnitNo,
+      street: input.street,
+      subdivision: input.subdivision,
       location: latLngToGeoPoint(input.location),
       operatingRadiusMeters: input.operatingRadiusMeters,
       permitNumber: input.permitNumber,
@@ -233,7 +238,10 @@ export const shelterService = {
     const allowed = [
       'name',
       'contactNumber',
-      'address',
+      'houseUnitNo',
+      'street',
+      'subdivision',
+      'photoUrl',
       'barangay',
       'location',
       'operatingRadiusMeters',
@@ -255,6 +263,20 @@ export const shelterService = {
     
     const shelter = await Shelter.findByIdAndUpdate(shelterId, update, { new: true });
     return shelter ? serializeShelter(shelter) : null;
+  },
+
+  // ----- Change the password the Developer issued -----
+  async changePassword(shelterId: string, currentPassword: string, newPassword: string) {
+    const shelter = await Shelter.findById(shelterId);
+    if (!shelter?.adminPasswordHash) throw ApiError.notFound('Shelter not found');
+    if (!(await bcrypt.compare(currentPassword, shelter.adminPasswordHash))) {
+      // 403, not 401: the session itself is valid. A 401 here would trip the
+      // client's global "session expired" handler and sign the shelter out.
+      throw ApiError.forbidden('Current password is incorrect');
+    }
+    shelter.adminPasswordHash = await bcrypt.hash(newPassword, 10);
+    await shelter.save();
+    return { ok: true };
   },
 
   // ----- Notification Management -----

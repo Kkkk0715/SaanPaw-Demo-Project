@@ -17,7 +17,7 @@ import {
   Segmented,
   Sheet,
 } from '@/components/ui';
-import { ShelterAnimalCard } from '@/components/domain';
+import { AnimalTypeAndBreed, ShelterAnimalCard } from '@/components/domain';
 import { shrinkPhoto } from '@/services/photo';
 import { useApp } from '@saanpaw/shared';
 import type { AnimalCaseStatus, AnimalType, ShelterAnimal } from '@saanpaw/shared';
@@ -38,6 +38,8 @@ export function ShelterAnimalsScreen() {
   const [notes, setNotes] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // Remounts AnimalTypeAndBreed after each save so its own internal picker state clears too.
+  const [formKey, setFormKey] = useState(0);
 
   const mine = shelterAnimals.filter((a) => a.shelterId === currentShelter.id);
   const shown = mine.filter((a) => (filter === 'all' ? true : a.caseStatus === filter));
@@ -68,6 +70,7 @@ export function ShelterAnimalsScreen() {
       notes: notes.trim() || undefined,
     });
     setAdding(false);
+    setFormKey((k) => k + 1);
     setName('');
     setBreed('');
     setColor('');
@@ -149,7 +152,7 @@ export function ShelterAnimalsScreen() {
             value={animalType}
             onChange={setAnimalType}
           />
-          <Field label="Breed" value={breed} onChangeText={setBreed} placeholder="e.g. Aspin" />
+          <AnimalTypeAndBreed key={formKey} animalType={animalType} breed={breed} onBreedChange={setBreed} />
           <Field label="Coat colour" value={color} onChangeText={setColor} placeholder="e.g. black with white paws" />
           <Choice
             label="Size"

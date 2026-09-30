@@ -336,7 +336,7 @@ export const apiActions = {
     call<Shelter>(s, '/shelter/profile', { method: 'PATCH', body: patch }),
 
   reviewShelter: (s: ApiSession, id: string, decision: 'approve' | 'reject') =>
-    call<{ shelter: Shelter; adminEmail?: string; temporaryPassword?: string }>(
+    call<{ shelter: Shelter; adminEmail?: string; temporaryPassword?: string; emailSent?: boolean }>(
       s,
       `/developer/shelters/${id}/review`,
       { method: 'PATCH', body: { decision } },
@@ -346,4 +346,7 @@ export const apiActions = {
     call<{ flag: ModerationFlag }>(s, `/developer/flags/${id}/resolve`, { method: 'PATCH', body: { action } }),
 
   banUser: (s: ApiSession, id: string) => call<AppUser>(s, `/developer/users/${id}/ban`, { method: 'PATCH' }),
+
+  changeShelterPassword: (s: ApiSession, currentPassword: string, newPassword: string) =>
+    call<{ ok: boolean }>(s, '/shelter/password', { method: 'PATCH', body: { currentPassword, newPassword } }),
 };

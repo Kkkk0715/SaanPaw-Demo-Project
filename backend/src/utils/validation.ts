@@ -19,10 +19,27 @@ const sex = z.enum(['male', 'female', 'unknown']);
 const size = z.enum(['small', 'medium', 'large']);
 const imageUrls = z.array(text(1000)).max(5).default([]);
 
+/** Philippine mobile number, e.g. "+639171234567" - the +639 prefix plus 9 more digits. */
+const phMobile = z.string().trim().regex(/^\+639\d{9}$/, 'Enter a valid mobile number (+639 followed by 9 digits)');
+const optionalPhMobile = z.union([z.literal(''), phMobile]).optional();
+
+/** Only Gmail addresses are accepted, per the app's registration policy. */
+const gmailAddress = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[^\s@]+@gmail\.com$/, 'Enter a Gmail address (must end in @gmail.com)')
+  .max(200);
+const optionalGmailAddress = z.union([z.literal(''), gmailAddress]).optional();
+
+const personName = (label: string) => text(60).min(1, `Enter ${label}`);
+
 export const registerUserSchema = z.object({
-  fullName: text(100).min(1, 'Enter your full name'),
-  email: z.string().trim().email('Enter a valid email address').max(200),
-  phone: optionalText(30),
+  firstName: personName('your first name'),
+  middleName: optionalText(60),
+  lastName: personName('your last name'),
+  email: gmailAddress,
+  phone: phMobile,
   password: z.string().min(8, 'Use at least 8 characters').max(128),
   barangay: text(100).min(1, 'Select your barangay'),
   alertRadiusMeters: z.coerce.number().positive().max(50_000).default(3000),
@@ -32,9 +49,11 @@ export const registerUserSchema = z.object({
 export const registerShelterSchema = z.object({
   name: text(150).min(1, 'Enter the shelter name'),
   barangay: text(100).min(1, 'Select the barangay'),
-  contactNumber: optionalText(30),
-  email: z.string().trim().email('Enter a valid email address').max(200).optional(),
-  address: optionalText(300),
+  contactNumber: phMobile,
+  email: gmailAddress,
+  houseUnitNo: optionalText(100),
+  street: optionalText(150),
+  subdivision: optionalText(150),
   location: latLngSchema,
   operatingRadiusMeters: z.coerce.number().positive().max(50_000).default(5000),
   permitNumber: optionalText(100),
@@ -56,8 +75,11 @@ export const reportSchema = z.object({
 });
 
 export const userProfileSchema = z.object({
-  fullName: text(100).min(1).optional(),
-  phone: optionalText(30),
+  firstName: text(60).min(1).optional(),
+  middleName: optionalText(60),
+  lastName: text(60).min(1).optional(),
+  phone: optionalPhMobile,
+  photoUrl: optionalText(1000),
   barangay: text(100).min(1).optional(),
   alertRadiusMeters: z.coerce.number().positive().max(50_000).optional(),
   location: latLngSchema.optional(),
@@ -65,14 +87,22 @@ export const userProfileSchema = z.object({
 
 export const shelterProfileSchema = z.object({
   name: text(150).min(1).optional(),
-  contactNumber: optionalText(30),
-  address: optionalText(300),
+  contactNumber: optionalPhMobile,
+  houseUnitNo: optionalText(100),
+  street: optionalText(150),
+  subdivision: optionalText(150),
+  photoUrl: optionalText(1000),
   barangay: text(100).min(1).optional(),
   location: latLngSchema.optional(),
   operatingRadiusMeters: z.coerce.number().positive().max(50_000).optional(),
-  email: z.union([z.literal(''), z.string().trim().email().max(200)]).optional(),
+  email: optionalGmailAddress,
   capacity: z.coerce.number().int().min(0).max(100_000).optional(),
   currentOccupancy: z.coerce.number().int().min(0).max(100_000).optional(),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password'),
+  newPassword: z.string().min(8, 'Use at least 8 characters').max(128),
 });
 
 const caseStatus = z.enum(ANIMAL_CASE_STATUSES);

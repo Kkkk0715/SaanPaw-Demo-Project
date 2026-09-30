@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { SJDM_BARANGAYS, distanceMeters } from '../sjdm';
-import { apiActions, loadSnapshot, type ApiSession, type Snapshot } from '../api';
+import { apiActions, isLocalImageUri, loadSnapshot, uploadImage, type ApiSession, type Snapshot } from '../api';
 import {
   CURRENT_SHELTER_ID,
   CURRENT_USER_ID,
@@ -65,6 +65,8 @@ const PLACEHOLDER_LOCATION = SJDM_BARANGAYS[0].center;
 
 const PLACEHOLDER_USER: AppUser = {
   id: '',
+  firstName: '',
+  lastName: '',
   fullName: '',
   email: '',
   phone: '',
@@ -107,6 +109,8 @@ export interface IssuedLogin {
   shelterId: string;
   email: string;
   password: string;
+  /** Whether the credentials were also emailed to the shelter automatically. */
+  emailSent: boolean;
 }
 
 /**
@@ -199,6 +203,8 @@ interface AppState {
   markAllNotificationsRead: (role: Role) => void;
   resolveFlag: (flagId: string, resolution: ModerationFlag['resolution']) => void;
   banUser: (userId: string) => void;
+  /** Rejects with the server's message (e.g. "Current password is incorrect") on failure. */
+  changeShelterPassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppState | undefined>(undefined);
@@ -617,7 +623,12 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
           .reviewShelter(session, shelterId, status === 'approved' ? 'approve' : 'reject')
           .then((res) => {
             if (res.temporaryPassword && res.adminEmail) {
-              setIssuedLogin({ shelterId, email: res.adminEmail, password: res.temporaryPassword });
+              setIssuedLogin({
+                shelterId,
+                email: res.adminEmail,
+                password: res.temporaryPassword,
+                emailSent: Boolean(res.emailSent),
+              });
             }
           }),
       );
@@ -738,8 +749,15 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const updateShelterProfile = useCallback<AppState['updateShelterProfile']>(
     (patch) => {
       const session = sessionRef.current;
+      // Shows immediately from the device's own local file; the real hosted URL replaces it
+      // once the next refresh comes back, same as a shelter animal's photo.
       setShelters((prev) => prev.map((s) => (s.id === currentShelter.id ? { ...s, ...patch } : s)));
-      if (session) send(apiActions.updateShelterProfile(session, patch));
+      if (!session) return;
+      const ready =
+        patch.photoUrl && isLocalImageUri(patch.photoUrl)
+          ? uploadImage(session, patch.photoUrl).then((photoUrl) => ({ ...patch, photoUrl }))
+          : Promise.resolve(patch);
+      send(ready.then((finalPatch) => apiActions.updateShelterProfile(session, finalPatch)));
     },
     [currentShelter.id, send],
   );
@@ -748,7 +766,12 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     (patch) => {
       const session = sessionRef.current;
       setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? { ...u, ...patch } : u)));
-      if (session) send(apiActions.updateUserProfile(session, patch));
+      if (!session) return;
+      const ready =
+        patch.photoUrl && isLocalImageUri(patch.photoUrl)
+          ? uploadImage(session, patch.photoUrl).then((photoUrl) => ({ ...patch, photoUrl }))
+          : Promise.resolve(patch);
+      send(ready.then((finalPatch) => apiActions.updateUserProfile(session, finalPatch)));
     },
     [currentUser.id, send],
   );
@@ -892,6 +915,12 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     [send],
   );
 
+  const changeShelterPassword = useCallback<AppState['changeShelterPassword']>(async (currentPassword, newPassword) => {
+    const session = sessionRef.current;
+    if (!session) return;
+    await apiActions.changeShelterPassword(session, currentPassword, newPassword);
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
   const clearIssuedLogin = useCallback(() => setIssuedLogin(null), []);
   const sync = useMemo<SyncState>(
@@ -945,6 +974,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       markAllNotificationsRead,
       resolveFlag,
       banUser,
+      changeShelterPassword,
     }),
     [
       users, shelters, reports, matches, shelterAnimals, cases, flags, notifications,
@@ -955,6 +985,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       setShelterApproval, openCase, setCaseStatus, setShelterAnimalStatus, addShelterAnimal,
       toggleAnimalPublic, updateShelterProfile, updateUserProfile, sendMessage,
       startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,
+      changeShelterPassword,
     ],
   );
 

@@ -10,10 +10,13 @@ import {
   COLUMN,
   Choice,
   Field,
+  PhoneField,
   Select,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
 import { apiRequest } from '@/services/api';
+
+const GMAIL_PATTERN = /^[^\s@]+@gmail\.com$/i;
 
 /**
  * Shelter Admin Module - Register.
@@ -25,7 +28,9 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
   const [permit, setPermit] = useState('');
   const [email, setEmail] = useState('');
   const [contact, setContact] = useState('');
-  const [address, setAddress] = useState('');
+  const [houseUnitNo, setHouseUnitNo] = useState('');
+  const [street, setStreet] = useState('');
+  const [subdivision, setSubdivision] = useState('');
   const [capacity, setCapacity] = useState('');
   const [barangay, setBarangay] = useState<string | null>(null);
   const [radius, setRadius] = useState(5000);
@@ -42,9 +47,9 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Enter the shelter name.';
     if (!permit.trim()) next.permit = 'The city permit number is required for verification.';
-    if (!/^\S+@\S+\.\S+$/.test(email)) next.email = 'Enter a valid email address.';
-    if (contact.replace(/\D/g, '').length < 7) next.contact = 'Enter a contact number.';
-    if (!address.trim()) next.address = 'Enter the shelter address.';
+    if (!GMAIL_PATTERN.test(email)) next.email = 'Enter a Gmail address (must end in @gmail.com).';
+    if (contact.length !== 13) next.contact = 'Enter a complete contact number.';
+    if (!street.trim()) next.street = 'Enter the street.';
     if (!Number(capacity)) next.capacity = 'Enter the animal capacity.';
     if (!barangay) next.barangay = 'Select the barangay.';
     setErrors(next);
@@ -59,7 +64,9 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           barangay,
           contactNumber: contact,
           email,
-          address,
+          houseUnitNo: houseUnitNo.trim() || undefined,
+          street,
+          subdivision: subdivision.trim() || undefined,
           location: center,
           operatingRadiusMeters: radius,
           permitNumber: permit,
@@ -83,7 +90,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
             tone="success"
             icon="checkmark-circle"
             title={`${name} submitted for review`}
-            message={`Permit ${permit} will be verified with the local government. Once approved, your login credentials are issued by the Developer and sent to ${email}.`}
+            message={`Permit ${permit} will be verified with the local government. Once approved, your login credentials are emailed to ${email}.`}
           />
           <Banner
             tone="info"
@@ -122,9 +129,20 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           hint="The Developer verifies this with the local government before granting access."
           error={errors.permit}
         />
-        <Field label="Official email" value={email} onChangeText={setEmail} placeholder="shelter@example.ph" keyboardType="email-address" icon="mail-outline" error={errors.email} />
-        <Field label="Contact number" value={contact} onChangeText={setContact} placeholder="(044) 000 0000" keyboardType="phone-pad" icon="call-outline" error={errors.contact} />
-        <Field label="Address" value={address} onChangeText={setAddress} placeholder="Street, subdivision, landmark" icon="location-outline" multiline error={errors.address} />
+        <Field
+          label="Official email"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="shelter@gmail.com"
+          keyboardType="email-address"
+          icon="mail-outline"
+          hint="Only Gmail addresses are accepted. Login credentials are emailed here once approved."
+          error={errors.email}
+        />
+        <PhoneField label="Contact number" value={contact} onChangeText={setContact} error={errors.contact} />
+        <Field label="House/Unit No. (optional)" value={houseUnitNo} onChangeText={setHouseUnitNo} placeholder="e.g. Blk 5 Lot 12" icon="location-outline" />
+        <Field label="Street" value={street} onChangeText={setStreet} placeholder="e.g. Sampaguita St." icon="location-outline" error={errors.street} />
+        <Field label="Subdivision/Village (optional)" value={subdivision} onChangeText={setSubdivision} placeholder="e.g. Greenfields Subdivision" icon="location-outline" />
         <Field label="Animal capacity" value={capacity} onChangeText={setCapacity} placeholder="e.g. 30" keyboardType="numeric" icon="albums-outline" error={errors.capacity} />
 
         <Select label="Barangay" value={barangay} options={SJDM_BARANGAY_NAMES} onChange={setBarangay} placeholder="Select the barangay" hint={errors.barangay} />

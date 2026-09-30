@@ -10,11 +10,14 @@ import {
   COLUMN,
   Choice,
   Field,
+  PhoneField,
   Select,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
 import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/services/api';
+
+const GMAIL_PATTERN = /^[^\s@]+@gmail\.com$/i;
 
 /**
  * User Module - Registration.
@@ -24,7 +27,9 @@ import { apiRequest } from '@/services/api';
 export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) {
   const { signIn } = useAuth();
 
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -40,9 +45,10 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
   const submit = async () => {
     setSubmitError(null);
     const next: Record<string, string> = {};
-    if (!fullName.trim()) next.fullName = 'Enter your full name.';
-    if (!/^\S+@\S+\.\S+$/.test(email)) next.email = 'Enter a valid email address.';
-    if (phone.replace(/\D/g, '').length < 10) next.phone = 'Enter a valid mobile number.';
+    if (!firstName.trim()) next.firstName = 'Enter your first name.';
+    if (!lastName.trim()) next.lastName = 'Enter your last name.';
+    if (!GMAIL_PATTERN.test(email)) next.email = 'Enter a Gmail address (must end in @gmail.com).';
+    if (phone.length !== 13) next.phone = 'Enter a complete mobile number.';
     if (password.length < 8) next.password = 'Use at least 8 characters.';
     if (!barangay) next.barangay = 'Select your barangay.';
     setErrors(next);
@@ -53,7 +59,9 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
       await apiRequest('/user/register', {
         method: 'POST',
         body: JSON.stringify({
-          fullName,
+          firstName,
+          middleName: middleName.trim() || undefined,
+          lastName,
           email,
           phone,
           password,
@@ -86,29 +94,41 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           <Banner tone="danger" icon="alert-circle" title="Could not create account" message={submitError} />
         ) : null}
         <Field
-          label="Full name"
-          value={fullName}
-          onChangeText={setFullName}
-          placeholder="Juan Dela Cruz"
+          label="First name"
+          value={firstName}
+          onChangeText={setFirstName}
+          placeholder="Juan"
           icon="person-outline"
-          error={errors.fullName}
+          error={errors.firstName}
+        />
+        <Field
+          label="Middle name (optional)"
+          value={middleName}
+          onChangeText={setMiddleName}
+          placeholder="Santos"
+          icon="person-outline"
+        />
+        <Field
+          label="Last name"
+          value={lastName}
+          onChangeText={setLastName}
+          placeholder="Dela Cruz"
+          icon="person-outline"
+          error={errors.lastName}
         />
         <Field
           label="Email address"
           value={email}
           onChangeText={setEmail}
-          placeholder="you@example.ph"
+          placeholder="you@gmail.com"
           keyboardType="email-address"
           icon="mail-outline"
+          hint="Only Gmail addresses are accepted."
           error={errors.email}
         />
-        <Field
-          label="Mobile number"
+        <PhoneField
           value={phone}
           onChangeText={setPhone}
-          placeholder="09XX XXX XXXX"
-          keyboardType="phone-pad"
-          icon="call-outline"
           hint="Shelters use this to reach you when your pet is recovered."
           error={errors.phone}
         />

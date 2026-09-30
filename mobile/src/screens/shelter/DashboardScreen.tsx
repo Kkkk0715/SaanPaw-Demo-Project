@@ -179,23 +179,6 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
           badge={unreadMessages}
           onPress={() => navigation.navigate('Messages')}
         />
-        <ListRow
-          icon="notifications"
-          title="Notifications"
-          subtitle="Smart alerts in your radius"
-          iconColor={theme.colors.accent}
-          iconSoft={theme.colors.accentSoft}
-          badge={unreadAlerts}
-          onPress={() => navigation.navigate('ShelterNotifications')}
-        />
-        <ListRow
-          icon="business"
-          title="Shelter profile"
-          subtitle="Contact details, radius, and sign out"
-          iconColor={theme.colors.muted}
-          iconSoft={theme.colors.surfaceAlt}
-          onPress={() => navigation.navigate('ShelterProfile')}
-        />
       </View>
     </Screen>
   );

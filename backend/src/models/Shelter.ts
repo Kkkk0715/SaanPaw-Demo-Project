@@ -14,9 +14,12 @@ const shelterSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
     barangay: { type: String, required: true, trim: true },
-    address: { type: String, trim: true },
+    houseUnitNo: { type: String, trim: true },
+    street: { type: String, trim: true },
+    subdivision: { type: String, trim: true },
     contactNumber: { type: String, trim: true },
     email: { type: String, lowercase: true, trim: true },
+    photoUrl: { type: String, trim: true },
     location: { type: pointSchema, required: true },
     operatingRadiusMeters: { type: Number, default: () => env.alerts.defaultShelterRadius },
     approvalStatus: { type: String, enum: SHELTER_APPROVAL_STATUSES, default: 'pending' },

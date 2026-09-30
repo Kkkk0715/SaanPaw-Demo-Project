@@ -40,6 +40,9 @@ const photo = (kind: 'dog' | 'cat' | 'other', lock: number) =>
 export const seedUsers: AppUser[] = [
   {
     id: 'u1',
+    firstName: 'Mark',
+    middleName: 'Kenneth',
+    lastName: 'Pena',
     fullName: 'Mark Kenneth Pena',
     email: 'user@saanpaw.ph',
     phone: '0917 555 0142',
@@ -52,6 +55,8 @@ export const seedUsers: AppUser[] = [
   },
   {
     id: 'u2',
+    firstName: 'Justin',
+    lastName: 'Roque',
     fullName: 'Justin Roque',
     email: 'justin.r@example.ph',
     phone: '0918 555 0733',
@@ -64,6 +69,9 @@ export const seedUsers: AppUser[] = [
   },
   {
     id: 'u3',
+    firstName: 'Dirk',
+    middleName: 'Louisse',
+    lastName: 'Villaflor',
     fullName: 'Dirk Louisse Villaflor',
     email: 'dirk.v@example.ph',
     phone: '0995 555 2210',
@@ -76,6 +84,9 @@ export const seedUsers: AppUser[] = [
   },
   {
     id: 'u4',
+    firstName: 'Mark',
+    middleName: 'Gabriel',
+    lastName: 'Yoldi',
     fullName: 'Mark Gabriel Yoldi',
     email: 'gab.y@example.ph',
     phone: '0906 555 8891',
@@ -88,6 +99,8 @@ export const seedUsers: AppUser[] = [
   },
   {
     id: 'u5',
+    firstName: 'Rowena',
+    lastName: 'Bautista',
     fullName: 'Rowena Bautista',
     email: 'rowena.b@example.ph',
     phone: '0977 555 6120',

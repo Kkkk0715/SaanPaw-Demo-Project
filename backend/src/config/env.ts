@@ -71,4 +71,13 @@ export const env = {
   moderation: {
     falseReportBanThreshold: optionalNumber('MODERATION_FALSE_REPORT_BAN_THRESHOLD', 3),
   },
+  /**
+   * Gmail SMTP with an App Password (myaccount.google.com/apppasswords) - not the account's own
+   * login password. Left unset, `email.service.ts` logs the message instead of sending it, so
+   * everything else still works without this configured.
+   */
+  email: {
+    gmailUser: optional('GMAIL_USER', ''),
+    gmailAppPassword: optional('GMAIL_APP_PASSWORD', ''),
+  },
 };

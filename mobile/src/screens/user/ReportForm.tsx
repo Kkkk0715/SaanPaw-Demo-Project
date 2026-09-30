@@ -28,7 +28,7 @@ import {
   Select,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
-import { MatchCard, describeAnimal } from '@/components/domain';
+import { AnimalTypeAndBreed, MatchCard, describeAnimal } from '@/components/domain';
 
 /**
  * One form for both "Report Lost Pet" and "Report Found Animal".
@@ -58,6 +58,8 @@ export function ReportForm({
   const [pin, setPin] = useState<LatLng>(currentUser.location);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState<AnimalReport | null>(null);
+  // Remounts AnimalTypeAndBreed on 'Submit another report' so its own internal picker state clears too.
+  const [formKey, setFormKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   /** Where auto-tagging got to. */
@@ -241,6 +243,7 @@ export function ReportForm({
           variant="secondary"
           onPress={() => {
             setSubmitted(null);
+            setFormKey((k) => k + 1);
             setImages([]);
             setName('');
             setBreed('');
@@ -316,7 +319,7 @@ export function ReportForm({
           onChange={setAnimalType}
         />
 
-        <Field label="Breed (if known)" value={breed} onChangeText={setBreed} placeholder="e.g. Aspin, Shih Tzu, Puspin" icon="ribbon-outline" />
+        <AnimalTypeAndBreed key={formKey} animalType={animalType} breed={breed} onBreedChange={setBreed} />
         <Field
           label="Coat colour"
           value={color}
@@ -353,7 +356,6 @@ export function ReportForm({
           value={marks}
           onChangeText={setMarks}
           placeholder="e.g. torn left ear, red collar with a bell"
-          icon="sparkles-outline"
           hint="Unique marks raise the match confidence more than anything else."
         />
 

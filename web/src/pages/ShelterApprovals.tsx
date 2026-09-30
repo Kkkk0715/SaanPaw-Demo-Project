@@ -36,8 +36,18 @@ export function ShelterApprovalsPage() {
     <>
       {issuedLogin ? (
         <Banner tone="success" title="Shelter login issued - shown once">
-          Give {shelters.find((s) => s.id === issuedLogin.shelterId)?.name ?? 'the shelter'} these
-          credentials: <strong>{issuedLogin.email}</strong> / <strong>{issuedLogin.password}</strong>.{' '}
+          {issuedLogin.emailSent ? (
+            <>
+              Credentials were emailed to <strong>{issuedLogin.email}</strong>. Backup copy:{' '}
+              <strong>{issuedLogin.email}</strong> / <strong>{issuedLogin.password}</strong>.{' '}
+            </>
+          ) : (
+            <>
+              Could not email this automatically - give{' '}
+              {shelters.find((s) => s.id === issuedLogin.shelterId)?.name ?? 'the shelter'} these credentials
+              yourself: <strong>{issuedLogin.email}</strong> / <strong>{issuedLogin.password}</strong>.{' '}
+            </>
+          )}
           <Button variant="ghost" small onClick={clearIssuedLogin}>
             Dismiss
           </Button>

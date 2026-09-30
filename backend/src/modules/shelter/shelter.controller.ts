@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { messagingService } from '../messaging/messaging.service';
 import {
   caseStatusSchema,
+  changePasswordSchema,
   openCaseSchema,
   registerShelterSchema,
   sendMessageSchema,
@@ -50,6 +51,11 @@ export const shelterController = {
 
   updateProfile: async (req: Request, res: Response) =>
     res.json(await shelterService.updateProfile(sid(req), shelterProfileSchema.parse(req.body))),
+
+  changePassword: async (req: Request, res: Response) => {
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+    res.json(await shelterService.changePassword(sid(req), currentPassword, newPassword));
+  },
 
   listNotifications: async (req: Request, res: Response) =>
     res.json(await shelterService.listNotifications(sid(req))),

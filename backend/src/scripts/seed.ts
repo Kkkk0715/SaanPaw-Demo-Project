@@ -38,7 +38,8 @@ async function seed() {
     barangay: 'Poblacion',
     contactNumber: '(044) 815 1234',
     email: 'shelter@saanpaw.ph',
-    address: 'City Hall Compound, Poblacion, San Jose Del Monte',
+    street: 'City Hall Compound',
+    subdivision: 'Poblacion, San Jose Del Monte',
     location: { type: 'Point', coordinates: center },
     operatingRadiusMeters: 5000,
     permitNumber: 'SJDM-VET-2024-001',
@@ -52,7 +53,8 @@ async function seed() {
 
   // User account
   await User.create({
-    fullName: 'Test User',
+    firstName: 'Test',
+    lastName: 'User',
     email: 'user@saanpaw.ph',
     phone: '0917 555 0142',
     passwordHash: pass,

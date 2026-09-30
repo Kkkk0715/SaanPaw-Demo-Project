@@ -11,6 +11,7 @@ import {
 } from '@saanpaw/shared';
 import { AnimalPhoto, Badge, Card, Row, ScoreBar } from '@/components/ui';
 export { describeAnimal, timeAgo } from '@saanpaw/shared';
+export { AnimalTypeAndBreed } from './AnimalTypeAndBreed';
 
 import type {
   AnimalCaseStatus,

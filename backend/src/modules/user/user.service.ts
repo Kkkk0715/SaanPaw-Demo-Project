@@ -14,6 +14,7 @@ import { authService } from '../auth/auth.service';
 import { REPORT_STATUSES } from '../../config/constants';
 import { ApiError } from '../../utils/ApiError';
 import {
+  combineName,
   serializeUser,
   serializeShelter,
   serializeLostReport,
@@ -28,7 +29,9 @@ import {
 export const userService = {
   // ----- Registration -----
   async register(input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     phone?: string;
     password: string;
@@ -38,9 +41,11 @@ export const userService = {
   }) {
     const exists = await User.findOne({ email: input.email.toLowerCase().trim() });
     if (exists) throw ApiError.conflict('Email already registered');
-    
+
     const user = await User.create({
-      fullName: input.fullName,
+      firstName: input.firstName,
+      middleName: input.middleName,
+      lastName: input.lastName,
       email: input.email.toLowerCase().trim(),
       phone: input.phone,
       passwordHash: await authService.hashPassword(input.password),
@@ -48,7 +53,7 @@ export const userService = {
       alertRadiusMeters: input.alertRadiusMeters,
       homeLocation: latLngToGeoPoint(input.location),
     });
-    
+
     return serializeUser(user);
   },
 
@@ -61,7 +66,7 @@ export const userService = {
 
   async updateProfile(userId: string, patch: Record<string, unknown>) {
     const update: Record<string, unknown> = {};
-    for (const key of ['fullName', 'phone', 'barangay', 'alertRadiusMeters'] as const) {
+    for (const key of ['firstName', 'middleName', 'lastName', 'phone', 'photoUrl', 'barangay', 'alertRadiusMeters'] as const) {
       if (patch[key] !== undefined) update[key] = patch[key];
     }
     const loc = patch.location as { latitude?: number; longitude?: number } | undefined;
@@ -110,7 +115,7 @@ export const userService = {
     const report = await LostPetReport.create({
       ...data,
       reporterId,
-      reporterName: user.fullName,
+      reporterName: combineName(user),
       reporterPhone: user.phone,
       lastSeenLocation: latLngToGeoPoint(data.location),
     });
@@ -177,7 +182,7 @@ export const userService = {
     const report = await FoundAnimalReport.create({
       ...data,
       reporterId,
-      reporterName: user.fullName,
+      reporterName: combineName(user),
       reporterPhone: user.phone,
       foundLocation: latLngToGeoPoint(data.location),
     });

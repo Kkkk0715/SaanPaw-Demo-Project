@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '@/constants/theme';
@@ -36,8 +36,7 @@ export function ShelterViewScreen() {
   const [tab, setTab] = useState<'shelters' | 'animals' | 'messages'>('shelters');
   const [composeFor, setComposeFor] = useState<Shelter | null>(null);
   const [draft, setDraft] = useState('');
-  const [openThread, setOpenThread] = useState<string | null>(null);
-  const [reply, setReply] = useState('');
+  const [replies, setReplies] = useState<Record<string, string>>({});
 
   const approved = shelters
     .filter((s) => s.approvalStatus === 'approved')
@@ -47,6 +46,14 @@ export function ShelterViewScreen() {
   /** Only animals a shelter has explicitly posted are visible to users. */
   const publicAnimals = shelterAnimals.filter((a) => a.postedPublicly);
   const myThreads = conversations.filter((c) => c.userId === currentUser.id);
+
+  // Threads render open on this tab, so they count as read the moment they are on screen.
+  const unreadKey = myThreads.map((c) => `${c.id}:${c.unreadForUser}`).join(',');
+  useEffect(() => {
+    if (tab !== 'messages') return;
+    myThreads.filter((c) => c.unreadForUser).forEach((c) => markConversationRead(c.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, unreadKey]);
 
   const send = () => {
     if (!composeFor || !draft.trim()) return;
@@ -154,8 +161,6 @@ export function ShelterViewScreen() {
             myThreads.map((c) => {
               const shelter = shelters.find((s) => s.id === c.shelterId);
               const thread = messagesIn(c.id);
-              const last = thread[thread.length - 1];
-              const isOpen = openThread === c.id;
               return (
                 <Card key={c.id}>
                   <Row gap={1} align="flex-start">
@@ -165,75 +170,59 @@ export function ShelterViewScreen() {
                     <View style={{ flex: 1, gap: 3 }}>
                       <Text style={styles.threadTitle}>{shelter?.name ?? 'Shelter'}</Text>
                       <Caption>{c.subject}</Caption>
-                      {!isOpen && last ? (
-                        <Text style={styles.preview} numberOfLines={1}>
-                          {last.senderRole === 'user' ? 'You: ' : ''}
-                          {last.body}
-                        </Text>
-                      ) : null}
                       <Caption>{timeAgo(c.lastMessageAt)}</Caption>
                     </View>
-                    <Button
-                      label={isOpen ? 'Hide' : 'Open'}
-                      variant="ghost"
-                      full={false}
-                      onPress={() => {
-                        setOpenThread(isOpen ? null : c.id);
-                        if (!isOpen) markConversationRead(c.id);
-                      }}
-                    />
                   </Row>
 
-                  {isOpen ? (
-                    <View style={{ gap: theme.spacing(1) }}>
-                      <ScrollView style={{ maxHeight: 260 }}>
-                        <View style={{ gap: 8 }}>
-                          {thread.map((m) => (
-                            <View
-                              key={m.id}
+                  <View style={{ gap: theme.spacing(1) }}>
+                    <ScrollView style={{ maxHeight: 260 }}>
+                      <View style={{ gap: 8 }}>
+                        {thread.map((m) => (
+                          <View
+                            key={m.id}
+                            style={[
+                              styles.bubble,
+                              m.senderRole === 'user' ? styles.bubbleMine : styles.bubbleTheirs,
+                            ]}
+                          >
+                            <Text
                               style={[
-                                styles.bubble,
-                                m.senderRole === 'user' ? styles.bubbleMine : styles.bubbleTheirs,
+                                styles.bubbleText,
+                                m.senderRole === 'user' && { color: theme.colors.onPrimary },
                               ]}
                             >
-                              <Text
-                                style={[
-                                  styles.bubbleText,
-                                  m.senderRole === 'user' && { color: theme.colors.onPrimary },
-                                ]}
-                              >
-                                {m.body}
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.bubbleTime,
-                                  m.senderRole === 'user' && { color: 'rgba(255,255,255,0.7)' },
-                                ]}
-                              >
-                                {timeAgo(m.sentAt)}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      </ScrollView>
-                      <Field
-                        label="Reply"
-                        value={reply}
-                        onChangeText={setReply}
-                        placeholder="Type your message..."
-                        multiline
-                      />
-                      <Button
-                        label="Send"
-                        icon="send"
-                        onPress={() => {
-                          if (!reply.trim()) return;
-                          sendMessage(c.id, 'user', reply.trim());
-                          setReply('');
-                        }}
-                      />
-                    </View>
-                  ) : null}
+                              {m.body}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.bubbleTime,
+                                m.senderRole === 'user' && { color: 'rgba(255,255,255,0.7)' },
+                              ]}
+                            >
+                              {timeAgo(m.sentAt)}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </ScrollView>
+                    <Field
+                      label="Reply"
+                      value={replies[c.id] ?? ''}
+                      onChangeText={(v) => setReplies((r) => ({ ...r, [c.id]: v }))}
+                      placeholder="Type your message..."
+                      multiline
+                    />
+                    <Button
+                      label="Send"
+                      icon="send"
+                      onPress={() => {
+                        const body = (replies[c.id] ?? '').trim();
+                        if (!body) return;
+                        sendMessage(c.id, 'user', body);
+                        setReplies((r) => ({ ...r, [c.id]: '' }));
+                      }}
+                    />
+                  </View>
                 </Card>
               );
             })
@@ -280,7 +269,6 @@ const styles = StyleSheet.create({
   animalName: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
   threadIcon: { width: 36, height: 36, borderRadius: theme.radius.sm, alignItems: 'center', justifyContent: 'center' },
   threadTitle: { fontSize: 14.5, fontWeight: '700', color: theme.colors.text },
-  preview: { fontSize: 12.5, color: theme.colors.textSoft },
 
   bubble: { maxWidth: '85%', padding: theme.spacing(1.25), borderRadius: theme.radius.md, gap: 3 },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: theme.colors.primary, borderBottomRightRadius: 4 },

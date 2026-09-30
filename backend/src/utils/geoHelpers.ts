@@ -30,12 +30,34 @@ export function latLngToGeoPoint(latLng: LatLng): GeoPoint {
   };
 }
 
+/** "First Middle Last", skipping a blank middle name. */
+export function combineName(parts: {
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+}): string {
+  return [parts.firstName, parts.middleName, parts.lastName].filter(Boolean).join(' ');
+}
+
+/** "House/Unit No., Street, Subdivision", skipping whichever parts are blank. */
+export function combineAddress(parts: {
+  houseUnitNo?: string | null;
+  street?: string | null;
+  subdivision?: string | null;
+}): string {
+  return [parts.houseUnitNo, parts.street, parts.subdivision].filter(Boolean).join(', ');
+}
+
 export function serializeUser(doc: any) {
   return {
     id: String(doc._id),
-    fullName: doc.fullName,
+    firstName: doc.firstName,
+    middleName: doc.middleName,
+    lastName: doc.lastName,
+    fullName: combineName(doc),
     email: doc.email,
     phone: doc.phone,
+    photoUrl: doc.photoUrl,
     barangay: doc.barangay,
     location: geoPointToLatLng(doc.homeLocation),
     alertRadiusMeters: doc.alertRadiusMeters,
@@ -50,9 +72,13 @@ export function serializeShelter(doc: any) {
     id: String(doc._id),
     name: doc.name,
     barangay: doc.barangay,
-    address: doc.address,
+    houseUnitNo: doc.houseUnitNo,
+    street: doc.street,
+    subdivision: doc.subdivision,
+    address: combineAddress(doc),
     contactNumber: doc.contactNumber,
     email: doc.email,
+    photoUrl: doc.photoUrl,
     location: geoPointToLatLng(doc.location),
     operatingRadiusMeters: doc.operatingRadiusMeters,
     approvalStatus: doc.approvalStatus,

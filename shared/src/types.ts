@@ -68,9 +68,15 @@ export interface Shelter {
   id: string;
   name: string;
   barangay: string;
+  /** House/Unit No., e.g. "Blk 5 Lot 12". */
+  houseUnitNo?: string;
+  street?: string;
+  subdivision?: string;
+  /** "House/Unit No., Street, Subdivision" - derived server-side for display. */
   address: string;
   contactNumber: string;
   email: string;
+  photoUrl?: string;
   location: LatLng;
   /** Scope: shelter admin "select their operations radius". */
   operatingRadiusMeters: number;
@@ -158,9 +164,14 @@ export interface ModerationFlag {
 
 export interface AppUser {
   id: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  /** "First Middle Last", derived server-side - kept for display so nothing that already reads it needs to change. */
   fullName: string;
   email: string;
   phone: string;
+  photoUrl?: string;
   barangay: string;
   location: LatLng;
   /** Scope: user registration "select their radius to receive notifications". */

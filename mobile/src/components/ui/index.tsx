@@ -277,6 +277,53 @@ export function Field({
   );
 }
 
+/**
+ * Philippine mobile number input: a fixed "+639" prefix plus up to 9 digits. `value`/`onChangeText`
+ * always deal in the full canonical string (e.g. "+639171234567" or "" when empty), so the parent
+ * never has to assemble it itself.
+ */
+export function PhoneField({
+  label = 'Mobile number',
+  value,
+  onChangeText,
+  error,
+  hint,
+}: {
+  label?: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  error?: string;
+  hint?: string;
+}) {
+  const digits = value.startsWith('+639') ? value.slice(4) : '';
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={[styles.inputWrap, Boolean(error) && styles.inputWrapError]}>
+        <Ionicons name="call-outline" size={17} color={theme.colors.muted} />
+        <Text style={styles.phonePrefix}>+639</Text>
+        <TextInput
+          style={styles.input}
+          value={digits}
+          onChangeText={(t) => {
+            const cleaned = t.replace(/\D/g, '').slice(0, 9);
+            onChangeText(cleaned ? `+639${cleaned}` : '');
+          }}
+          placeholder="171234567"
+          placeholderTextColor={theme.colors.muted}
+          keyboardType="number-pad"
+          maxLength={9}
+        />
+      </View>
+      {error ? (
+        <Text style={styles.fieldError}>{error}</Text>
+      ) : hint ? (
+        <Text style={styles.fieldHint}>{hint}</Text>
+      ) : null}
+    </View>
+  );
+}
+
 /** Horizontal single-select used for animal type, sex, size, radius, filters. */
 export function Choice<T extends string | number>({
   label,
@@ -359,6 +406,7 @@ export function Select({
   onChange,
   placeholder = 'Select...',
   hint,
+  icon = 'location-outline',
 }: {
   label: string;
   value: string | null;
@@ -366,13 +414,14 @@ export function Select({
   onChange: (v: string) => void;
   placeholder?: string;
   hint?: string;
+  icon?: IconName;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <Pressable style={styles.inputWrap} onPress={() => setOpen(true)}>
-        <Ionicons name="location-outline" size={17} color={theme.colors.muted} />
+        <Ionicons name={icon} size={17} color={theme.colors.muted} />
         <Text style={[styles.input, !value && { color: theme.colors.muted }]}>
           {value ?? placeholder}
         </Text>
@@ -764,6 +813,14 @@ const styles = StyleSheet.create({
   inputMultiline: { minHeight: 84, textAlignVertical: 'top', paddingTop: 0 },
   fieldHint: { ...theme.type.caption, color: theme.colors.muted },
   fieldError: { ...theme.type.captionMedium, color: theme.colors.danger },
+  phonePrefix: {
+    ...theme.type.body,
+    color: theme.colors.text,
+    fontFamily: theme.fonts.bold,
+    borderRightWidth: 1,
+    borderRightColor: theme.colors.border,
+    paddingRight: 8,
+  },
 
   choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choice: {
