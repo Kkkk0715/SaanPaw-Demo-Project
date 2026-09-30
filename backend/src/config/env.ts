@@ -80,4 +80,14 @@ export const env = {
     gmailUser: optional('GMAIL_USER', ''),
     gmailAppPassword: optional('GMAIL_APP_PASSWORD', ''),
   },
+  /**
+   * A free key from aistudio.google.com/apikey. Left unset, photo matching and the image signal
+   * in report flagging both fall back to their non-AI behaviour (see gemini.service.ts).
+   */
+  gemini: {
+    apiKey: optional('GEMINI_API_KEY', ''),
+    // An alias Google keeps pointed at their current recommended flash-lite model, rather than a
+    // dated model name that eventually gets retired (as gemini-2.0-flash was).
+    model: optional('GEMINI_MODEL', 'gemini-flash-lite-latest'),
+  },
 };

@@ -165,9 +165,9 @@ export function serializeMatchSuggestion(doc: any) {
   return {
     id: String(doc._id),
     lostReportId: String(doc.lostReportId),
-    candidateId: String(doc.candidateId ?? doc.foundReportId),
-    candidateSource: doc.candidateSource ?? 'found_report',
-    score: doc.score ?? doc.similarityScore ?? 0,
+    candidateId: String(doc.candidateId),
+    candidateSource: doc.candidateSource,
+    score: doc.score,
     reasons: doc.reasons || [],
     createdAt: doc.createdAt?.toISOString?.(),
   };

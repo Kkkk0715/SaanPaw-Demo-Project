@@ -74,6 +74,15 @@ export const reportSchema = z.object({
   location: latLngSchema,
 });
 
+export const matchScanSchema = z.object({
+  animalType: z.enum(ANIMAL_TYPES),
+  breed: optionalText(100),
+  color: optionalText(100),
+  size: size.optional(),
+  location: latLngSchema,
+  photoUrl: optionalText(1000),
+});
+
 export const userProfileSchema = z.object({
   firstName: text(60).min(1).optional(),
   middleName: optionalText(60),

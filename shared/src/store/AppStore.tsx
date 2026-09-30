@@ -178,9 +178,9 @@ interface AppState {
   messagesIn: (conversationId: string) => Message[];
   caseForReport: (reportId: string) => AnimalCase | undefined;
   /**
-   * Stands in for image recognition: scores open found reports and shelter
-   * animals against a description. The real model will run on the server and
-   * return this same shape.
+   * Text-attribute heuristic used only in offline demo mode, where there is no backend to run a
+   * real photo comparison. `scanPhotoMatch` is the real thing and falls back to this when signed
+   * out of a live session.
    */
   runImageMatch: (input: {
     animalType: AnimalType;
@@ -189,6 +189,15 @@ interface AppState {
     breed?: string;
     location: LatLng;
   }) => { id: string; source: 'found_report' | 'shelter_animal'; score: number; reasons: string[] }[];
+  /** Ad-hoc "scan a photo" search, not tied to any existing report; results are not persisted. */
+  scanPhotoMatch: (input: {
+    animalType: AnimalType;
+    color?: string;
+    breed?: string;
+    size?: AnimalReport['size'];
+    location: LatLng;
+    photoUrl?: string;
+  }) => Promise<{ candidateId: string; candidateSource: 'found_report' | 'shelter_animal'; score: number; reasons: string[] }[]>;
 
   // ---- actions
   /** Rejects when the server refuses the report, e.g. a pin outside the service area. */
@@ -516,6 +525,22 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     [reports, shelterAnimals, shelters],
   );
 
+  const scanPhotoMatch = useCallback<AppState['scanPhotoMatch']>(
+    async (input) => {
+      const session = sessionRef.current;
+      if (!session) {
+        return runImageMatch(input).map((m) => ({
+          candidateId: m.id,
+          candidateSource: m.source,
+          score: m.score,
+          reasons: m.reasons,
+        }));
+      }
+      return apiActions.scanPhoto(session, input);
+    },
+    [runImageMatch],
+  );
+
   // ---------------------------------------------------------------- actions
 
   const createReport = useCallback<AppState['createReport']>(
@@ -570,27 +595,31 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
           relatedReportId: report.id,
         });
 
-        // Rank candidates now so the match screen has results waiting.
-        const ranked = runImageMatch({
-          animalType: input.animalType,
-          color: input.color,
-          size: input.size,
-          breed: input.breed,
-          location: input.location,
-        });
-        if (ranked.length) {
-          setMatches((prev) => [
-            ...ranked.slice(0, 3).map((m) => ({
-              id: uid('mm'),
-              lostReportId: report.id,
-              candidateId: m.id,
-              candidateSource: m.source,
-              score: m.score,
-              reasons: m.reasons,
-              createdAt: new Date().toISOString(),
-            })),
-            ...prev,
-          ]);
+        // Live mode: the server ranks real candidates (attribute pre-filter + a Gemini photo
+        // comparison) while creating the report, and the refresh() below pulls those in. Offline
+        // demo mode has no server to do that, so it keeps using this text-only heuristic.
+        if (!session) {
+          const ranked = runImageMatch({
+            animalType: input.animalType,
+            color: input.color,
+            size: input.size,
+            breed: input.breed,
+            location: input.location,
+          });
+          if (ranked.length) {
+            setMatches((prev) => [
+              ...ranked.slice(0, 3).map((m) => ({
+                id: uid('mm'),
+                lostReportId: report.id,
+                candidateId: m.id,
+                candidateSource: m.source,
+                score: m.score,
+                reasons: m.reasons,
+                createdAt: new Date().toISOString(),
+              })),
+              ...prev,
+            ]);
+          }
         }
       }
 
@@ -968,6 +997,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       messagesIn,
       caseForReport,
       runImageMatch,
+      scanPhotoMatch,
       createReport,
       setReportStatus,
       deleteReport,
@@ -993,7 +1023,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       conversations, messages, currentUser, currentShelter, sync, issuedLogin, clearIssuedLogin,
       stats, reportById, shelterById,
       myReports, nearbyReports, shelterAreaReports, matchesForReport, notificationsFor,
-      messagesIn, caseForReport, runImageMatch, createReport, setReportStatus, deleteReport,
+      messagesIn, caseForReport, runImageMatch, scanPhotoMatch, createReport, setReportStatus, deleteReport,
       setShelterApproval, openCase, setCaseStatus, setShelterAnimalStatus, addShelterAnimal,
       toggleAnimalPublic, updateShelterProfile, updateUserProfile, sendMessage,
       startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,

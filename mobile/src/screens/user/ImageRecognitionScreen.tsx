@@ -28,7 +28,7 @@ import type { AnimalReport, AnimalType } from '@saanpaw/shared';
  */
 export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenProps<any>) {
   const reportId = (route.params as { reportId?: string } | undefined)?.reportId;
-  const { reportById, shelterById, matchesForReport, runImageMatch, shelterAnimals, startConversation } =
+  const { reportById, shelterById, matchesForReport, scanPhotoMatch, shelterAnimals, startConversation } =
     useApp();
 
   const linkedReport = reportId ? reportById(reportId) : undefined;
@@ -38,7 +38,8 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
   const [color, setColor] = useState(linkedReport?.color ?? '');
   const [size, setSize] = useState<AnimalReport['size']>(linkedReport?.size ?? 'medium');
   const [scanning, setScanning] = useState(false);
-  const [results, setResults] = useState<ReturnType<typeof runImageMatch> | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [results, setResults] = useState<Awaited<ReturnType<typeof scanPhotoMatch>> | null>(null);
 
   const storedMatches = linkedReport ? matchesForReport(linkedReport.id) : [];
 
@@ -52,21 +53,24 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
     }
   };
 
-  const scan = () => {
+  const scan = async () => {
     setScanning(true);
+    setScanError(null);
     setResults(null);
-    // The real model runs server-side; the delay stands in for that round trip.
-    setTimeout(() => {
-      setResults(
-        runImageMatch({
-          animalType,
-          color,
-          size,
-          location: linkedReport?.location ?? { latitude: 14.8136, longitude: 121.0453 },
-        }),
-      );
+    try {
+      const ranked = await scanPhotoMatch({
+        animalType,
+        color,
+        size,
+        location: linkedReport?.location ?? { latitude: 14.8136, longitude: 121.0453 },
+        photoUrl: image ?? undefined,
+      });
+      setResults(ranked);
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : 'Could not run the match. Try again.');
+    } finally {
       setScanning(false);
-    }, 900);
+    }
   };
 
   const describe = (id: string, source: 'found_report' | 'shelter_animal') => {
@@ -183,16 +187,17 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
         onPress={scan}
       />
       {!image ? <Caption style={{ textAlign: 'center' }}>Upload a photo to enable matching.</Caption> : null}
+      {scanError ? <Caption style={{ textAlign: 'center', color: theme.colors.danger }}>{scanError}</Caption> : null}
 
       {results ? (
         <>
           <SectionHeader title={`Results (${results.length})`} />
           {results.length ? (
             results.map((m) => {
-              const d = describe(m.id, m.source);
+              const d = describe(m.candidateId, m.candidateSource);
               return (
                 <MatchCard
-                  key={`${m.source}-${m.id}`}
+                  key={`${m.candidateSource}-${m.candidateId}`}
                   sourceLabel={d.label}
                   title={d.title}
                   subtitle={d.subtitle}

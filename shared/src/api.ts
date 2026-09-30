@@ -2,9 +2,12 @@ import type {
   AnimalCase,
   AnimalCaseStatus,
   AnimalReport,
+  AnimalSize,
+  AnimalType,
   AppUser,
   Conversation,
   DashboardStats,
+  LatLng,
   MatchSuggestion,
   Message,
   ModerationFlag,
@@ -320,6 +323,18 @@ export const apiActions = {
 
   matchesFor: (s: ApiSession, lostReportId: string) =>
     call<MatchSuggestion[]>(s, `/user/reports/lost/${lostReportId}/matches`),
+
+  /** Ad-hoc "scan a photo" search, not tied to any report - uploads the photo first if it's still local. */
+  scanPhoto: async (
+    s: ApiSession,
+    input: { animalType: AnimalType; color?: string; breed?: string; size?: AnimalSize; location: LatLng; photoUrl?: string },
+  ) => {
+    const photoUrl = input.photoUrl && isLocalImageUri(input.photoUrl) ? await uploadImage(s, input.photoUrl) : input.photoUrl;
+    return call<Pick<MatchSuggestion, 'candidateId' | 'candidateSource' | 'score' | 'reasons'>[]>(s, '/user/match/scan', {
+      method: 'POST',
+      body: { ...input, photoUrl },
+    });
+  },
 
   notifications: (s: ApiSession) => call<NotificationItem[]>(s, `${notificationsBase(s.role)}/notifications`),
 

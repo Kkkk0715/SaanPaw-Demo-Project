@@ -61,6 +61,41 @@ export async function readDatabasePhoto(name: string) {
   return Photo.findById(id);
 }
 
+const MIME_BY_EXTENSION: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+
+/**
+ * Reads back the bytes for a URL `saveUploadedPhoto` returned - a Vercel Blob URL, a `/uploads/<id>`
+ * path backed by the database, or a `/uploads/<file>` path on local disk. Callers that need the
+ * actual bytes rather than a browser-fetchable URL (gemini.service.ts's vision calls) use this
+ * instead of re-deriving the three storage backends themselves.
+ */
+export async function readStoredPhoto(url: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  try {
+    if (/^https?:\/\//.test(url)) {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      return { buffer, mimeType: res.headers.get('content-type') ?? 'image/jpeg' };
+    }
+
+    const name = url.replace(/^\/uploads\//, '');
+    if (isDatabasePhotoId(name)) {
+      const photo = await readDatabasePhoto(name);
+      return photo ? { buffer: photo.data as unknown as Buffer, mimeType: photo.contentType } : null;
+    }
+
+    const buffer = await fs.promises.readFile(path.join(localUploadDir, name));
+    return { buffer, mimeType: MIME_BY_EXTENSION[path.extname(name).toLowerCase()] ?? 'image/jpeg' };
+  } catch {
+    return null;
+  }
+}
+
 /** The mime type is client-supplied, so confirm the file really starts like the image it claims to be. */
 export function looksLikeImage(buffer: Buffer): boolean {
   if (buffer.length < 12) return false;

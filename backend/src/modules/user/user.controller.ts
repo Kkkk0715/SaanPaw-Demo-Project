@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { messagingService } from '../messaging/messaging.service';
 import { ApiError } from '../../utils/ApiError';
 import {
+  matchScanSchema,
   queryNumber,
   registerUserSchema,
   reportSchema,
@@ -50,6 +51,8 @@ export const userController = {
 
   matchSuggestions: async (req: Request, res: Response) =>
     res.json(await userService.matchSuggestions(req.params.id)),
+  scanPhoto: async (req: Request, res: Response) =>
+    res.json(await userService.scanPhoto(matchScanSchema.parse(req.body))),
 
   mapReports: async (req: Request, res: Response) => {
     const lng = queryNumber(req.query.lng);

@@ -8,11 +8,13 @@ import { Notification } from '../../models/Notification';
 import { MatchSuggestion } from '../../models/MatchSuggestion';
 import { smartAlertService } from '../../services/smartAlert.service';
 import { moderationService } from '../../services/moderation.service';
+import { findMatches } from '../../services/matching.service';
 import { statsService } from '../../services/stats.service';
 import { geolocationService } from '../../services/geolocation.service';
 import { authService } from '../auth/auth.service';
 import { REPORT_STATUSES } from '../../config/constants';
 import { ApiError } from '../../utils/ApiError';
+import { logger } from '../../utils/logger';
 import {
   combineName,
   serializeUser,
@@ -141,7 +143,35 @@ export const userService = {
       lat,
       summary: `${data.name || report.animalType} - ${data.color ?? ''} ${data.breed ?? ''}`.trim(),
     });
-    
+
+    // Real candidates ranked now (attribute pre-filter + Gemini photo comparison for the top few),
+    // so matches are already there the first time the owner opens this report. Never blocks
+    // report creation: a matching hiccup just means no suggestions yet, not a failed submission.
+    try {
+      const ranked = await findMatches({
+        animalType: report.animalType,
+        color: data.color,
+        breed: data.breed,
+        size: data.size,
+        location: data.location,
+        imageUrl: report.imageUrls[0],
+      });
+      if (ranked.length) {
+        await MatchSuggestion.insertMany(
+          ranked.map((m) => ({
+            lostReportId: report._id,
+            candidateId: m.candidateId,
+            candidateSource: m.candidateSource,
+            score: m.score,
+            reasons: m.reasons,
+          })),
+          { ordered: false },
+        );
+      }
+    } catch (err) {
+      logger.error('matching: failed to rank candidates for new lost report', err);
+    }
+
     return serializeLostReport(report);
   },
 
@@ -230,6 +260,31 @@ export const userService = {
       .limit(10)
       .lean();
     return matches.map(serializeMatchSuggestion);
+  },
+
+  /** Ad-hoc "scan a photo" search, not tied to any report of the caller's own - results aren't persisted. */
+  async scanPhoto(input: {
+    animalType: string;
+    color?: string;
+    breed?: string;
+    size?: string;
+    location: { latitude: number; longitude: number };
+    photoUrl?: string;
+  }) {
+    const ranked = await findMatches({
+      animalType: input.animalType as any,
+      color: input.color,
+      breed: input.breed,
+      size: input.size,
+      location: input.location,
+      imageUrl: input.photoUrl,
+    });
+    return ranked.map((m) => ({
+      candidateId: m.candidateId,
+      candidateSource: m.candidateSource,
+      score: m.score,
+      reasons: m.reasons,
+    }));
   },
 
   // ----- Map View Interface -----

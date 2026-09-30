@@ -32,8 +32,9 @@ router.delete('/reports/:kind(lost|found)/:id', asyncHandler(userController.dele
 router.get('/shelters', asyncHandler(userController.listShelters));
 router.get('/shelters/:id/animals', asyncHandler(userController.listShelterAnimals));
 
-// Image Recognition Matching (suggestions for one lost report)
+// Image Recognition Matching (suggestions for one lost report, or an ad-hoc scan of any photo)
 router.get('/reports/lost/:id/matches', asyncHandler(userController.matchSuggestions));
+router.post('/match/scan', geoFence, asyncHandler(userController.scanPhoto));
 
 // Map View Interface
 router.get('/map/reports', asyncHandler(userController.mapReports));
