@@ -106,8 +106,26 @@ const originOf = (baseUrl: string) => baseUrl.match(/^https?:\/\/[^/]+/)?.[0] ??
 export const resolveImageUrl = (url: string, baseUrl: string) =>
   url.startsWith(UPLOAD_PREFIX) ? `${originOf(baseUrl)}${url}` : url;
 
+/**
+ * Inverse of resolveImageUrl. A hosted photo already loaded into state (e.g. the current
+ * profile picture, unresolved a moment before its first render) carries the display-time
+ * absolute form. Saving the profile without changing the picture must not send that absolute
+ * URL back to the server - it would overwrite the portable `/uploads/...` path stored there
+ * with one baked to today's host, breaking the moment the API moves (local -> LAN -> prod).
+ */
+export const toStoredImageUrl = (url: string, baseUrl: string) => {
+  const prefix = `${originOf(baseUrl)}${UPLOAD_PREFIX}`;
+  return url.startsWith(prefix) ? url.slice(originOf(baseUrl).length) : url;
+};
+
 const withImageHosts = <T extends { imageUrls: string[] }>(baseUrl: string, items: T[]): T[] =>
   items.map((item) => ({ ...item, imageUrls: item.imageUrls.map((u) => resolveImageUrl(u, baseUrl)) }));
+
+const withPhotoHost = <T extends { photoUrl?: string }>(baseUrl: string, item: T): T =>
+  item.photoUrl ? { ...item, photoUrl: resolveImageUrl(item.photoUrl, baseUrl) } : item;
+
+const withPhotoHosts = <T extends { photoUrl?: string }>(baseUrl: string, items: T[]): T[] =>
+  items.map((item) => withPhotoHost(baseUrl, item));
 
 /** A photo still on the device (file, content, blob or data URI) rather than one the server can already serve. */
 export const isLocalImageUri = (uri: string) => !/^https?:\/\//.test(uri) && !uri.startsWith(UPLOAD_PREFIX);
@@ -211,8 +229,8 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
 
     return {
       ...emptySnapshot(me.id),
-      users: [me],
-      shelters,
+      users: [withPhotoHost(s.baseUrl, me)],
+      shelters: withPhotoHosts(s.baseUrl, shelters),
       reports: withImageHosts(s.baseUrl, [...reports.values()]),
       matches: matches.flat(),
       shelterAnimals: withImageHosts(s.baseUrl, animals.flat()),
@@ -236,7 +254,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
     ]);
     return {
       ...emptySnapshot(me.id),
-      shelters: [me],
+      shelters: [withPhotoHost(s.baseUrl, me)],
       reports: withImageHosts(s.baseUrl, flatten(reports)),
       shelterAnimals: withImageHosts(s.baseUrl, animals),
       cases,
@@ -257,7 +275,13 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
     reports: AnimalReport[];
     flags: ModerationFlag[];
   }>(s, '/developer/overview');
-  return { ...emptySnapshot(''), ...overview, reports: withImageHosts(s.baseUrl, overview.reports) };
+  return {
+    ...emptySnapshot(''),
+    ...overview,
+    shelters: withPhotoHosts(s.baseUrl, overview.shelters),
+    users: withPhotoHosts(s.baseUrl, overview.users),
+    reports: withImageHosts(s.baseUrl, overview.reports),
+  };
 }
 
 /** Field names the report endpoints read from the request body. */

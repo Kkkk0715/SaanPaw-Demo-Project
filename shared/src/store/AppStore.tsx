@@ -9,7 +9,15 @@ import {
   type ReactNode,
 } from 'react';
 import { SJDM_BARANGAYS, distanceMeters } from '../sjdm';
-import { apiActions, isLocalImageUri, loadSnapshot, uploadImage, type ApiSession, type Snapshot } from '../api';
+import {
+  apiActions,
+  isLocalImageUri,
+  loadSnapshot,
+  toStoredImageUrl,
+  uploadImage,
+  type ApiSession,
+  type Snapshot,
+} from '../api';
 import {
   CURRENT_SHELTER_ID,
   CURRENT_USER_ID,
@@ -756,7 +764,9 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       const ready =
         patch.photoUrl && isLocalImageUri(patch.photoUrl)
           ? uploadImage(session, patch.photoUrl).then((photoUrl) => ({ ...patch, photoUrl }))
-          : Promise.resolve(patch);
+          : Promise.resolve(
+              patch.photoUrl ? { ...patch, photoUrl: toStoredImageUrl(patch.photoUrl, session.baseUrl) } : patch,
+            );
       send(ready.then((finalPatch) => apiActions.updateShelterProfile(session, finalPatch)));
     },
     [currentShelter.id, send],
@@ -770,7 +780,9 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       const ready =
         patch.photoUrl && isLocalImageUri(patch.photoUrl)
           ? uploadImage(session, patch.photoUrl).then((photoUrl) => ({ ...patch, photoUrl }))
-          : Promise.resolve(patch);
+          : Promise.resolve(
+              patch.photoUrl ? { ...patch, photoUrl: toStoredImageUrl(patch.photoUrl, session.baseUrl) } : patch,
+            );
       send(ready.then((finalPatch) => apiActions.updateUserProfile(session, finalPatch)));
     },
     [currentUser.id, send],
