@@ -20,6 +20,7 @@ import {
   Select,
   Sheet,
 } from '@/components/ui';
+import { confirmAsync } from '@/services/confirm';
 import { shrinkPhoto } from '@/services/photo';
 import { useAuth } from '@/context/AuthContext';
 
@@ -75,6 +76,16 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
       location: center,
     });
     setEditing(false);
+  };
+
+  const handleSignOut = async () => {
+    const confirmed = await confirmAsync({
+      title: 'Sign out',
+      message: 'Are you sure you want to sign out?',
+      confirmLabel: 'Sign out',
+      destructive: true,
+    });
+    if (confirmed) signOut();
   };
 
   const activeReports = myReports.filter((r) => r.status !== 'closed').length;
@@ -168,7 +179,7 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
         />
 
         <View style={{ height: theme.spacing(1) }} />
-        <Button label="Sign out" variant="danger" icon="log-out-outline" onPress={signOut} />
+        <Button label="Sign out" variant="danger" icon="log-out-outline" onPress={handleSignOut} />
 
         <Caption style={{ textAlign: 'center', marginTop: theme.spacing(1) }}>
           SaanPaw · San Jose Del Monte, Bulacan

@@ -20,6 +20,7 @@ import {
   Select,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
+import { confirmAsync } from '@/services/confirm';
 import { shrinkPhoto } from '@/services/photo';
 import { useAuth } from '@/context/AuthContext';
 
@@ -101,6 +102,16 @@ export function ShelterProfileScreen() {
     } finally {
       setChangingPassword(false);
     }
+  };
+
+  const handleSignOut = async () => {
+    const confirmed = await confirmAsync({
+      title: 'Sign out',
+      message: 'Are you sure you want to sign out?',
+      confirmLabel: 'Sign out',
+      destructive: true,
+    });
+    if (confirmed) signOut();
   };
 
   return (
@@ -207,7 +218,7 @@ export function ShelterProfileScreen() {
         <Button label="Change password" variant="secondary" icon="key-outline" loading={changingPassword} onPress={savePassword} />
       </Card>
 
-      <Button label="Sign out" variant="secondary" icon="log-out-outline" onPress={signOut} />
+      <Button label="Sign out" variant="secondary" icon="log-out-outline" onPress={handleSignOut} />
     </Screen>
   );
 }
