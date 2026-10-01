@@ -1,11 +1,23 @@
-import { Expo, type ExpoPushMessage } from 'expo-server-sdk';
+import type { Expo as ExpoType, ExpoPushMessage } from 'expo-server-sdk';
 import { Notification } from '../models/Notification';
 import { Shelter } from '../models/Shelter';
 import { User } from '../models/User';
 import type { NOTIFICATION_TYPES } from '../config/constants';
 import { logger } from '../utils/logger';
 
-const expo = new Expo();
+/**
+ * expo-server-sdk ships as an ES module. A static `import { Expo } from 'expo-server-sdk'` compiles
+ * to `require('expo-server-sdk')` under this project's CommonJS output, which throws
+ * `ERR_REQUIRE_ESM` on Node runtimes without require()-of-ESM support - Vercel's included, even
+ * though it works unnoticed on a newer local Node that does support it. A plain `import()` doesn't
+ * fix that: under `module: CommonJS`, tsc downlevels it right back to
+ * `Promise.resolve().then(() => require(...))`, the same crash. `Function(...)` builds the import
+ * call from a string at runtime so tsc never sees the `import` token to downlevel - this is the
+ * standard workaround for loading an ESM-only package from CommonJS.
+ */
+let expoModule: Promise<typeof import('expo-server-sdk')> | null = null;
+const importExpoSdk = new Function('return import("expo-server-sdk")') as () => Promise<typeof import('expo-server-sdk')>;
+const loadExpo = () => (expoModule ??= importExpoSdk());
 
 export interface PushPayload {
   token?: string | null;
@@ -20,6 +32,7 @@ export interface PushPayload {
  * a failed or partial push must not block whatever triggered it, same as sendEmail().
  */
 export async function sendPushNotifications(payloads: PushPayload[]): Promise<void> {
+  const { Expo } = await loadExpo();
   const messages: ExpoPushMessage[] = payloads
     .filter((p): p is PushPayload & { token: string } => Boolean(p.token) && Expo.isExpoPushToken(p.token))
     .map((p) => ({ to: p.token, title: p.title, body: p.body, data: p.data, sound: 'default' }));
@@ -27,6 +40,7 @@ export async function sendPushNotifications(payloads: PushPayload[]): Promise<vo
   if (!messages.length) return;
 
   try {
+    const expo: ExpoType = new Expo();
     for (const chunk of expo.chunkPushNotifications(messages)) {
       const receipts = await expo.sendPushNotificationsAsync(chunk);
       for (const r of receipts) {
