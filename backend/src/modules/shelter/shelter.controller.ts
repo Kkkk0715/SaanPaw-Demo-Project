@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { messagingService } from '../messaging/messaging.service';
+import { ApiError } from '../../utils/ApiError';
 import {
   caseStatusSchema,
   changePasswordSchema,
@@ -61,6 +62,10 @@ export const shelterController = {
     res.json(await shelterService.listNotifications(sid(req))),
   markNotificationRead: async (req: Request, res: Response) =>
     res.json(await shelterService.markNotificationRead(sid(req), req.params.id)),
+  updatePushToken: async (req: Request, res: Response) => {
+    if (typeof req.body?.token !== 'string' || !req.body.token) throw ApiError.badRequest('token is required');
+    res.json(await shelterService.updatePushToken(sid(req), req.body.token));
+  },
 
   // ----- Message box -----
   listConversations: async (req: Request, res: Response) =>

@@ -5,6 +5,7 @@ import { AnimalCase } from '../../models/AnimalCase';
 import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
 import { Notification } from '../../models/Notification';
+import { notify } from '../../services/pushNotification.service';
 import { geolocationService } from '../../services/geolocation.service';
 import { ApiError } from '../../utils/ApiError';
 import {
@@ -164,16 +165,16 @@ export const shelterService = {
     report.status = 'matched';
     await report.save();
 
-    if (lost) {
-      await Notification.create({
-        audienceType: 'user',
-        audienceId: lost.reporterId,
-        type: 'status_update',
-        refId: lost._id,
-        title: 'A shelter responded to your report',
-        body: `${shelter.name} opened a rescue case. Status: Under rescue.`,
-      });
-    }
+    // Notifies the reporter either way: a found report's finder deserves to know their report
+    // was picked up just as much as a lost report's owner does.
+    await notify({
+      audienceType: 'user',
+      audienceId: report.reporterId,
+      type: 'status_update',
+      refId: report._id,
+      title: 'A shelter responded to your report',
+      body: `${shelter.name} opened a rescue case. Status: Under rescue.`,
+    });
     return serializeCase(doc.toObject(), shelter.name);
   },
 
@@ -198,22 +199,27 @@ export const shelterService = {
     });
     await doc.save();
 
-    if (doc.lostReportId) {
-      const lost = await LostPetReport.findById(doc.lostReportId);
-      if (lost) {
-        if (params.status === 'reunited') {
-          lost.status = 'recovered';
-          await lost.save();
-        }
-        await Notification.create({
-          audienceType: 'user',
-          audienceId: lost.reporterId,
-          type: 'status_update',
-          refId: lost._id,
-          title: 'Case status updated',
-          body: `${shelter?.name ?? 'The shelter'} set the case to "${params.status.replace('_', ' ')}". ${params.notes ?? ''}`.trim(),
-        });
+    // A case can be opened from either report kind (openCase above); keep both in sync the same
+    // way instead of only ever handling the lost-report side.
+    const report = doc.lostReportId
+      ? await LostPetReport.findById(doc.lostReportId)
+      : doc.foundReportId
+        ? await FoundAnimalReport.findById(doc.foundReportId)
+        : null;
+
+    if (report) {
+      if (params.status === 'reunited') {
+        report.status = doc.lostReportId ? 'recovered' : 'closed';
+        await report.save();
       }
+      await notify({
+        audienceType: 'user',
+        audienceId: report.reporterId,
+        type: 'status_update',
+        refId: report._id,
+        title: 'Case status updated',
+        body: `${shelter?.name ?? 'The shelter'} set the case to "${params.status.replace('_', ' ')}". ${params.notes ?? ''}`.trim(),
+      });
     }
     return serializeCase(doc.toObject(), shelter?.name);
   },
@@ -299,5 +305,10 @@ export const shelterService = {
     );
     if (!notif) throw ApiError.notFound('Notification not found');
     return serializeNotification(notif);
+  },
+
+  async updatePushToken(shelterId: string, token: string) {
+    const shelter = await Shelter.findByIdAndUpdate(shelterId, { expoPushToken: token }, { new: true });
+    return shelter ? serializeShelter(shelter) : null;
   },
 };

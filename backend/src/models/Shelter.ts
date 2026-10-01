@@ -35,6 +35,7 @@ const shelterSchema = new Schema(
     // Forgot-password: a hashed one-time code, not the code itself, same as a real password.
     resetCodeHash: { type: String },
     resetCodeExpiresAt: { type: Date },
+    expoPushToken: { type: String },
   },
   { timestamps: { createdAt: 'registeredAt', updatedAt: 'updatedAt' } },
 );

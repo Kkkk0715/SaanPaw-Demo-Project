@@ -1,6 +1,7 @@
 import { Notification } from '../models/Notification';
 import { User } from '../models/User';
 import { Shelter } from '../models/Shelter';
+import { sendPushNotifications } from './pushNotification.service';
 import { logger } from '../utils/logger';
 
 /**
@@ -40,33 +41,52 @@ export const smartAlertService = {
       }).lean(),
     ]);
 
+    const matchedUsers = users.filter((u) =>
+      withinMeters(u.homeLocation?.coordinates as number[], point.coordinates, u.alertRadiusMeters),
+    );
+    const matchedShelters = shelters.filter((s) =>
+      withinMeters(s.location?.coordinates as number[], point.coordinates, s.operatingRadiusMeters),
+    );
+
+    const userTitle = params.reportType === 'lost' ? 'Lost pet reported nearby' : 'Found animal reported nearby';
+    const notificationType = params.reportType === 'lost' ? ('lost_report' as const) : ('found_report' as const);
+
     const notifications = [
-      ...users
-        .filter((u) => withinMeters(u.homeLocation?.coordinates as number[], point.coordinates, u.alertRadiusMeters))
-        .map((u) => ({
-          audienceType: 'user' as const,
-          audienceId: u._id,
-          type: params.reportType === 'lost' ? ('lost_report' as const) : ('found_report' as const),
-          refId: params.reportId,
-          title: params.reportType === 'lost' ? 'Lost pet reported nearby' : 'Found animal reported nearby',
-          body: params.summary,
-        })),
-      ...shelters
-        .filter((s) => withinMeters(s.location?.coordinates as number[], point.coordinates, s.operatingRadiusMeters))
-        .map((s) => ({
-          audienceType: 'shelter' as const,
-          audienceId: s._id,
-          type: params.reportType === 'lost' ? ('lost_report' as const) : ('found_report' as const),
-          refId: params.reportId,
-          title: 'New report in your operating radius',
-          body: params.summary,
-        })),
+      ...matchedUsers.map((u) => ({
+        audienceType: 'user' as const,
+        audienceId: u._id,
+        type: notificationType,
+        refId: params.reportId,
+        title: userTitle,
+        body: params.summary,
+      })),
+      ...matchedShelters.map((s) => ({
+        audienceType: 'shelter' as const,
+        audienceId: s._id,
+        type: notificationType,
+        refId: params.reportId,
+        title: 'New report in your operating radius',
+        body: params.summary,
+      })),
     ];
 
     if (notifications.length) {
       await Notification.insertMany(notifications);
       logger.info(`smartAlert: queued ${notifications.length} notifications for ${params.reportType} ${params.reportId}`);
-      // TODO: push via Expo (expo-server-sdk) using stored push tokens.
+      await sendPushNotifications([
+        ...matchedUsers.map((u) => ({
+          token: u.expoPushToken,
+          title: userTitle,
+          body: params.summary,
+          data: { type: notificationType, refId: params.reportId },
+        })),
+        ...matchedShelters.map((s) => ({
+          token: s.expoPushToken,
+          title: 'New report in your operating radius',
+          body: params.summary,
+          data: { type: notificationType, refId: params.reportId },
+        })),
+      ]);
     }
   },
 };

@@ -33,6 +33,7 @@ router.patch('/password', asyncHandler(shelterController.changePassword));
 // Notification Management
 router.get('/notifications', asyncHandler(shelterController.listNotifications));
 router.patch('/notifications/:id/read', asyncHandler(shelterController.markNotificationRead));
+router.put('/push-token', asyncHandler(shelterController.updatePushToken));
 
 // Message box
 router.get('/conversations', asyncHandler(shelterController.listConversations));

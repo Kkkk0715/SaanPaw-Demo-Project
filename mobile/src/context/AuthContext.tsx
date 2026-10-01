@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Role } from '@saanpaw/shared';
 import { apiRequest } from '../services/api';
+import { registerForPushNotificationsAsync } from '../services/pushNotifications';
 import { tokenStorage } from '../services/tokenStorage';
 
 const SESSION_KEY = 'saanpaw.session';
@@ -55,6 +56,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  // Fires once a session is live - covers both a fresh sign-in and the app relaunching into an
+  // already-signed-in session (e.g. permission was only just granted after an earlier denial).
+  useEffect(() => {
+    if (DEMO_MODE || !role || !token) return;
+    let cancelled = false;
+    void registerForPushNotificationsAsync().then((pushToken) => {
+      if (cancelled || !pushToken) return;
+      const path = role === 'user' ? '/user/push-token' : '/shelter/push-token';
+      void apiRequest(path, { method: 'PUT', body: JSON.stringify({ token: pushToken }) }, token).catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [role, token]);
 
   const value = useMemo<AuthState>(
     () => ({
