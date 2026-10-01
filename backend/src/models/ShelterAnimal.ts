@@ -22,6 +22,8 @@ const shelterAnimalSchema = new Schema(
     },
     postedPublicly: { type: Boolean, default: false },
     notes: { type: String, trim: true },
+    isHiddenByModeration: { type: Boolean, default: false },
+    moderationFlagId: { type: Schema.Types.ObjectId, ref: 'ModerationFlag' },
   },
   { timestamps: true },
 );

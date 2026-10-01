@@ -243,6 +243,7 @@ export function serializeFlag(doc: any, reporterName: string, reporterBanned: bo
         : 'pending';
   return {
     id: String(doc._id),
+    reportType: doc.reportType,
     reportId: String(doc.reportId),
     reporterId: String(doc.reporterId),
     reporterName,

@@ -6,6 +6,7 @@ import { Shelter } from '../../models/Shelter';
 import { User } from '../../models/User';
 import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
+import { ShelterAnimal } from '../../models/ShelterAnimal';
 import { ModerationFlag } from '../../models/ModerationFlag';
 import { moderationService } from '../../services/moderation.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
@@ -19,6 +20,7 @@ import {
   serializeFoundReport,
   serializeLostReport,
   serializeShelter,
+  serializeShelterAnimal,
   serializeUser,
 } from '../../utils/geoHelpers';
 
@@ -47,24 +49,31 @@ export const developerService = {
 
   /** Everything the console renders, in the shapes the shared types describe. */
   async overview() {
-    const [stats, shelters, users, lost, found, flags, systemConfig] = await Promise.all([
+    const [stats, shelters, users, lost, found, shelterAnimals, flags, systemConfig] = await Promise.all([
       statsService.platformStats(),
       Shelter.find().sort({ registeredAt: -1 }).lean(),
       User.find().sort({ joinedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       // Removed reports stay out of the console, matching what "Remove" promises.
       LostPetReport.find({ isHiddenByModeration: false }).sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       FoundAnimalReport.find({ isHiddenByModeration: false }).sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
+      ShelterAnimal.find({ isHiddenByModeration: false }).sort({ intakeDate: -1 }).limit(OVERVIEW_LIMIT).lean(),
       ModerationFlag.find().sort({ createdAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       getSystemConfig(),
     ]);
 
     const userById = new Map(users.map((u) => [String(u._id), u]));
+    const shelterById = new Map(shelters.map((s) => [String(s._id), s]));
     return {
       stats,
       shelters: shelters.map(serializeShelter),
       users: users.map(serializeUser),
       reports: [...lost.map(serializeLostReport), ...found.map(serializeFoundReport)],
+      shelterAnimals: shelterAnimals.map(serializeShelterAnimal),
       flags: flags.map((f) => {
+        if (f.reportType === 'shelter_animal') {
+          const shelter = shelterById.get(String(f.reporterId));
+          return serializeFlag(f, shelter ? shelter.name : 'Unknown shelter', false);
+        }
         const reporter = userById.get(String(f.reporterId));
         return serializeFlag(f, reporter ? combineName(reporter) : 'Unknown user', Boolean(reporter?.isBanned));
       }),
@@ -133,9 +142,19 @@ export const developerService = {
   // ----- Report Monitoring -----
   async listFlags(status: 'open' | 'dismissed' | 'actioned' = 'open') {
     const flags = await ModerationFlag.find({ status }).sort({ createdAt: -1 }).lean();
-    const users = await User.find({ _id: { $in: flags.map((f) => f.reporterId) } }).lean();
+    const userIds = flags.filter((f) => f.reportType !== 'shelter_animal').map((f) => f.reporterId);
+    const shelterIds = flags.filter((f) => f.reportType === 'shelter_animal').map((f) => f.reporterId);
+    const [users, shelters] = await Promise.all([
+      User.find({ _id: { $in: userIds } }).lean(),
+      Shelter.find({ _id: { $in: shelterIds } }).lean(),
+    ]);
     const userById = new Map(users.map((u) => [String(u._id), u]));
+    const shelterById = new Map(shelters.map((s) => [String(s._id), s]));
     return flags.map((f) => {
+      if (f.reportType === 'shelter_animal') {
+        const shelter = shelterById.get(String(f.reporterId));
+        return serializeFlag(f, shelter ? shelter.name : 'Unknown shelter', false);
+      }
       const reporter = userById.get(String(f.reporterId));
       return serializeFlag(f, reporter ? combineName(reporter) : 'Unknown user', Boolean(reporter?.isBanned));
     });
@@ -154,32 +173,46 @@ export const developerService = {
       throw ApiError.badRequest('action must be "dismiss" or "remove_report"');
     }
 
+    const isShelterFlag = flag.reportType === 'shelter_animal';
+
     if (params.action === 'dismiss') {
       flag.status = 'dismissed';
     } else {
       flag.status = 'actioned';
       if (flag.reportType === 'lost') {
         await LostPetReport.findByIdAndUpdate(flag.reportId, { isHiddenByModeration: true });
-      } else {
+      } else if (flag.reportType === 'found') {
         await FoundAnimalReport.findByIdAndUpdate(flag.reportId, { isHiddenByModeration: true });
+      } else {
+        await ShelterAnimal.findByIdAndUpdate(flag.reportId, { isHiddenByModeration: true, postedPublicly: false });
       }
     }
     flag.resolvedBy = params.developerId as never;
     flag.resolutionNote = params.note;
     await flag.save();
 
-    // An upheld flag counts against the reporter; enough of them ban the account.
-    if (params.action === 'remove_report') {
+    // An upheld flag counts against the reporter; enough of them ban the account. A shelter has
+    // no equivalent ban - access is revoked by hand via Manage Shelters, a heavier, human decision.
+    if (params.action === 'remove_report' && !isShelterFlag) {
       await User.findByIdAndUpdate(flag.reporterId, { $inc: { flaggedReportCount: 1 } });
     }
     const escalation =
-      params.action === 'remove_report'
+      params.action === 'remove_report' && !isShelterFlag
         ? await moderationService.escalateReporter(String(flag.reporterId))
         : { banned: false };
 
-    const reporter = await User.findById(flag.reporterId).lean();
+    let reporterName = 'Unknown shelter';
+    let reporterBanned = false;
+    if (isShelterFlag) {
+      const shelter = await Shelter.findById(flag.reporterId, 'name').lean();
+      if (shelter) reporterName = shelter.name;
+    } else {
+      const reporter = await User.findById(flag.reporterId).lean();
+      reporterName = reporter ? combineName(reporter) : 'Unknown user';
+      reporterBanned = Boolean(reporter?.isBanned);
+    }
     return {
-      flag: serializeFlag(flag.toObject(), reporter ? combineName(reporter) : 'Unknown user', Boolean(reporter?.isBanned)),
+      flag: serializeFlag(flag.toObject(), reporterName, reporterBanned),
       escalation,
     };
   },

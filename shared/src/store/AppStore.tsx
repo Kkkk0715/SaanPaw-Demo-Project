@@ -962,7 +962,11 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       setFlags((prev) => {
         const flag = prev.find((f) => f.id === flagId);
         if (flag && resolution === 'removed') {
-          setReports((rs) => rs.filter((r) => r.id !== flag.reportId));
+          if (flag.reportType === 'shelter_animal') {
+            setShelterAnimals((as) => as.filter((a) => a.id !== flag.reportId));
+          } else {
+            setReports((rs) => rs.filter((r) => r.id !== flag.reportId));
+          }
         }
         if (flag && resolution === 'account_banned') {
           setUsers((us) => us.map((u) => (u.id === flag.reporterId ? { ...u, isBanned: true } : u)));

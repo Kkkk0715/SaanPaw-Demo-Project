@@ -114,6 +114,7 @@ async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
       animalType,
       caseStatus: { $in: ['under_rescue', 'inconclusive'] },
       imageUrls: { $exists: true, $ne: [] },
+      isHiddenByModeration: false,
     })
       .limit(200)
       .lean(),

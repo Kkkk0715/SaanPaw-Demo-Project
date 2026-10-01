@@ -6,9 +6,10 @@ import { Schema, model, InferSchemaType } from 'mongoose';
  */
 const moderationFlagSchema = new Schema(
   {
-    reportType: { type: String, enum: ['lost', 'found'], required: true },
+    reportType: { type: String, enum: ['lost', 'found', 'shelter_animal'], required: true },
     reportId: { type: Schema.Types.ObjectId, required: true, index: true },
-    reporterId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    // No `ref`: points into User for 'lost'/'found', or Shelter for 'shelter_animal'.
+    reporterId: { type: Schema.Types.ObjectId, required: true, index: true },
     reason: {
       type: String,
       enum: ['ai_false_positive', 'inappropriate', 'duplicate', 'manual'],

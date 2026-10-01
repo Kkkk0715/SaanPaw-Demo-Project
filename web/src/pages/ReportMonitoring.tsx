@@ -9,6 +9,7 @@ import {
   useApp,
   type AnimalReport,
   type ModerationFlag,
+  type ShelterAnimal,
 } from '@saanpaw/shared';
 import { Badge, Banner, Button, Card, CardHead, EmptyState, Meter, Tabs, Thumb } from '@/components/ui';
 import { ReportDetailModal } from '@/components/ReportDetailModal';
@@ -21,7 +22,7 @@ const BAN_THRESHOLD = 3;
  * remove bad entries, and ban accounts that keep posting them.
  */
 export function ReportMonitoringPage() {
-  const { flags, reports, users, reportById, resolveFlag, banUser, deleteUserAccount } = useApp();
+  const { flags, reports, shelterAnimals, users, reportById, resolveFlag, banUser, deleteUserAccount } = useApp();
   const [tab, setTab] = useState<'flagged' | 'all' | 'accounts'>('flagged');
   const [acting, setActing] = useState<ModerationFlag | null>(null);
   const [selectedReport, setSelectedReport] = useState<AnimalReport | null>(null);
@@ -30,6 +31,10 @@ export function ReportMonitoringPage() {
   const pending = flags.filter((f) => f.resolution === 'pending');
   const resolved = flags.filter((f) => f.resolution !== 'pending');
   const accountRows = [...users].sort((a, b) => b.flaggedReportCount - a.flaggedReportCount);
+
+  /** A flag's target: a citizen's lost/found report, or a shelter's own animal posting. */
+  const flaggedItem = (f: ModerationFlag): AnimalReport | ShelterAnimal | undefined =>
+    f.reportType === 'shelter_animal' ? shelterAnimals.find((a) => a.id === f.reportId) : reportById(f.reportId);
 
   const act = (resolution: ModerationFlag['resolution']) => {
     if (!acting) return;
@@ -78,20 +83,25 @@ export function ReportMonitoringPage() {
                 </thead>
                 <tbody>
                   {pending.map((f) => {
-                    const report = reportById(f.reportId);
+                    const item = flaggedItem(f);
+                    const isShelterFlag = f.reportType === 'shelter_animal';
+                    const note = item ? (item as AnimalReport).description ?? (item as ShelterAnimal).notes : undefined;
                     return (
                       <tr key={f.id}>
                         <td>
-                          <Thumb src={report?.imageUrls[0]} alt="Flagged report" />
+                          <Thumb src={item?.imageUrls[0]} alt="Flagged item" />
                         </td>
                         <td style={{ maxWidth: 320 }}>
                           <div className="cell-title">
-                            {report ? describeAnimal(report) : 'Removed report'}
+                            {item ? describeAnimal(item) : isShelterFlag ? 'Removed posting' : 'Removed report'}
                           </div>
-                          {report?.description ? (
+                          {isShelterFlag ? (
+                            <div className="cell-sub">Shelter posting</div>
+                          ) : null}
+                          {note ? (
                             <div className="cell-sub" style={{ fontStyle: 'italic' }}>
-                              “{report.description.slice(0, 90)}
-                              {report.description.length > 90 ? '…' : ''}”
+                              “{note.slice(0, 90)}
+                              {note.length > 90 ? '…' : ''}”
                             </div>
                           ) : null}
                         </td>
@@ -140,19 +150,22 @@ export function ReportMonitoringPage() {
               />
               <div className="card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <p style={{ color: 'var(--text-soft)' }}>
-                  Dismissing keeps the report live. Removing deletes it. Banning removes the account
-                  and every report it has submitted.
+                  {acting.reportType === 'shelter_animal'
+                    ? 'Dismissing keeps the posting live. Removing unpublishes it. A shelter account itself is revoked by hand from Manage Shelters, not from here.'
+                    : 'Dismissing keeps the report live. Removing deletes it. Banning removes the account and every report it has submitted.'}
                 </p>
                 <div className="row row-wrap">
                   <Button variant="secondary" onClick={() => act('dismissed')}>
-                    Dismiss — report is legitimate
+                    Dismiss — {acting.reportType === 'shelter_animal' ? 'posting is legitimate' : 'report is legitimate'}
                   </Button>
                   <Button variant="danger" onClick={() => act('removed')}>
-                    Remove this report
+                    {acting.reportType === 'shelter_animal' ? 'Remove this posting' : 'Remove this report'}
                   </Button>
-                  <Button variant="danger" onClick={() => act('account_banned')}>
-                    Remove and ban the account
-                  </Button>
+                  {acting.reportType === 'shelter_animal' ? null : (
+                    <Button variant="danger" onClick={() => act('account_banned')}>
+                      Remove and ban the account
+                    </Button>
+                  )}
                 </div>
               </div>
             </Card>

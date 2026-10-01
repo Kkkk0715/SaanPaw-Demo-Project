@@ -8,6 +8,7 @@ import { MatchSuggestion } from '../../models/MatchSuggestion';
 import { Notification } from '../../models/Notification';
 import { notify } from '../../services/pushNotification.service';
 import { findMatchingLostReports, type AnimalType } from '../../services/matching.service';
+import { moderationService } from '../../services/moderation.service';
 import { geolocationService } from '../../services/geolocation.service';
 import { geoPointToLatLng } from '../../utils/geoHelpers';
 import { ApiError } from '../../utils/ApiError';
@@ -70,6 +71,23 @@ async function matchAnimalAgainstLostReports(animal: {
   }
 }
 
+/** Runs the same AI content screen a citizen's lost/found report gets, over a shelter's own posting. */
+async function screenAnimalPosting(
+  shelterId: string,
+  animal: { _id: unknown; imageUrls: string[] },
+  data: Record<string, unknown>,
+): Promise<void> {
+  await moderationService.screenShelterAnimal({
+    shelterId,
+    animalId: String(animal._id),
+    text: [data.name, data.breed, data.color, data.distinctMarks, data.description]
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      .join(' '),
+    imageCount: animal.imageUrls.length,
+    imageUrl: animal.imageUrls[0],
+  });
+}
+
 export const shelterService = {
   // ----- Register -----
   async register(input: {
@@ -122,13 +140,14 @@ export const shelterService = {
 
   // ----- Shelter Animals Management -----
   async listShelterAnimals(shelterId: string) {
-    const animals = await ShelterAnimal.find({ shelterId }).sort({ intakeDate: -1 }).lean();
+    const animals = await ShelterAnimal.find({ shelterId, isHiddenByModeration: false }).sort({ intakeDate: -1 }).lean();
     return animals.map(serializeShelterAnimal);
   },
 
   async addShelterAnimal(shelterId: string, data: Record<string, unknown>) {
     const animal = await ShelterAnimal.create({ ...data, shelterId });
     await matchAnimalAgainstLostReports(animal);
+    await screenAnimalPosting(shelterId, animal, data);
     return serializeShelterAnimal(animal);
   },
 
@@ -141,6 +160,7 @@ export const shelterService = {
       caseStatus: 'under_rescue',
     });
     await matchAnimalAgainstLostReports(animal);
+    await screenAnimalPosting(shelterId, animal, data);
     return serializeShelterAnimal(animal);
   },
 

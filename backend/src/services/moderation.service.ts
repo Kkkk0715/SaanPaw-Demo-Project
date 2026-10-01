@@ -3,6 +3,7 @@ import { ModerationFlag } from '../models/ModerationFlag';
 import { User } from '../models/User';
 import { LostPetReport } from '../models/LostPetReport';
 import { FoundAnimalReport } from '../models/FoundAnimalReport';
+import { ShelterAnimal } from '../models/ShelterAnimal';
 import { assessAnimalPhoto } from './gemini.service';
 import { getSystemConfig } from './systemConfig.service';
 import { logger } from '../utils/logger';
@@ -247,6 +248,46 @@ export const moderationService = {
       );
     } catch (err) {
       logger.error('moderation: screening failed, report left unflagged', err);
+    }
+  },
+
+  /**
+   * Same screen as screenReport, for a shelter's own animal posting. No duplicate check - a
+   * shelter legitimately intakes visually-similar animals over time, so that signal does not
+   * apply here. Never throws, for the same reason: a screening hiccup must not block an intake.
+   */
+  async screenShelterAnimal(params: {
+    shelterId: string;
+    animalId: string;
+    text: string;
+    imageCount: number;
+    imageUrl?: string;
+  }): Promise<void> {
+    try {
+      if (!(await getSystemConfig()).aiModeration) return;
+      const photoSignal = params.imageUrl ? await assessAnimalPhoto(params.imageUrl) : null;
+      const result = assessReport({
+        text: params.text,
+        imageCount: params.imageCount,
+        duplicate: false,
+        photoSignal: photoSignal ?? undefined,
+      });
+      if (result.confidence < REVIEW_THRESHOLD) return;
+
+      const flag = await ModerationFlag.create({
+        reportType: 'shelter_animal',
+        reportId: params.animalId,
+        reporterId: params.shelterId,
+        reason: result.reason,
+        detail: result.detail,
+        aiConfidence: result.confidence,
+      });
+      await ShelterAnimal.findByIdAndUpdate(params.animalId, { moderationFlagId: flag._id });
+      logger.warn(
+        `moderation: flagged shelter_animal ${params.animalId} as ${result.reason} (confidence ${result.confidence.toFixed(2)})`,
+      );
+    } catch (err) {
+      logger.error('moderation: shelter animal screening failed, posting left unflagged', err);
     }
   },
 

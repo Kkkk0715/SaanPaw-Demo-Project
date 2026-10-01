@@ -279,7 +279,11 @@ export const userService = {
   },
 
   async listShelterAnimals(shelterId: string) {
-    const animals = await ShelterAnimal.find({ shelterId, caseStatus: { $ne: 'adopted' } }).lean();
+    const animals = await ShelterAnimal.find({
+      shelterId,
+      caseStatus: { $ne: 'adopted' },
+      isHiddenByModeration: false,
+    }).lean();
     return animals.map(serializeShelterAnimal);
   },
 

@@ -283,6 +283,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
     shelters: Shelter[];
     users: AppUser[];
     reports: AnimalReport[];
+    shelterAnimals: ShelterAnimal[];
     flags: ModerationFlag[];
     systemConfig: SystemConfig;
     deployment: DeploymentInfo;
@@ -293,6 +294,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
     shelters: withPhotoHosts(s.baseUrl, overview.shelters),
     users: withPhotoHosts(s.baseUrl, overview.users),
     reports: withImageHosts(s.baseUrl, overview.reports),
+    shelterAnimals: withImageHosts(s.baseUrl, overview.shelterAnimals),
   };
 }
 

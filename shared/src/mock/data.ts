@@ -594,6 +594,7 @@ export const seedCases: AnimalCase[] = [
 export const seedFlags: ModerationFlag[] = [
   {
     id: 'm1',
+    reportType: 'lost',
     reportId: 'r9',
     reporterId: 'u5',
     reporterName: 'Rowena Bautista',
@@ -606,6 +607,7 @@ export const seedFlags: ModerationFlag[] = [
   },
   {
     id: 'm2',
+    reportType: 'found',
     reportId: 'r10',
     reporterId: 'u3',
     reporterName: 'Dirk Louisse Villaflor',
@@ -617,6 +619,7 @@ export const seedFlags: ModerationFlag[] = [
   },
   {
     id: 'm3',
+    reportType: 'found',
     reportId: 'r8',
     reporterId: 'u1',
     reporterName: 'Mark Kenneth Pena',

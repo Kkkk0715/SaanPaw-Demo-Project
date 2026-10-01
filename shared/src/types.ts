@@ -151,6 +151,8 @@ export interface Conversation {
 /** Scope: Developer "Report Monitoring ... AI system that automatically flags". */
 export interface ModerationFlag {
   id: string;
+  /** What reportId points into: a citizen's report, or a shelter's own animal posting. */
+  reportType: 'lost' | 'found' | 'shelter_animal';
   reportId: string;
   reporterId: string;
   reporterName: string;
