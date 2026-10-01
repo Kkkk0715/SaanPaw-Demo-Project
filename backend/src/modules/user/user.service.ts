@@ -8,7 +8,7 @@ import { Notification } from '../../models/Notification';
 import { MatchSuggestion } from '../../models/MatchSuggestion';
 import { smartAlertService } from '../../services/smartAlert.service';
 import { moderationService } from '../../services/moderation.service';
-import { findMatches } from '../../services/matching.service';
+import { findMatches, findMatchingLostReports } from '../../services/matching.service';
 import { statsService } from '../../services/stats.service';
 import { geolocationService } from '../../services/geolocation.service';
 import { authService } from '../auth/auth.service';
@@ -240,7 +240,35 @@ export const userService = {
       lat,
       summary: `${report.animalType} - ${data.color ?? ''} ${data.breed ?? ''}`.trim(),
     });
-    
+
+    // The reverse of the lost-report flow above: a freshly found animal is checked against
+    // existing lost reports too, so an owner who already filed sees this the next time they
+    // open their report instead of only matching reports filed after this one.
+    try {
+      const ranked = await findMatchingLostReports({
+        animalType: report.animalType,
+        color: data.color,
+        breed: data.breed,
+        size: data.size,
+        location: data.location,
+        imageUrl: report.imageUrls[0],
+      });
+      if (ranked.length) {
+        await MatchSuggestion.insertMany(
+          ranked.map((m) => ({
+            lostReportId: m.lostReportId,
+            candidateId: report._id,
+            candidateSource: 'found_report',
+            score: m.score,
+            reasons: m.reasons,
+          })),
+          { ordered: false },
+        );
+      }
+    } catch (err) {
+      logger.error('matching: failed to rank lost reports for new found report', err);
+    }
+
     return serializeFoundReport(report);
   },
 

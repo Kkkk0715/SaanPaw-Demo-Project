@@ -1,22 +1,27 @@
 import { ANIMAL_TYPES } from '../config/constants';
 import { FoundAnimalReport } from '../models/FoundAnimalReport';
+import { LostPetReport } from '../models/LostPetReport';
 import { Shelter } from '../models/Shelter';
 import { ShelterAnimal } from '../models/ShelterAnimal';
 import { geoPointToLatLng, type LatLng } from '../utils/geoHelpers';
 import { compareAnimalPhotos } from './gemini.service';
 
-type AnimalType = (typeof ANIMAL_TYPES)[number];
+export type AnimalType = (typeof ANIMAL_TYPES)[number];
 type CandidateSource = 'found_report' | 'shelter_animal';
 
-interface Candidate {
-  id: string;
-  source: CandidateSource;
+/** The subset `attributeScore` actually reads - both match directions' candidates satisfy this. */
+interface ScorableCandidate {
   animalType: AnimalType;
   color?: string | null;
   breed?: string | null;
   size?: string | null;
-  imageUrls: string[];
   location?: LatLng;
+}
+
+interface Candidate extends ScorableCandidate {
+  id: string;
+  source: CandidateSource;
+  imageUrls: string[];
 }
 
 export interface MatchInput {
@@ -55,7 +60,7 @@ function haversineMeters(a: LatLng, b: LatLng): number {
  * comparison - never the final word once Gemini is configured. Mirrors the offline heuristic in
  * shared/src/store/AppStore.tsx (used verbatim when there is no backend session to call).
  */
-export function attributeScore(input: MatchInput, candidate: Candidate): { score: number; reasons: string[] } | null {
+export function attributeScore(input: MatchInput, candidate: ScorableCandidate): { score: number; reasons: string[] } | null {
   if (candidate.animalType !== input.animalType) return null; // a cat is never a match for a dog
 
   const reasons: string[] = [`Species match (${input.animalType})`];
@@ -170,6 +175,77 @@ export async function findMatches(input: MatchInput): Promise<RankedMatch[]> {
       return {
         candidateId: candidate.id,
         candidateSource: candidate.source,
+        score: visionResult ? visionResult.score : score,
+        reasons: visionResult ? [visionResult.reasoning, ...reasons] : reasons,
+      };
+    }),
+  );
+
+  return ranked
+    .filter((m) => m.score >= MIN_SCORE)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_RESULTS);
+}
+
+interface LostCandidate extends ScorableCandidate {
+  id: string;
+  imageUrls: string[];
+}
+
+async function gatherLostCandidates(animalType: AnimalType): Promise<LostCandidate[]> {
+  const lostReports = await LostPetReport.find({
+    animalType,
+    status: 'active',
+    isHiddenByModeration: false,
+    imageUrls: { $exists: true, $ne: [] },
+  })
+    .limit(200)
+    .lean();
+
+  return lostReports.map((r) => ({
+    id: String(r._id),
+    animalType: r.animalType as AnimalType,
+    color: r.color,
+    breed: r.breed,
+    size: r.size,
+    imageUrls: r.imageUrls,
+    location: geoPointToLatLng(r.lastSeenLocation as any),
+  }));
+}
+
+export interface RankedLostMatch {
+  lostReportId: string;
+  score: number;
+  reasons: string[];
+}
+
+/**
+ * The reverse of findMatches: given a newly posted found animal (found report or shelter intake),
+ * ranks the active lost reports it might solve. Same attribute shortlist + Gemini photo comparison
+ * as the other direction, just over LostPetReport instead - so a lost pet's owner gets a suggestion
+ * the moment a matching found/intake record appears, not only when they happen to file (or reopen)
+ * their own lost report after it.
+ */
+export async function findMatchingLostReports(input: MatchInput): Promise<RankedLostMatch[]> {
+  const candidates = await gatherLostCandidates(input.animalType);
+
+  const shortlisted = candidates
+    .map((c) => {
+      const attr = attributeScore(input, c);
+      return attr && { candidate: c, ...attr };
+    })
+    .filter((x): x is { candidate: LostCandidate; score: number; reasons: string[] } => Boolean(x))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, SHORTLIST_SIZE);
+
+  const ranked = await Promise.all(
+    shortlisted.map(async ({ candidate, score, reasons }) => {
+      const candidatePhoto = candidate.imageUrls[0];
+      const visionResult =
+        input.imageUrl && candidatePhoto ? await compareAnimalPhotos(input.imageUrl, candidatePhoto) : null;
+
+      return {
+        lostReportId: candidate.id,
         score: visionResult ? visionResult.score : score,
         reasons: visionResult ? [visionResult.reasoning, ...reasons] : reasons,
       };

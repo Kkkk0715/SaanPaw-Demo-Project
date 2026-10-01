@@ -4,10 +4,14 @@ import { ShelterAnimal } from '../../models/ShelterAnimal';
 import { AnimalCase } from '../../models/AnimalCase';
 import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
+import { MatchSuggestion } from '../../models/MatchSuggestion';
 import { Notification } from '../../models/Notification';
 import { notify } from '../../services/pushNotification.service';
+import { findMatchingLostReports, type AnimalType } from '../../services/matching.service';
 import { geolocationService } from '../../services/geolocation.service';
+import { geoPointToLatLng } from '../../utils/geoHelpers';
 import { ApiError } from '../../utils/ApiError';
+import { logger } from '../../utils/logger';
 import {
   serializeShelter,
   serializeShelterAnimal,
@@ -20,6 +24,51 @@ import {
 import type { ANIMAL_CASE_STATUSES } from '../../config/constants';
 
 type CaseStatus = (typeof ANIMAL_CASE_STATUSES)[number];
+
+/**
+ * Reverse of the lost-report matching flow in user.service.ts: a freshly intake/recovered shelter
+ * animal is checked against existing lost reports too, so an owner who already filed sees this
+ * animal as a candidate the next time they open their report, not only animals posted after it.
+ * A shelter animal has no location of its own - it inherits its shelter's, same as the forward
+ * direction's candidate-gathering does.
+ */
+async function matchAnimalAgainstLostReports(animal: {
+  _id: unknown;
+  shelterId: unknown;
+  animalType: AnimalType;
+  color?: string | null;
+  breed?: string | null;
+  size?: string | null;
+  imageUrls: string[];
+}): Promise<void> {
+  try {
+    const shelter = await Shelter.findById(animal.shelterId, 'location').lean();
+    const location = geoPointToLatLng(shelter?.location as any);
+    if (!location) return;
+    const ranked = await findMatchingLostReports({
+      animalType: animal.animalType,
+      color: animal.color ?? undefined,
+      breed: animal.breed ?? undefined,
+      size: animal.size ?? undefined,
+      location,
+      imageUrl: animal.imageUrls[0],
+    });
+    if (ranked.length) {
+      await MatchSuggestion.insertMany(
+        ranked.map((m) => ({
+          lostReportId: m.lostReportId,
+          candidateId: animal._id,
+          candidateSource: 'shelter_animal',
+          score: m.score,
+          reasons: m.reasons,
+        })),
+        { ordered: false },
+      );
+    }
+  } catch (err) {
+    logger.error('matching: failed to rank lost reports for new shelter animal', err);
+  }
+}
 
 export const shelterService = {
   // ----- Register -----
@@ -79,6 +128,7 @@ export const shelterService = {
 
   async addShelterAnimal(shelterId: string, data: Record<string, unknown>) {
     const animal = await ShelterAnimal.create({ ...data, shelterId });
+    await matchAnimalAgainstLostReports(animal);
     return serializeShelterAnimal(animal);
   },
 
@@ -90,6 +140,7 @@ export const shelterService = {
       postedPublicly: true,
       caseStatus: 'under_rescue',
     });
+    await matchAnimalAgainstLostReports(animal);
     return serializeShelterAnimal(animal);
   },
 
