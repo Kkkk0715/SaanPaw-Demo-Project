@@ -6,6 +6,7 @@ import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
 import { ModerationFlag } from '../../models/ModerationFlag';
 import { moderationService } from '../../services/moderation.service';
+import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import { sendEmail, shelterCredentialsEmail } from '../../services/email.service';
 import { statsService } from '../../services/stats.service';
 import { ApiError } from '../../utils/ApiError';
@@ -177,5 +178,25 @@ export const developerService = {
       FoundAnimalReport.updateMany({ reporterId: userId }, { isHiddenByModeration: true }),
     ]);
     return serializeUser(user);
+  },
+
+  // ----- Account & Report Deletion -----
+  // A true delete, unlike banning or flag resolution (both soft hides) - see cascadeDelete.service.ts.
+  async deleteShelter(shelterId: string) {
+    const shelter = await deleteShelterCascade(shelterId);
+    if (!shelter) throw ApiError.notFound('Shelter not found');
+    return { id: shelterId };
+  },
+
+  async deleteUser(userId: string) {
+    const user = await deleteUserCascade(userId);
+    if (!user) throw ApiError.notFound('User not found');
+    return { id: userId };
+  },
+
+  async deleteReport(kind: 'lost' | 'found', reportId: string) {
+    const report = await deleteReportCascade(kind, reportId);
+    if (!report) throw ApiError.notFound('Report not found');
+    return { id: reportId };
   },
 };

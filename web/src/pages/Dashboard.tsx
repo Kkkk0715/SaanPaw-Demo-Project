@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   colors,
@@ -6,12 +7,15 @@ import {
   reportStatusMeta,
   timeAgo,
   useApp,
+  type AnimalReport,
 } from '@saanpaw/shared';
 import { Badge, Banner, Card, CardHead, EmptyState, Stat, Thumb } from '@/components/ui';
+import { ReportDetailModal } from '@/components/ReportDetailModal';
 
 /** Developer Module - Dashboard. System-wide stats and anything needing review. */
 export function DashboardPage() {
   const { stats, shelters, flags, users, reports, notificationsFor } = useApp();
+  const [selected, setSelected] = useState<AnimalReport | null>(null);
 
   const pendingShelters = shelters.filter((s) => s.approvalStatus === 'pending').length;
   const pendingFlags = flags.filter((f) => f.resolution === 'pending').length;
@@ -75,7 +79,7 @@ export function DashboardPage() {
                 const kind = reportKindStyle[r.kind];
                 const status = reportStatusMeta[r.status];
                 return (
-                  <tr key={r.id}>
+                  <tr key={r.id} onClick={() => setSelected(r)} style={{ cursor: 'pointer' }}>
                     <td>
                       <Thumb src={r.imageUrls[0]} alt={describeAnimal(r)} />
                     </td>
@@ -127,6 +131,8 @@ export function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      {selected ? <ReportDetailModal report={selected} onClose={() => setSelected(null)} /> : null}
     </>
   );
 }

@@ -9,10 +9,12 @@ router.use(authenticate, authorize('developer'));
 router.get('/dashboard', asyncHandler(developerController.dashboard));
 router.get('/overview', asyncHandler(developerController.overview));
 router.patch('/users/:id/ban', asyncHandler(developerController.banUser));
+router.delete('/users/:id', asyncHandler(developerController.deleteUser));
 
 // Shelter Approval Management
 router.get('/shelters/pending', asyncHandler(developerController.listPendingShelters));
 router.patch('/shelters/:id/review', asyncHandler(developerController.reviewShelter));
+router.delete('/shelters/:id', asyncHandler(developerController.deleteShelter));
 
 // System Management
 router.get('/system', asyncHandler(developerController.systemConfig));
@@ -20,5 +22,6 @@ router.get('/system', asyncHandler(developerController.systemConfig));
 // Report Monitoring
 router.get('/flags', asyncHandler(developerController.listFlags));
 router.patch('/flags/:id/resolve', asyncHandler(developerController.resolveFlag));
+router.delete('/reports/:kind(lost|found)/:id', asyncHandler(developerController.deleteReport));
 
 export default router;

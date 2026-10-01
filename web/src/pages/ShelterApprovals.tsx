@@ -15,9 +15,10 @@ import { Badge, Banner, Button, Card, CardHead, EmptyState, Tabs } from '@/compo
  * so a permit can be read without losing your place.
  */
 export function ShelterApprovalsPage() {
-  const { shelters, setShelterApproval, issuedLogin, clearIssuedLogin } = useApp();
+  const { shelters, setShelterApproval, deleteShelterAccount, issuedLogin, clearIssuedLogin } = useApp();
   const [tab, setTab] = useState<ShelterApprovalStatus>('pending');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const rows = shelters.filter((s) => s.approvalStatus === tab);
   const selected: Shelter | undefined =
@@ -29,7 +30,19 @@ export function ShelterApprovalsPage() {
   const decide = (status: 'approved' | 'rejected') => {
     if (!selected) return;
     setShelterApproval(selected.id, status);
+    selectShelter(null);
+  };
+
+  const confirmDelete = () => {
+    if (!selected) return;
+    deleteShelterAccount(selected.id);
     setSelectedId(null);
+    setConfirmingDelete(false);
+  };
+
+  const selectShelter = (id: string | null) => {
+    setSelectedId(id);
+    setConfirmingDelete(false);
   };
 
   return (
@@ -64,7 +77,7 @@ export function ShelterApprovalsPage() {
         value={tab}
         onChange={(v) => {
           setTab(v);
-          setSelectedId(null);
+          selectShelter(null);
         }}
         options={[
           { label: `Pending (${count('pending')})`, value: 'pending' },
@@ -93,7 +106,7 @@ export function ShelterApprovalsPage() {
                 {rows.map((s) => (
                   <tr
                     key={s.id}
-                    onClick={() => setSelectedId(s.id)}
+                    onClick={() => selectShelter(s.id)}
                     data-selected={selected?.id === s.id}
                     style={{ cursor: 'pointer' }}
                   >
@@ -123,7 +136,7 @@ export function ShelterApprovalsPage() {
                     <td>{s.capacity}</td>
                     <td style={{ color: 'var(--muted)' }}>{timeAgo(s.registeredAt)}</td>
                     <td>
-                      <Button variant="secondary" small onClick={() => setSelectedId(s.id)}>
+                      <Button variant="secondary" small onClick={() => selectShelter(s.id)}>
                         Review
                       </Button>
                     </td>
@@ -195,6 +208,27 @@ export function ShelterApprovalsPage() {
                   {selected.approvalStatus === 'approved' ? 'Revoke access' : 'Approve instead'}
                 </Button>
               )}
+
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                {confirmingDelete ? (
+                  <Banner tone="danger" title="Permanently delete this shelter account?">
+                    Its animals, cases, conversations, and notifications are deleted too. This cannot
+                    be undone.
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <Button variant="secondary" small onClick={() => setConfirmingDelete(false)}>
+                        Cancel
+                      </Button>
+                      <Button variant="danger" small onClick={confirmDelete}>
+                        Yes, delete permanently
+                      </Button>
+                    </div>
+                  </Banner>
+                ) : (
+                  <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
+                    Delete shelter account
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <EmptyState title="Nothing selected">

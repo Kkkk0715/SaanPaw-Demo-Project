@@ -35,4 +35,15 @@ export const developerController = {
         ...req.body,
       }),
     ),
+
+  deleteShelter: async (req: Request, res: Response) =>
+    res.json(await developerService.deleteShelter(req.params.id)),
+
+  deleteUser: async (req: Request, res: Response) =>
+    res.json(await developerService.deleteUser(req.params.id)),
+
+  deleteReport: async (req: Request, res: Response) => {
+    const kind = req.params.kind === 'found' ? 'found' : 'lost';
+    res.json(await developerService.deleteReport(kind, req.params.id));
+  },
 };

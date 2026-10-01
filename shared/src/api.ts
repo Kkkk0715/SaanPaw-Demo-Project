@@ -315,8 +315,17 @@ export const apiActions = {
   setReportStatus: (s: ApiSession, kind: ReportKind, id: string, status: ReportStatus) =>
     call<AnimalReport>(s, `/user/reports/${kind}/${id}/status`, { method: 'PATCH', body: { status } }),
 
+  /** A developer session deletes any report outright; a user session can only delete their own. */
   deleteReport: (s: ApiSession, kind: ReportKind, id: string) =>
-    call<{ id: string }>(s, `/user/reports/${kind}/${id}`, { method: 'DELETE' }),
+    call<{ id: string }>(s, `${s.role === 'developer' ? '/developer' : '/user'}/reports/${kind}/${id}`, {
+      method: 'DELETE',
+    }),
+
+  deleteShelterAccount: (s: ApiSession, id: string) =>
+    call<{ id: string }>(s, `/developer/shelters/${id}`, { method: 'DELETE' }),
+
+  deleteUserAccount: (s: ApiSession, id: string) =>
+    call<{ id: string }>(s, `/developer/users/${id}`, { method: 'DELETE' }),
 
   updateUserProfile: (s: ApiSession, patch: Partial<AppUser>) =>
     call<AppUser>(s, '/user/profile', { method: 'PATCH', body: patch }),

@@ -220,6 +220,10 @@ interface AppState {
   markAllNotificationsRead: (role: Role) => void;
   resolveFlag: (flagId: string, resolution: ModerationFlag['resolution']) => void;
   banUser: (userId: string) => void;
+  /** Developer-only: a true delete, unlike banning (which hides their reports but keeps the account). */
+  deleteUserAccount: (userId: string) => void;
+  /** Developer-only: a true delete, unlike revoking approval (which keeps the account, just blocks sign-in). */
+  deleteShelterAccount: (shelterId: string) => void;
   /** Rejects with the server's message (e.g. "Current password is incorrect") on failure. */
   changeShelterPassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
@@ -956,6 +960,26 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     [send],
   );
 
+  const deleteUserAccount = useCallback<AppState['deleteUserAccount']>(
+    (userId) => {
+      const session = sessionRef.current;
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+      setReports((prev) => prev.filter((r) => r.reporterId !== userId));
+      if (session) send(apiActions.deleteUserAccount(session, userId));
+    },
+    [send],
+  );
+
+  const deleteShelterAccount = useCallback<AppState['deleteShelterAccount']>(
+    (shelterId) => {
+      const session = sessionRef.current;
+      setShelters((prev) => prev.filter((s) => s.id !== shelterId));
+      setShelterAnimals((prev) => prev.filter((a) => a.shelterId !== shelterId));
+      if (session) send(apiActions.deleteShelterAccount(session, shelterId));
+    },
+    [send],
+  );
+
   const changeShelterPassword = useCallback<AppState['changeShelterPassword']>(async (currentPassword, newPassword) => {
     const session = sessionRef.current;
     if (!session) return;
@@ -1016,6 +1040,8 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       markAllNotificationsRead,
       resolveFlag,
       banUser,
+      deleteUserAccount,
+      deleteShelterAccount,
       changeShelterPassword,
     }),
     [
@@ -1027,7 +1053,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       setShelterApproval, openCase, setCaseStatus, setShelterAnimalStatus, addShelterAnimal,
       toggleAnimalPublic, updateShelterProfile, updateUserProfile, sendMessage,
       startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,
-      changeShelterPassword,
+      deleteUserAccount, deleteShelterAccount, changeShelterPassword,
     ],
   );
 

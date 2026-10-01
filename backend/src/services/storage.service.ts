@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { put } from '@vercel/blob';
+import { del, put } from '@vercel/blob';
 import { env } from '../config/env';
 import { Photo } from '../models/Photo';
 import { ApiError } from '../utils/ApiError';
@@ -93,6 +93,28 @@ export async function readStoredPhoto(url: string): Promise<{ buffer: Buffer; mi
     return { buffer, mimeType: MIME_BY_EXTENSION[path.extname(name).toLowerCase()] ?? 'image/jpeg' };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Removes a photo from whichever of the three backends holds it. Best-effort: deleting an
+ * account or report must not fail just because one of its old photos is already gone, or
+ * because Blob/disk is briefly unavailable - the record disappearing is what matters.
+ */
+export async function deleteStoredPhoto(url: string): Promise<void> {
+  try {
+    if (/^https?:\/\//.test(url)) {
+      if (useBlobStorage) await del(url);
+      return;
+    }
+    const name = url.replace(/^\/uploads\//, '');
+    if (isDatabasePhotoId(name)) {
+      await Photo.findByIdAndDelete(name.replace(/\.[a-z]+$/i, ''));
+      return;
+    }
+    await fs.promises.unlink(path.join(localUploadDir, name));
+  } catch {
+    // best-effort, see above
   }
 }
 

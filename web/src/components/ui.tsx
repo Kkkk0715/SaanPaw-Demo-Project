@@ -188,6 +188,39 @@ export function Tabs<T extends string>({
   );
 }
 
+/** Overlay for a detail view or confirmation that doesn't fit inline. Click the backdrop or × to close. */
+export function Modal({
+  title,
+  sub,
+  onClose,
+  children,
+  actions,
+}: {
+  title: string;
+  sub?: string;
+  onClose: () => void;
+  children: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <header className="modal-head">
+          <div>
+            <h2>{title}</h2>
+            {sub ? <p className="sub">{sub}</p> : null}
+          </div>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </header>
+        <div className="modal-body">{children}</div>
+        {actions ? <footer className="modal-foot">{actions}</footer> : null}
+      </div>
+    </div>
+  );
+}
+
 export function Toggle({
   on,
   onChange,
