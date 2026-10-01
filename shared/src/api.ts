@@ -291,10 +291,13 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
   return {
     ...emptySnapshot(''),
     ...overview,
-    shelters: withPhotoHosts(s.baseUrl, overview.shelters),
-    users: withPhotoHosts(s.baseUrl, overview.users),
-    reports: withImageHosts(s.baseUrl, overview.reports),
-    shelterAnimals: withImageHosts(s.baseUrl, overview.shelterAnimals),
+    shelters: withPhotoHosts(s.baseUrl, overview.shelters ?? []),
+    users: withPhotoHosts(s.baseUrl, overview.users ?? []),
+    reports: withImageHosts(s.baseUrl, overview.reports ?? []),
+    // An older backend (mid-deploy, or not yet redeployed) won't send this field yet - degrade to
+    // an empty list rather than taking the whole console down over one missing collection.
+    shelterAnimals: withImageHosts(s.baseUrl, overview.shelterAnimals ?? []),
+    flags: overview.flags ?? [],
   };
 }
 
