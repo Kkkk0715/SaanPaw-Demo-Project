@@ -9,6 +9,7 @@ import { Banner, Button, Card } from '@/components/ui';
 import { LoginPage } from '@/pages/Login';
 import { DashboardPage } from '@/pages/Dashboard';
 import { ShelterApprovalsPage } from '@/pages/ShelterApprovals';
+import { ManageSheltersPage } from '@/pages/ManageShelters';
 import { ReportMonitoringPage } from '@/pages/ReportMonitoring';
 import { SystemManagementPage } from '@/pages/SystemManagement';
 import { applyTokens } from '@/tokens';
@@ -66,6 +67,7 @@ function Console() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/shelters" element={<ShelterApprovalsPage />} />
+        <Route path="/shelters/manage" element={<ManageSheltersPage />} />
         <Route path="/reports" element={<ReportMonitoringPage />} />
         <Route path="/system" element={<SystemManagementPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

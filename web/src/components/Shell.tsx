@@ -10,7 +10,8 @@ import { useAuth } from '@/auth';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '▦', end: true },
-  { to: '/shelters', label: 'Shelter Approvals', icon: '⛨', badge: 'shelters' as const },
+  { to: '/shelters', label: 'Shelter Approvals', icon: '⛨', badge: 'shelters' as const, end: true },
+  { to: '/shelters/manage', label: 'Manage Shelters', icon: '🏠' },
   { to: '/reports', label: 'Report Monitoring', icon: '⚑', badge: 'flags' as const },
   { to: '/system', label: 'System Management', icon: '⚙' },
 ];
@@ -23,6 +24,10 @@ const PAGE_META: Record<string, { title: string; sub: string }> = {
   '/shelters': {
     title: 'Shelter Approval Management',
     sub: 'Verify permits with the local government before granting system access',
+  },
+  '/shelters/manage': {
+    title: 'Manage Shelters',
+    sub: 'View full registration detail, revoke access, or delete any shelter account',
   },
   '/reports': {
     title: 'Report Monitoring',
@@ -82,7 +87,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="sidebar-avatar" aria-hidden>
             SD
           </div>
-          <div>
+          <div className="sidebar-user">
             <div style={{ fontSize: 12.5, fontWeight: 600 }}>System Developer</div>
             <div className="sidebar-sub">dev@saanpaw.ph</div>
           </div>

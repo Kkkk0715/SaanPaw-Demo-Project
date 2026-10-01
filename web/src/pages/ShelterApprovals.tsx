@@ -1,24 +1,20 @@
 import { useState } from 'react';
-import {
-  approvalMeta,
-  formatDistance,
-  timeAgo,
-  useApp,
-  type Shelter,
-  type ShelterApprovalStatus,
-} from '@saanpaw/shared';
-import { Badge, Banner, Button, Card, CardHead, EmptyState, Tabs } from '@/components/ui';
+import { useNavigate } from 'react-router-dom';
+import { approvalMeta, formatDistance, timeAgo, useApp, type Shelter, type ShelterApprovalStatus } from '@saanpaw/shared';
+import { Banner, Button, Card, CardHead, EmptyState, Tabs } from '@/components/ui';
+import { ShelterDetailPanel } from '@/components/ShelterDetailPanel';
 
 /**
- * Developer Module - Approve or reject shelter applications after checking
- * their permit with the local government. The queue sits beside the detail pane
- * so a permit can be read without losing your place.
+ * Developer Module - The pending-decision queue: approve or reject new
+ * applications after checking the permit with the local government. Once a
+ * shelter is approved or rejected, "Review" sends you to Manage Shelters
+ * instead - this page stays focused on applications still awaiting a decision.
  */
 export function ShelterApprovalsPage() {
-  const { shelters, setShelterApproval, deleteShelterAccount, issuedLogin, clearIssuedLogin } = useApp();
+  const { shelters, issuedLogin, clearIssuedLogin } = useApp();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<ShelterApprovalStatus>('pending');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const rows = shelters.filter((s) => s.approvalStatus === tab);
   const selected: Shelter | undefined =
@@ -27,22 +23,10 @@ export function ShelterApprovalsPage() {
   const count = (s: ShelterApprovalStatus) =>
     shelters.filter((x) => x.approvalStatus === s).length;
 
-  const decide = (status: 'approved' | 'rejected') => {
-    if (!selected) return;
-    setShelterApproval(selected.id, status);
-    selectShelter(null);
-  };
-
-  const confirmDelete = () => {
-    if (!selected) return;
-    deleteShelterAccount(selected.id);
-    setSelectedId(null);
-    setConfirmingDelete(false);
-  };
-
-  const selectShelter = (id: string | null) => {
-    setSelectedId(id);
-    setConfirmingDelete(false);
+  /** Pending applications are reviewed right here; a decided shelter's full management lives on its own page. */
+  const openShelter = (id: string) => {
+    if (tab === 'pending') setSelectedId(id);
+    else navigate(`/shelters/manage?id=${id}`);
   };
 
   return (
@@ -77,7 +61,7 @@ export function ShelterApprovalsPage() {
         value={tab}
         onChange={(v) => {
           setTab(v);
-          selectShelter(null);
+          setSelectedId(null);
         }}
         options={[
           { label: `Pending (${count('pending')})`, value: 'pending' },
@@ -86,7 +70,7 @@ export function ShelterApprovalsPage() {
         ]}
       />
 
-      <div className="split">
+      <div className={tab === 'pending' ? 'split' : ''}>
         <Card>
           <CardHead title={`${approvalMeta[tab].label} (${rows.length})`} />
           {rows.length ? (
@@ -106,8 +90,8 @@ export function ShelterApprovalsPage() {
                 {rows.map((s) => (
                   <tr
                     key={s.id}
-                    onClick={() => selectShelter(s.id)}
-                    data-selected={selected?.id === s.id}
+                    onClick={() => openShelter(s.id)}
+                    data-selected={tab === 'pending' && selected?.id === s.id}
                     style={{ cursor: 'pointer' }}
                   >
                     <td>
@@ -122,7 +106,7 @@ export function ShelterApprovalsPage() {
                           }}
                           aria-hidden
                         />
-                        <div>
+                        <div className="cell-clip">
                           <div className="cell-title">{s.name}</div>
                           <div className="cell-sub">{s.email}</div>
                         </div>
@@ -136,7 +120,7 @@ export function ShelterApprovalsPage() {
                     <td>{s.capacity}</td>
                     <td style={{ color: 'var(--muted)' }}>{timeAgo(s.registeredAt)}</td>
                     <td>
-                      <Button variant="secondary" small onClick={() => selectShelter(s.id)}>
+                      <Button variant="secondary" small onClick={() => openShelter(s.id)}>
                         Review
                       </Button>
                     </td>
@@ -152,90 +136,18 @@ export function ShelterApprovalsPage() {
           )}
         </Card>
 
-        <Card>
-          <CardHead title="Application detail" />
-          {selected ? (
-            <div className="card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{selected.name}</div>
-                <Badge
-                  label={approvalMeta[selected.approvalStatus].label}
-                  color={approvalMeta[selected.approvalStatus].color}
-                  soft={approvalMeta[selected.approvalStatus].soft}
-                />
-              </div>
-
-              <dl className="kv">
-                <dt>Permit number</dt>
-                <dd>{selected.permitNumber}</dd>
-                <dt>Address</dt>
-                <dd>{selected.address}</dd>
-                <dt>Barangay</dt>
-                <dd>{selected.barangay}</dd>
-                <dt>Contact</dt>
-                <dd>{selected.contactNumber}</dd>
-                <dt>Email</dt>
-                <dd>{selected.email}</dd>
-                <dt>Capacity</dt>
-                <dd>{selected.capacity} animals</dd>
-                <dt>Operating radius</dt>
-                <dd>{formatDistance(selected.operatingRadiusMeters)}</dd>
-                <dt>Coordinates</dt>
-                <dd>
-                  {selected.location.latitude.toFixed(4)}, {selected.location.longitude.toFixed(4)}
-                </dd>
-                <dt>Applied</dt>
-                <dd>{new Date(selected.registeredAt).toLocaleDateString()}</dd>
-              </dl>
-
-              <Banner tone="info" title="Verification checklist">
-                Confirm the permit with the city veterinary office; confirm the address is inside
-                San Jose Del Monte; confirm the contact number reaches the shelter.
-              </Banner>
-
-              {selected.approvalStatus === 'pending' ? (
-                <div className="row">
-                  <Button variant="danger" onClick={() => decide('rejected')}>
-                    Reject
-                  </Button>
-                  <Button onClick={() => decide('approved')}>Approve access</Button>
-                </div>
-              ) : (
-                <Button
-                  variant={selected.approvalStatus === 'approved' ? 'danger' : 'primary'}
-                  onClick={() => decide(selected.approvalStatus === 'approved' ? 'rejected' : 'approved')}
-                >
-                  {selected.approvalStatus === 'approved' ? 'Revoke access' : 'Approve instead'}
-                </Button>
-              )}
-
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-                {confirmingDelete ? (
-                  <Banner tone="danger" title="Permanently delete this shelter account?">
-                    Its animals, cases, conversations, and notifications are deleted too. This cannot
-                    be undone.
-                    <div className="row" style={{ marginTop: 10 }}>
-                      <Button variant="secondary" small onClick={() => setConfirmingDelete(false)}>
-                        Cancel
-                      </Button>
-                      <Button variant="danger" small onClick={confirmDelete}>
-                        Yes, delete permanently
-                      </Button>
-                    </div>
-                  </Banner>
-                ) : (
-                  <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
-                    Delete shelter account
-                  </Button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <EmptyState title="Nothing selected">
-              Choose a shelter from the list to review its application.
-            </EmptyState>
-          )}
-        </Card>
+        {tab === 'pending' ? (
+          <Card>
+            <CardHead title="Application detail" />
+            {selected ? (
+              <ShelterDetailPanel shelter={selected} onAfterAction={() => setSelectedId(null)} />
+            ) : (
+              <EmptyState title="Nothing selected">
+                Choose a shelter from the list to review its application.
+              </EmptyState>
+            )}
+          </Card>
+        ) : null}
       </div>
     </>
   );

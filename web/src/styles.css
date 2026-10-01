@@ -196,10 +196,26 @@ a {
   place-items: center;
   font-size: 12px;
   font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* The name+email block between the avatar and the sign-out button: a long email
+   must truncate rather than push "Sign out" out of the fixed-width sidebar. */
+.sidebar-user {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar-user > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-signout {
   margin-left: auto;
+  flex-shrink: 0;
   background: none;
   border: none;
   color: rgba(255, 255, 255, 0.66);
@@ -264,6 +280,9 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
+  /* A table with more columns than the viewport has room for scrolls within its own
+     card instead of widening the card and breaking the page layout. */
+  overflow-x: auto;
 }
 
 .card-pad {
@@ -348,6 +367,10 @@ tbody td {
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
   font-size: 13px;
+  /* An unbroken long value (an email, a permit number) wraps within its column
+     instead of forcing the column - and the whole table - wider than the page. */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 tbody tr:last-child td {
@@ -361,6 +384,14 @@ tbody tr:hover {
 tbody tr[data-selected='true'] {
   background: var(--primary-faint);
   box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* A flex item (the name+email block next to a shelter's colour swatch) needs an
+   explicit min-width to shrink below its content's natural width - without it, the
+   row refuses to let long text wrap and pushes the table wider instead. */
+.cell-clip {
+  min-width: 0;
+  flex: 1;
 }
 
 .cell-title {
@@ -470,6 +501,12 @@ tbody tr[data-selected='true'] {
   font-size: 13px;
 }
 
+.banner > div {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
 .banner .banner-title {
   font-weight: 700;
   margin-bottom: 2px;
@@ -560,6 +597,23 @@ tbody tr[data-selected='true'] {
   border-color: var(--primary);
 }
 
+.table-search {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  width: 200px;
+  max-width: 100%;
+}
+
+.table-search:focus {
+  outline: 2px solid var(--primary-soft);
+  border-color: var(--primary);
+}
+
 .toggle-row {
   display: flex;
   align-items: center;
@@ -628,6 +682,9 @@ tbody tr[data-selected='true'] {
 .kv dd {
   margin: 0;
   font-weight: 600;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .split {
@@ -635,6 +692,13 @@ tbody tr[data-selected='true'] {
   grid-template-columns: 1fr 340px;
   gap: 20px;
   align-items: start;
+}
+
+.split > * {
+  /* A grid item defaults to min-width: auto, which lets its content's natural width
+     (a wide table, a long unbroken value) force this track - and the whole grid -
+     wider than the page instead of shrinking to fit. */
+  min-width: 0;
 }
 
 @media (max-width: 1040px) {
