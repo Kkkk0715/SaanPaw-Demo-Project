@@ -117,6 +117,17 @@ export function buildMapHtml(initial: MapInitialState): string {
 
       // ---------------------------------------------------------- markers
 
+      // Leaflet's bindPopup treats a string argument as HTML, not text - a report's name or
+      // colour (free text from a citizen, never sanitised for markup) would otherwise execute
+      // as script the moment someone taps that pin. The browser's own serialiser is the most
+      // reliable way to escape it: round-tripping through textContent/innerHTML handles every
+      // character correctly, not just the handful an ad-hoc replace() would think to cover.
+      function escapeHtml(s) {
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
       function pinIcon(color) {
         return L.divIcon({
           className: 'pin-marker',
@@ -157,7 +168,7 @@ export function buildMapHtml(initial: MapInitialState): string {
           }
           if (m.label && selectedId === m.id) {
             if (!existing.getPopup()) {
-              existing.bindPopup(m.label, { closeButton: false, closeOnClick: false, autoClose: false, autoPan: false });
+              existing.bindPopup(escapeHtml(m.label), { closeButton: false, closeOnClick: false, autoClose: false, autoPan: false });
             }
             existing.openPopup();
           } else if (existing.getPopup()) {
