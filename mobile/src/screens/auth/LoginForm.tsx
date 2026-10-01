@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { theme } from '@/constants/theme';
 import {
   AuthHeader,
@@ -25,6 +26,7 @@ export function LoginForm({
   footer?: React.ReactNode;
 }) {
   const { signIn } = useAuth();
+  const navigation = useNavigation<any>();
   const demo = DEMO_ACCOUNTS[role];
 
   // Demo accounts only exist in the static demo build, so a real deployment starts blank.
@@ -78,6 +80,16 @@ export function LoginForm({
           />
 
           <Button label="Sign in" onPress={submit} loading={busy} icon="log-in-outline" />
+
+          <Pressable
+            onPress={() => navigation.navigate('ForgotPassword', { role })}
+            hitSlop={8}
+            style={{ alignSelf: 'center' }}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.muted }}>
+              Forgot password?
+            </Text>
+          </Pressable>
 
           {DEMO_MODE ? (
             <Banner

@@ -32,6 +32,9 @@ const shelterSchema = new Schema(
     // Credentials issued by the Developer after LGU verification:
     adminEmail: { type: String, lowercase: true, trim: true },
     adminPasswordHash: { type: String },
+    // Forgot-password: a hashed one-time code, not the code itself, same as a real password.
+    resetCodeHash: { type: String },
+    resetCodeExpiresAt: { type: Date },
   },
   { timestamps: { createdAt: 'registeredAt', updatedAt: 'updatedAt' } },
 );

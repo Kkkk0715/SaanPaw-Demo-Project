@@ -114,6 +114,20 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(8, 'Use at least 8 characters').max(128),
 });
 
+const resettableRole = z.enum(['user', 'shelter_admin']);
+
+export const forgotPasswordSchema = z.object({
+  role: resettableRole,
+  email: z.string().trim().toLowerCase().email('Enter a valid email address'),
+});
+
+export const resetPasswordSchema = z.object({
+  role: resettableRole,
+  email: z.string().trim().toLowerCase().email('Enter a valid email address'),
+  code: z.string().trim().length(6, 'Enter the 6-digit code'),
+  newPassword: z.string().min(8, 'Use at least 8 characters').max(128),
+});
+
 const caseStatus = z.enum(ANIMAL_CASE_STATUSES);
 
 export const shelterAnimalSchema = z.object({

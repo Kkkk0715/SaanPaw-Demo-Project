@@ -68,3 +68,20 @@ export function shelterCredentialsEmail(params: { shelterName: string; email: st
   `;
   return { to: params.email, subject: 'Your SaanPaw shelter account is approved', text, html };
 }
+
+export function passwordResetEmail(params: { email: string; code: string }): EmailMessage {
+  const text =
+    `Someone requested a password reset for this SaanPaw account.\n\n` +
+    `Your code: ${params.code}\n\n` +
+    `Enter this in the app within 15 minutes to set a new password. If you didn't request this, ` +
+    `you can ignore this email - your password hasn't changed.\n\n` +
+    `- SaanPaw, San Jose Del Monte, Bulacan`;
+  const html = `
+    <p>Someone requested a password reset for this SaanPaw account.</p>
+    <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">${params.code}</p>
+    <p>Enter this in the app within 15 minutes to set a new password. If you didn't request this,
+    you can ignore this email - your password hasn't changed.</p>
+    <p>- SaanPaw, San Jose Del Monte, Bulacan</p>
+  `;
+  return { to: params.email, subject: 'Your SaanPaw password reset code', text, html };
+}

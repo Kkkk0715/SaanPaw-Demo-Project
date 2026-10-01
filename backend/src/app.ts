@@ -66,6 +66,28 @@ export function createApp() {
     }),
   );
 
+  // Caps how many reset emails one IP can trigger - forgotPassword() always answers the same way
+  // regardless of whether the email exists, so this is the only thing stopping an email-bombing loop.
+  app.use(
+    '/api/v1/auth/forgot-password',
+    rateLimit({
+      windowMs: 15 * 60_000,
+      max: 5,
+      message: { error: 'Too many reset requests. Try again in a few minutes.', details: null },
+    }),
+  );
+
+  // Slows guessing the 6-digit code: only failed attempts count, and a correct one never locks anyone out.
+  app.use(
+    '/api/v1/auth/reset-password',
+    rateLimit({
+      windowMs: 15 * 60_000,
+      max: 10,
+      skipSuccessfulRequests: true,
+      message: { error: 'Too many attempts. Request a new code and try again.', details: null },
+    }),
+  );
+
   app.use('/api/v1', api);
 
   app.use(notFoundHandler);

@@ -1,10 +1,12 @@
 import {
   caseStatusSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
   queryNumber,
   registerShelterSchema,
   registerUserSchema,
   reportSchema,
+  resetPasswordSchema,
   shelterAnimalPatchSchema,
   shelterProfileSchema,
 } from '../src/utils/validation';
@@ -145,6 +147,31 @@ describe('changePasswordSchema', () => {
     expect(changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'password1' }).newPassword).toBe(
       'password1',
     );
+  });
+});
+
+describe('forgotPasswordSchema', () => {
+  it('requires a valid email and a resettable role', () => {
+    expect(() => forgotPasswordSchema.parse({ role: 'user', email: 'not-an-email' })).toThrow();
+    expect(() => forgotPasswordSchema.parse({ role: 'developer', email: 'a@b.com' })).toThrow();
+    expect(forgotPasswordSchema.parse({ role: 'user', email: 'A@B.COM' }).email).toBe('a@b.com');
+    expect(forgotPasswordSchema.parse({ role: 'shelter_admin', email: 'shelter@gmail.com' }).role).toBe(
+      'shelter_admin',
+    );
+  });
+});
+
+describe('resetPasswordSchema', () => {
+  it('requires a 6-digit code and a new password of at least 8 characters', () => {
+    expect(() =>
+      resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '12345', newPassword: 'password1' }),
+    ).toThrow();
+    expect(() =>
+      resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '123456', newPassword: 'short' }),
+    ).toThrow();
+    expect(
+      resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '123456', newPassword: 'password1' }).code,
+    ).toBe('123456');
   });
 });
 

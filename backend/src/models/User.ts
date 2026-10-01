@@ -25,6 +25,9 @@ const userSchema = new Schema(
     expoPushToken: { type: String },
     flaggedReportCount: { type: Number, default: 0 },
     isBanned: { type: Boolean, default: false },
+    // Forgot-password: a hashed one-time code, not the code itself, same as a real password.
+    resetCodeHash: { type: String },
+    resetCodeExpiresAt: { type: Date },
   },
   { timestamps: { createdAt: 'joinedAt', updatedAt: 'updatedAt' } },
 );
