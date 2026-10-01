@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
 import { UserDashboardScreen } from '@/screens/user/DashboardScreen';
@@ -29,6 +30,9 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 function HomeTabs() {
   const { notificationsFor } = useApp();
   const unread = notificationsFor('user').filter((n) => !n.isRead).length;
+  // Android's gesture/3-button nav bar draws over the tab bar under edge-to-edge unless the
+  // tab bar's own height/padding absorbs that inset - a fixed height alone doesn't.
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -40,9 +44,9 @@ function HomeTabs() {
         tabBarStyle: {
           borderTopColor: theme.colors.border,
           backgroundColor: theme.colors.surface,
-          height: 62,
+          height: 62 + insets.bottom,
           paddingTop: 6,
-          paddingBottom: 8,
+          paddingBottom: 8 + insets.bottom,
         },
         tabBarLabelStyle: { ...theme.type.tiny, fontSize: 10.5 },
         tabBarIcon: ({ color, size, focused }) => (

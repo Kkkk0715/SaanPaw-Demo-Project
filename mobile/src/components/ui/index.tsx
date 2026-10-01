@@ -2,7 +2,9 @@ import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -38,16 +40,23 @@ export function Screen({
 }) {
   const body = padded ? styles.screenBodyPadded : styles.screenBody;
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       {scroll ? (
-        <ScrollView contentContainerStyle={body} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={body}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {children}
         </ScrollView>
       ) : (
         <View style={[body, { flex: 1 }]}>{children}</View>
       )}
       {footer ? <View style={styles.screenFooter}>{footer}</View> : null}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -278,9 +287,10 @@ export function Field({
 }
 
 /**
- * Philippine mobile number input: a fixed "+639" prefix plus up to 9 digits. `value`/`onChangeText`
- * always deal in the full canonical string (e.g. "+639171234567" or "" when empty), so the parent
- * never has to assemble it itself.
+ * Shows and accepts the number the way people in the Philippines actually type it - a plain
+ * 11-digit local number starting with "09" (e.g. "09171234567"), with no separate country-code
+ * chip. `value`/`onChangeText` still carry the "+639XXXXXXXXX" form the backend expects
+ * (`^\+639\d{9}$`) - the local/E.164 conversion happens only at this component's edges.
  */
 export function PhoneField({
   label = 'Mobile number',
@@ -295,24 +305,24 @@ export function PhoneField({
   error?: string;
   hint?: string;
 }) {
-  const digits = value.startsWith('+639') ? value.slice(4) : '';
+  const local = value.startsWith('+639') ? `0${value.slice(3)}` : '';
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={[styles.inputWrap, Boolean(error) && styles.inputWrapError]}>
         <Ionicons name="call-outline" size={17} color={theme.colors.muted} />
-        <Text style={styles.phonePrefix}>+639</Text>
         <TextInput
           style={styles.input}
-          value={digits}
+          value={local}
           onChangeText={(t) => {
-            const cleaned = t.replace(/\D/g, '').slice(0, 9);
-            onChangeText(cleaned ? `+639${cleaned}` : '');
+            const cleaned = t.replace(/\D/g, '').slice(0, 11);
+            const national = cleaned.startsWith('0') ? cleaned.slice(1) : cleaned;
+            onChangeText(national ? `+63${national}` : '');
           }}
-          placeholder="171234567"
+          placeholder="09171234567"
           placeholderTextColor={theme.colors.muted}
           keyboardType="number-pad"
-          maxLength={9}
+          maxLength={11}
         />
       </View>
       {error ? (
@@ -813,15 +823,6 @@ const styles = StyleSheet.create({
   inputMultiline: { minHeight: 84, textAlignVertical: 'top', paddingTop: 0 },
   fieldHint: { ...theme.type.caption, color: theme.colors.muted },
   fieldError: { ...theme.type.captionMedium, color: theme.colors.danger },
-  phonePrefix: {
-    ...theme.type.body,
-    color: theme.colors.text,
-    fontFamily: theme.fonts.bold,
-    borderRightWidth: 1,
-    borderRightColor: theme.colors.border,
-    paddingRight: 8,
-  },
-
   choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choice: {
     flexDirection: 'row',
@@ -846,7 +847,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   segment: { flex: 1, paddingVertical: 9, borderRadius: theme.radius.sm, alignItems: 'center' },
-  segmentText: { ...theme.type.label, color: theme.colors.muted },
+  segmentText: { ...theme.type.label, color: theme.colors.muted, textAlign: 'center' },
   segmentTextActive: { color: theme.colors.onPrimary },
 
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(17,24,39,0.45)' },
