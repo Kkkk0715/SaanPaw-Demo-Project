@@ -162,6 +162,23 @@ export interface ModerationFlag {
   resolution: 'pending' | 'dismissed' | 'removed' | 'account_banned';
 }
 
+/** Developer-controlled feature toggles, enforced server-side - not just a display of intent. */
+export interface SystemConfig {
+  aiModeration: boolean;
+  smartAlerts: boolean;
+  geoFence: boolean;
+  maintenanceMode: boolean;
+  updatedAt?: string;
+}
+
+/** Developer Module "Deployment" card - facts about the running instance, computed fresh per request. */
+export interface DeploymentInfo {
+  environment: string;
+  databaseConnected: boolean;
+  uptimeSeconds: number;
+  nodeVersion: string;
+}
+
 export interface AppUser {
   id: string;
   firstName: string;

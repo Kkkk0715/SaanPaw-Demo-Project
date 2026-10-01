@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
+import { env } from '../../config/env';
 import { Shelter } from '../../models/Shelter';
 import { User } from '../../models/User';
 import { LostPetReport } from '../../models/LostPetReport';
@@ -9,6 +11,7 @@ import { moderationService } from '../../services/moderation.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import { sendEmail, shelterCredentialsEmail } from '../../services/email.service';
 import { statsService } from '../../services/stats.service';
+import { getSystemConfig, updateSystemConfig, type SystemConfigValue } from '../../services/systemConfig.service';
 import { ApiError } from '../../utils/ApiError';
 import {
   combineName,
@@ -20,6 +23,16 @@ import {
 } from '../../utils/geoHelpers';
 
 const OVERVIEW_LIMIT = 500;
+
+/** Facts about the running instance, computed fresh on every call - never stored. */
+function deploymentInfo() {
+  return {
+    environment: env.nodeEnv,
+    databaseConnected: mongoose.connection.readyState === 1,
+    uptimeSeconds: Math.round(process.uptime()),
+    nodeVersion: process.version,
+  };
+}
 
 export const developerService = {
   /** Dashboard: daily lost/found stats + pending queues. */
@@ -34,7 +47,7 @@ export const developerService = {
 
   /** Everything the console renders, in the shapes the shared types describe. */
   async overview() {
-    const [stats, shelters, users, lost, found, flags] = await Promise.all([
+    const [stats, shelters, users, lost, found, flags, systemConfig] = await Promise.all([
       statsService.platformStats(),
       Shelter.find().sort({ registeredAt: -1 }).lean(),
       User.find().sort({ joinedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
@@ -42,6 +55,7 @@ export const developerService = {
       LostPetReport.find({ isHiddenByModeration: false }).sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       FoundAnimalReport.find({ isHiddenByModeration: false }).sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       ModerationFlag.find().sort({ createdAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
+      getSystemConfig(),
     ]);
 
     const userById = new Map(users.map((u) => [String(u._id), u]));
@@ -54,6 +68,8 @@ export const developerService = {
         const reporter = userById.get(String(f.reporterId));
         return serializeFlag(f, reporter ? combineName(reporter) : 'Unknown user', Boolean(reporter?.isBanned));
       }),
+      systemConfig,
+      deployment: deploymentInfo(),
     };
   },
 
@@ -107,12 +123,11 @@ export const developerService = {
 
   // ----- System Management -----
   async systemConfig() {
-    // TODO: surface real config (feature flags, DB health, build version, deploy state).
-    return {
-      build: process.env.npm_package_version ?? '0.1.0',
-      node: process.version,
-      uptimeSeconds: Math.round(process.uptime()),
-    };
+    return { config: await getSystemConfig(), deployment: deploymentInfo() };
+  },
+
+  async updateSystemConfig(patch: Partial<SystemConfigValue>) {
+    return { config: await updateSystemConfig(patch) };
   },
 
   // ----- Report Monitoring -----

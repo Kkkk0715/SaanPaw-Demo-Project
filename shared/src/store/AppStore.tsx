@@ -40,6 +40,7 @@ import type {
   AppUser,
   Conversation,
   DashboardStats,
+  DeploymentInfo,
   LatLng,
   MatchSuggestion,
   Message,
@@ -50,7 +51,16 @@ import type {
   Role,
   Shelter,
   ShelterAnimal,
+  SystemConfig,
 } from '../types';
+
+/** Offline demo mode has no server config to load, so toggles stay local-only here. */
+const DEMO_SYSTEM_CONFIG: SystemConfig = {
+  aiModeration: true,
+  smartAlerts: true,
+  geoFence: true,
+  maintenanceMode: false,
+};
 
 /**
  * All app data.
@@ -156,6 +166,10 @@ interface AppState {
   notifications: NotificationItem[];
   conversations: Conversation[];
   messages: Message[];
+  /** Developer-only: null until the System Management page loads (or in offline demo mode, local-only defaults). */
+  systemConfig: SystemConfig | null;
+  /** Developer-only: null outside a live session - offline demo mode has no server to report on. */
+  deployment: DeploymentInfo | null;
 
   currentUser: AppUser;
   currentShelter: Shelter;
@@ -226,6 +240,8 @@ interface AppState {
   deleteShelterAccount: (shelterId: string) => void;
   /** Rejects with the server's message (e.g. "Current password is incorrect") on failure. */
   changeShelterPassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /** Developer-only: enforced server-side, not just stored for display. Local-only (unenforced) in offline demo mode. */
+  updateSystemConfig: (patch: Partial<SystemConfig>) => void;
 }
 
 const AppContext = createContext<AppState | undefined>(undefined);
@@ -242,6 +258,8 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const [notifications, setNotifications] = useState<NotificationItem[]>(live ? [] : seedNotifications);
   const [conversations, setConversations] = useState<Conversation[]>(live ? [] : seedConversations);
   const [messages, setMessages] = useState<Message[]>(live ? [] : seedMessages);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(live ? null : DEMO_SYSTEM_CONFIG);
+  const [deployment, setDeployment] = useState<DeploymentInfo | null>(null);
 
   const [selfId, setSelfId] = useState('');
   const [serverStats, setServerStats] = useState<Snapshot['stats']>({});
@@ -276,6 +294,8 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     setConversations(snap.conversations);
     setMessages(snap.messages);
     setServerStats(snap.stats);
+    setSystemConfig(snap.systemConfig);
+    setDeployment(snap.deployment);
     // The server does not rank matches yet, so keep the ones ranked on this device.
     setMatches((prev) => {
       const seen = new Set(snap.matches.map((m) => `${m.lostReportId}:${m.candidateId}`));
@@ -323,6 +343,8 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       setConversations(seedConversations);
       setMessages(seedMessages);
       setServerStats({});
+      setSystemConfig(DEMO_SYSTEM_CONFIG);
+      setDeployment(null);
       setStatus('ready');
       return;
     }
@@ -337,6 +359,8 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     setConversations([]);
     setMessages([]);
     setServerStats({});
+    setSystemConfig(null);
+    setDeployment(null);
     setSelfId('');
     setStatus('loading');
     void refresh();
@@ -980,6 +1004,15 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     [send],
   );
 
+  const updateSystemConfig = useCallback<AppState['updateSystemConfig']>(
+    (patch) => {
+      const session = sessionRef.current;
+      setSystemConfig((prev) => (prev ? { ...prev, ...patch } : prev));
+      if (session) send(apiActions.updateSystemConfig(session, patch));
+    },
+    [send],
+  );
+
   const changeShelterPassword = useCallback<AppState['changeShelterPassword']>(async (currentPassword, newPassword) => {
     const session = sessionRef.current;
     if (!session) return;
@@ -1005,6 +1038,8 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       notifications,
       conversations,
       messages,
+      systemConfig,
+      deployment,
       currentUser,
       currentShelter,
       sync,
@@ -1043,17 +1078,18 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       deleteUserAccount,
       deleteShelterAccount,
       changeShelterPassword,
+      updateSystemConfig,
     }),
     [
       users, shelters, reports, matches, shelterAnimals, cases, flags, notifications,
-      conversations, messages, currentUser, currentShelter, sync, issuedLogin, clearIssuedLogin,
+      conversations, messages, systemConfig, deployment, currentUser, currentShelter, sync, issuedLogin, clearIssuedLogin,
       stats, reportById, shelterById,
       myReports, nearbyReports, shelterAreaReports, matchesForReport, notificationsFor,
       messagesIn, caseForReport, runImageMatch, scanPhotoMatch, createReport, setReportStatus, deleteReport,
       setShelterApproval, openCase, setCaseStatus, setShelterAnimalStatus, addShelterAnimal,
       toggleAnimalPublic, updateShelterProfile, updateUserProfile, sendMessage,
       startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,
-      deleteUserAccount, deleteShelterAccount, changeShelterPassword,
+      deleteUserAccount, deleteShelterAccount, changeShelterPassword, updateSystemConfig,
     ],
   );
 

@@ -7,6 +7,7 @@ import type {
   AppUser,
   Conversation,
   DashboardStats,
+  DeploymentInfo,
   LatLng,
   MatchSuggestion,
   Message,
@@ -17,6 +18,7 @@ import type {
   Role,
   Shelter,
   ShelterAnimal,
+  SystemConfig,
 } from './types';
 
 /**
@@ -192,6 +194,9 @@ export interface Snapshot {
   messages: Message[];
   /** Server-computed counters that win over anything derivable from the loaded rows. */
   stats: Partial<DashboardStats>;
+  /** Developer-only: the System Management page's config + deployment facts. Null for other roles. */
+  systemConfig: SystemConfig | null;
+  deployment: DeploymentInfo | null;
 }
 
 const emptySnapshot = (selfId: string): Snapshot => ({
@@ -207,6 +212,8 @@ const emptySnapshot = (selfId: string): Snapshot => ({
   conversations: [],
   messages: [],
   stats: {},
+  systemConfig: null,
+  deployment: null,
 });
 
 export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
@@ -277,6 +284,8 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
     users: AppUser[];
     reports: AnimalReport[];
     flags: ModerationFlag[];
+    systemConfig: SystemConfig;
+    deployment: DeploymentInfo;
   }>(s, '/developer/overview');
   return {
     ...emptySnapshot(''),
@@ -394,6 +403,9 @@ export const apiActions = {
     call<{ flag: ModerationFlag }>(s, `/developer/flags/${id}/resolve`, { method: 'PATCH', body: { action } }),
 
   banUser: (s: ApiSession, id: string) => call<AppUser>(s, `/developer/users/${id}/ban`, { method: 'PATCH' }),
+
+  updateSystemConfig: (s: ApiSession, patch: Partial<SystemConfig>) =>
+    call<{ config: SystemConfig }>(s, '/developer/system', { method: 'PATCH', body: patch }),
 
   changeShelterPassword: (s: ApiSession, currentPassword: string, newPassword: string) =>
     call<{ ok: boolean }>(s, '/shelter/password', { method: 'PATCH', body: { currentPassword, newPassword } }),

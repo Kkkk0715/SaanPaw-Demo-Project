@@ -4,6 +4,7 @@ import { User } from '../models/User';
 import { LostPetReport } from '../models/LostPetReport';
 import { FoundAnimalReport } from '../models/FoundAnimalReport';
 import { assessAnimalPhoto } from './gemini.service';
+import { getSystemConfig } from './systemConfig.service';
 import { logger } from '../utils/logger';
 
 /**
@@ -215,6 +216,7 @@ export const moderationService = {
     description?: string;
   }): Promise<void> {
     try {
+      if (!(await getSystemConfig()).aiModeration) return;
       const [duplicate, photoSignal] = await Promise.all([
         this.isDuplicate(params),
         params.imageUrl ? assessAnimalPhoto(params.imageUrl) : Promise.resolve(null),

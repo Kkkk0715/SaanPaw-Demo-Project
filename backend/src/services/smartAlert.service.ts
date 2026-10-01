@@ -2,6 +2,7 @@ import { Notification } from '../models/Notification';
 import { User } from '../models/User';
 import { Shelter } from '../models/Shelter';
 import { sendPushNotifications } from './pushNotification.service';
+import { getSystemConfig } from './systemConfig.service';
 import { logger } from '../utils/logger';
 
 /**
@@ -22,6 +23,7 @@ export const smartAlertService = {
     lat: number;
     summary: string;
   }): Promise<void> {
+    if (!(await getSystemConfig()).smartAlerts) return;
     const point = { type: 'Point' as const, coordinates: [params.lng, params.lat] };
 
     // Radius is per-recipient, so use $geoWithin/$centerSphere per recipient set.

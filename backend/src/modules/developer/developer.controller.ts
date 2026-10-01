@@ -24,6 +24,14 @@ export const developerController = {
   systemConfig: async (_req: Request, res: Response) =>
     res.json(await developerService.systemConfig()),
 
+  updateSystemConfig: async (req: Request, res: Response) => {
+    const patch: Record<string, boolean> = {};
+    for (const key of ['aiModeration', 'smartAlerts', 'geoFence', 'maintenanceMode'] as const) {
+      if (typeof req.body?.[key] === 'boolean') patch[key] = req.body[key];
+    }
+    res.json(await developerService.updateSystemConfig(patch));
+  },
+
   listFlags: async (req: Request, res: Response) =>
     res.json(await developerService.listFlags(req.query.status as never)),
 

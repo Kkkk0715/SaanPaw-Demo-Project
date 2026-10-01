@@ -7,6 +7,7 @@ import { User } from '../../models/User';
 import { Shelter } from '../../models/Shelter';
 import { DeveloperAccount } from '../../models/DeveloperAccount';
 import { sendEmail, passwordResetEmail } from '../../services/email.service';
+import { getSystemConfig } from '../../services/systemConfig.service';
 import { ApiError } from '../../utils/ApiError';
 
 const RESET_CODE_TTL_MS = 15 * 60_000;
@@ -19,6 +20,11 @@ function sign(payload: Express.UserPayload): string {
 export const authService = {
   async login(role: Role, email: string, password: string) {
     const normalized = email.toLowerCase().trim();
+
+    // The Developer must always be able to sign in, including to turn maintenance mode back off.
+    if (role !== 'developer' && (await getSystemConfig()).maintenanceMode) {
+      throw new ApiError(503, 'SaanPaw is temporarily down for maintenance. Please try again shortly.');
+    }
 
     if (role === 'developer') {
       const acct = await DeveloperAccount.findOne({ email: normalized });

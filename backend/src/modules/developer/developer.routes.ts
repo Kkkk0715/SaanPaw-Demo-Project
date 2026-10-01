@@ -18,6 +18,7 @@ router.delete('/shelters/:id', asyncHandler(developerController.deleteShelter));
 
 // System Management
 router.get('/system', asyncHandler(developerController.systemConfig));
+router.patch('/system', asyncHandler(developerController.updateSystemConfig));
 
 // Report Monitoring
 router.get('/flags', asyncHandler(developerController.listFlags));
