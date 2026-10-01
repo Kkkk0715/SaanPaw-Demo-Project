@@ -1,6 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "node_modules/expo-server-sdk/**"
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/uploads/(.*)", "destination": "/api" }

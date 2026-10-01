@@ -11,7 +11,9 @@ import { logger } from '../utils/logger';
  * When a lost/found report is filed inside the service area, notify:
  *   - Users whose `homeLocation` is within their own `alertRadiusMeters` of the report
  *   - Shelters whose `location` is within their `operatingRadiusMeters` of the report
- * Delivery is persisted as Notification docs and pushed via Expo.
+ * Delivery is persisted as Notification docs and pushed via Expo. Never throws: every call site
+ * runs this after the report is already saved, so a dispatch failure must never turn an
+ * already-successful report submission into a failed request.
  */
 export const smartAlertService = {
   async dispatchReportAlert(params: {
@@ -23,72 +25,76 @@ export const smartAlertService = {
     lat: number;
     summary: string;
   }): Promise<void> {
-    if (!(await getSystemConfig()).smartAlerts) return;
-    const point = { type: 'Point' as const, coordinates: [params.lng, params.lat] };
+    try {
+      if (!(await getSystemConfig()).smartAlerts) return;
+      const point = { type: 'Point' as const, coordinates: [params.lng, params.lat] };
 
-    // Radius is per-recipient, so use $geoWithin/$centerSphere per recipient set.
-    const [users, shelters] = await Promise.all([
-      User.find({
-        isBanned: false,
-        ...(params.reporterId ? { _id: { $ne: params.reporterId } } : {}),
-        homeLocation: {
-          $geoWithin: { $centerSphere: [[params.lng, params.lat], 20_000 / 6_378_100] },
-        },
-      }).lean(),
-      Shelter.find({
-        approvalStatus: 'approved',
-        location: {
-          $geoWithin: { $centerSphere: [[params.lng, params.lat], 30_000 / 6_378_100] },
-        },
-      }).lean(),
-    ]);
+      // Radius is per-recipient, so use $geoWithin/$centerSphere per recipient set.
+      const [users, shelters] = await Promise.all([
+        User.find({
+          isBanned: false,
+          ...(params.reporterId ? { _id: { $ne: params.reporterId } } : {}),
+          homeLocation: {
+            $geoWithin: { $centerSphere: [[params.lng, params.lat], 20_000 / 6_378_100] },
+          },
+        }).lean(),
+        Shelter.find({
+          approvalStatus: 'approved',
+          location: {
+            $geoWithin: { $centerSphere: [[params.lng, params.lat], 30_000 / 6_378_100] },
+          },
+        }).lean(),
+      ]);
 
-    const matchedUsers = users.filter((u) =>
-      withinMeters(u.homeLocation?.coordinates as number[], point.coordinates, u.alertRadiusMeters),
-    );
-    const matchedShelters = shelters.filter((s) =>
-      withinMeters(s.location?.coordinates as number[], point.coordinates, s.operatingRadiusMeters),
-    );
+      const matchedUsers = users.filter((u) =>
+        withinMeters(u.homeLocation?.coordinates as number[], point.coordinates, u.alertRadiusMeters),
+      );
+      const matchedShelters = shelters.filter((s) =>
+        withinMeters(s.location?.coordinates as number[], point.coordinates, s.operatingRadiusMeters),
+      );
 
-    const userTitle = params.reportType === 'lost' ? 'Lost pet reported nearby' : 'Found animal reported nearby';
-    const notificationType = params.reportType === 'lost' ? ('lost_report' as const) : ('found_report' as const);
+      const userTitle = params.reportType === 'lost' ? 'Lost pet reported nearby' : 'Found animal reported nearby';
+      const notificationType = params.reportType === 'lost' ? ('lost_report' as const) : ('found_report' as const);
 
-    const notifications = [
-      ...matchedUsers.map((u) => ({
-        audienceType: 'user' as const,
-        audienceId: u._id,
-        type: notificationType,
-        refId: params.reportId,
-        title: userTitle,
-        body: params.summary,
-      })),
-      ...matchedShelters.map((s) => ({
-        audienceType: 'shelter' as const,
-        audienceId: s._id,
-        type: notificationType,
-        refId: params.reportId,
-        title: 'New report in your operating radius',
-        body: params.summary,
-      })),
-    ];
-
-    if (notifications.length) {
-      await Notification.insertMany(notifications);
-      logger.info(`smartAlert: queued ${notifications.length} notifications for ${params.reportType} ${params.reportId}`);
-      await sendPushNotifications([
+      const notifications = [
         ...matchedUsers.map((u) => ({
-          token: u.expoPushToken,
+          audienceType: 'user' as const,
+          audienceId: u._id,
+          type: notificationType,
+          refId: params.reportId,
           title: userTitle,
           body: params.summary,
-          data: { type: notificationType, refId: params.reportId },
         })),
         ...matchedShelters.map((s) => ({
-          token: s.expoPushToken,
+          audienceType: 'shelter' as const,
+          audienceId: s._id,
+          type: notificationType,
+          refId: params.reportId,
           title: 'New report in your operating radius',
           body: params.summary,
-          data: { type: notificationType, refId: params.reportId },
         })),
-      ]);
+      ];
+
+      if (notifications.length) {
+        await Notification.insertMany(notifications);
+        logger.info(`smartAlert: queued ${notifications.length} notifications for ${params.reportType} ${params.reportId}`);
+        await sendPushNotifications([
+          ...matchedUsers.map((u) => ({
+            token: u.expoPushToken,
+            title: userTitle,
+            body: params.summary,
+            data: { type: notificationType, refId: params.reportId },
+          })),
+          ...matchedShelters.map((s) => ({
+            token: s.expoPushToken,
+            title: 'New report in your operating radius',
+            body: params.summary,
+            data: { type: notificationType, refId: params.reportId },
+          })),
+        ]);
+      }
+    } catch (err) {
+      logger.error('smartAlert: failed to dispatch report alert', err);
     }
   },
 };
