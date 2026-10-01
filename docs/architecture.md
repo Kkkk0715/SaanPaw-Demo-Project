@@ -19,7 +19,7 @@ flowchart LR
     end
 
     subgraph Data["MongoDB"]
-        DB[(Collections:\nusers, shelters, developerAccounts,\nlostPetReports, foundAnimalReports,\nanimalCases, shelterAnimals,\nconversations, messages,\nnotifications, moderationFlags,\nimageSignatures)]
+        DB[(Collections:\nusers, shelters, developerAccounts,\nlostPetReports, foundAnimalReports,\nanimalCases, shelterAnimals,\nconversations, messages,\nnotifications, moderationFlags,\nmatchSuggestions)]
     end
 
     EXPO[[Expo Push Notifications]]
@@ -56,7 +56,7 @@ flowchart LR
 | Rule | Where enforced |
 |------|----------------|
 | Service area = San Jose Del Monte only | `backend/src/config/serviceArea.ts` + `geoFence` middleware |
-| No RFID/GPS-collar/microchip data | not modeled; identification via `imageSignatures` only |
+| No RFID/GPS-collar/microchip data | not modeled; identification via photo matching (`matching.service.ts`, `matchSuggestions`) only |
 | No national DB integration | no external gov connectors in `backend/src/services` |
 | Smart alerts within selected radius | `smartAlert.service.ts` `$geoWithin` / `$nearSphere` query |
 | AI flagging of false reports | `moderation.service.ts`, `moderationFlags` collection |

@@ -14,7 +14,7 @@ function loadEnv(vars: Record<string, string | undefined>) {
     'CORS_ORIGINS',
     'TRUST_PROXY',
     'JWT_EXPIRES_IN',
-    'IR_MATCH_THRESHOLD',
+    'DEFAULT_USER_ALERT_RADIUS',
   ]) {
     delete process.env[key];
   }
@@ -72,9 +72,9 @@ describe('blank optional variables', () => {
   // Some hosts (Vercel included) create a variable with an empty string, rather than leaving it
   // unset, when its form field is left blank - this must not be treated as an explicit override.
   it('treats an empty string the same as unset, not as an explicit override', () => {
-    const env = loadEnv({ ...prod, JWT_EXPIRES_IN: '', TRUST_PROXY: '', IR_MATCH_THRESHOLD: '' });
+    const env = loadEnv({ ...prod, JWT_EXPIRES_IN: '', TRUST_PROXY: '', DEFAULT_USER_ALERT_RADIUS: '' });
     expect(env.jwtExpiresIn).toBe('7d');
     expect(env.trustProxy).toBe(0);
-    expect(env.imageRecognition.matchThreshold).toBe(0.82);
+    expect(env.alerts.defaultUserRadius).toBe(3000);
   });
 });

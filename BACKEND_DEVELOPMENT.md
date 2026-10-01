@@ -121,11 +121,12 @@ Protected routes require: `authenticate` + `authorize('shelter_admin')` + `geoFe
    - Flags suspicious reports for developer review
    - Escalates reporters with multiple flags to account ban
 
-5. **Image Recognition Service** (`imageRecognition.service.ts`)
-   - Pluggable embedding provider for AI model integration
-   - Cosine similarity scoring between image embeddings
-   - Matches lost pets against found reports and shelter animals
-   - Ranks results by confidence score
+5. **Matching Service** (`matching.service.ts`)
+   - Cheap attribute heuristic (species, coat colour, breed, size, distance) shortlists candidates
+   - Gemini vision compares photos for the shortlist; falls back to the heuristic score if unconfigured
+   - Runs both directions: a new lost report is matched against found reports/shelter animals, and a
+     new found report/shelter intake is matched back against existing lost reports
+   - Ranks results by confidence score, with the reasons behind each score
 
 ### ✅ **Data Serialization Layer** (`utils/geoHelpers.ts`)
 Helper functions to convert between MongoDB GeoJSON format and frontend LatLng format:

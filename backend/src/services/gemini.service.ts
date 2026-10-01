@@ -6,8 +6,7 @@ import { readStoredPhoto } from './storage.service';
  * Vision calls via Gemini's free-tier API (aistudio.google.com/apikey): direct photo-to-photo
  * comparison for matching, and a single-photo screen for report flagging.
  *
- * This is deliberately not the embedding/cosine-similarity pipeline sketched in
- * `imageRecognition.service.ts` (see docs/data-flow-diagrams.md, Figure 29): that shape assumes a
+ * This is deliberately not an embedding/cosine-similarity pipeline: that shape assumes a
  * self-hosted model producing a fixed vector per photo, cacheable and comparable to many others
  * for free. A hosted vision model like Gemini doesn't expose that on its free tier - each call is
  * its own request. `matching.service.ts` accounts for that by pre-filtering candidates with the

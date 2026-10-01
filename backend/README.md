@@ -14,7 +14,7 @@ src/
     developer/   Developer Module endpoints
     shelter/     Shelter Admin Module endpoints
     user/        User Module endpoints
-  services/      imageRecognition, smartAlert, geolocation, moderation
+  services/      matching, gemini, smartAlert, geolocation, moderation
   routes/        route table mount (/api/v1/...)
   scripts/       seed.ts
   utils/         ApiError, asyncHandler, logger

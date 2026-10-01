@@ -59,11 +59,6 @@ export const env = {
   trustProxy: optionalNumber('TRUST_PROXY', 0),
   uploadDir: optional('UPLOAD_DIR', 'uploads'),
   publicBaseUrl: optional('PUBLIC_BASE_URL', 'http://localhost:4000'),
-  imageRecognition: {
-    model: optional('IR_MODEL', 'mobilenet_v3'),
-    matchThreshold: optionalNumber('IR_MATCH_THRESHOLD', 0.82),
-    maxResults: optionalNumber('IR_MAX_RESULTS', 10),
-  },
   alerts: {
     defaultUserRadius: optionalNumber('DEFAULT_USER_ALERT_RADIUS', 3000),
     defaultShelterRadius: optionalNumber('DEFAULT_SHELTER_RADIUS', 5000),

@@ -38,7 +38,7 @@ flowchart TD
 
     D1[(D1 users / shelters /\ndeveloperAccounts)]
     D2[(D2 lostPetReports /\nfoundAnimalReports)]
-    D3[(D3 imageSignatures)]
+    D3[(D3 matchSuggestions)]
     D4[(D4 animalCases /\nshelterAnimals)]
     D5[(D5 notifications)]
     D6[(D6 conversations /\nmessages)]
@@ -69,6 +69,14 @@ flowchart TD
 ```
 
 ## Figure 29 - DFD Level 2 (explodes Process 3 - Image Recognition Matching)
+
+> This diagrams the self-hosted embedding/cosine-similarity pipeline explored in
+> `spike/image-recognition/`. It was not adopted - the implemented Process 3 is
+> `matching.service.ts`: an attribute heuristic (3.1-3.3 below, unchanged) shortlists
+> candidates, then Gemini vision scores the shortlisted photo pairs directly (replacing
+> 3.2's embedding extraction and 3.4's cosine step) in both match directions, lost-to-found
+> and found/intake-back-to-lost. `D3 imageSignatures` below does not exist; matches persist
+> to `matchSuggestions` (`D3` in the Level 1 diagram above).
 
 ```mermaid
 flowchart TD

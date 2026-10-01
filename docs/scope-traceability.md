@@ -85,7 +85,7 @@ visible rather than merely unimplemented.
 | Reported Lost Pet Status Update | `screens/user/LostPetStatusScreen.tsx` | Done |
 | Report Found Animal | `screens/user/ReportFoundAnimalScreen.tsx` → `ReportForm.tsx` (Figure 16) | Done |
 | Shelter View — view shelter animals **and communicate** | `screens/user/ShelterViewScreen.tsx` | Done — three tabs: Shelters, Recovered animals, Messages |
-| Image Recognition Matching | `screens/user/ImageRecognitionScreen.tsx` (Figure 17) | Done (UI + ranking heuristic); real embedding model pending — see `spike/image-recognition/` |
+| Image Recognition Matching | `screens/user/ImageRecognitionScreen.tsx` (Figure 17) | Done — `matching.service.ts` pre-filters by attributes, then Gemini vision scores the shortlisted photo pairs; see `spike/image-recognition/` for the embedding approach explored and not adopted |
 | Map View Interface | `screens/user/MapViewScreen.tsx` (Figure 18) | Done |
 | Smart Notifications | `screens/user/NotificationsScreen.tsx` (Figure 19) | Done |
 | Search and Filter Reports | `screens/user/SearchReportsScreen.tsx` (Figure 20) | Done — see Finding 1 |
