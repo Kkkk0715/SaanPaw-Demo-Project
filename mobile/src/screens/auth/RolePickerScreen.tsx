@@ -3,9 +3,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
+import { useBottomInset } from '@/components/ui';
 
 /** Entry screen. Each module has its own login, so ask which one first. */
 export function RolePickerScreen({ navigation }: NativeStackScreenProps<any>) {
+  const bottomInset = useBottomInset();
   const modules = [
     {
       title: 'Pet Owner',
@@ -40,7 +42,10 @@ export function RolePickerScreen({ navigation }: NativeStackScreenProps<any>) {
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: theme.spacing(5) + bottomInset }]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.hero}>
           {/* Soft shapes and paw marks, so the header is not a flat block of green. */}
           <View pointerEvents="none" style={styles.blobA} />

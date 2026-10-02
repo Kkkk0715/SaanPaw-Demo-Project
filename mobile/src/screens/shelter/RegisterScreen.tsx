@@ -12,6 +12,7 @@ import {
   Field,
   PhoneField,
   Select,
+  useBottomInset,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
 import { apiRequest } from '@/services/api';
@@ -24,6 +25,7 @@ const GMAIL_PATTERN = /^[^\s@]+@gmail\.com$/i;
  * verifies the permit and issues credentials afterwards.
  */
 export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any>) {
+  const bottomInset = useBottomInset();
   const [name, setName] = useState('');
   const [permit, setPermit] = useState('');
   const [email, setEmail] = useState('');
@@ -83,7 +85,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
 
   if (submitted) {
     return (
-      <ScrollView style={{ backgroundColor: theme.colors.background }}>
+      <ScrollView style={{ backgroundColor: theme.colors.background }} contentContainerStyle={{ paddingBottom: bottomInset }}>
         <AuthHeader title="Application submitted" subtitle="Your shelter is now awaiting Developer verification." />
         <View style={{ padding: theme.spacing(2.5), gap: theme.spacing(2), width: '100%', maxWidth: COLUMN, alignSelf: 'center' }}>
           <Banner
@@ -107,7 +109,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
   return (
     <ScrollView
       style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={{ paddingBottom: theme.spacing(4) }}
+      contentContainerStyle={{ paddingBottom: theme.spacing(4) + bottomInset }}
       keyboardShouldPersistTaps="handled"
     >
       <AuthHeader

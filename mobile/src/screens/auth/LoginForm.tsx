@@ -10,6 +10,7 @@ import {
   COLUMN,
   Caption,
   Field,
+  useBottomInset,
 } from '@/components/ui';
 import { DEMO_ACCOUNTS, DEMO_MODE, useAuth, type MobileRole } from '@/context/AuthContext';
 
@@ -27,6 +28,7 @@ export function LoginForm({
 }) {
   const { signIn } = useAuth();
   const navigation = useNavigation<any>();
+  const bottomInset = useBottomInset();
   const demo = DEMO_ACCOUNTS[role];
 
   // Demo accounts only exist in the static demo build, so a real deployment starts blank.
@@ -56,7 +58,7 @@ export function LoginForm({
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: bottomInset }} keyboardShouldPersistTaps="handled">
         <AuthHeader title={title} subtitle={subtitle} />
 
         <View style={{ padding: theme.spacing(2.5), gap: theme.spacing(2), width: '100%', maxWidth: COLUMN, alignSelf: 'center' }}>

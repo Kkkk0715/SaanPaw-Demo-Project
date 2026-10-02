@@ -12,6 +12,7 @@ import {
   Field,
   PhoneField,
   Select,
+  useBottomInset,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
 import { useAuth } from '@/context/AuthContext';
@@ -26,6 +27,7 @@ const GMAIL_PATTERN = /^[^\s@]+@gmail\.com$/i;
  */
 export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) {
   const { signIn } = useAuth();
+  const bottomInset = useBottomInset();
 
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
@@ -81,7 +83,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
   return (
     <ScrollView
       style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={{ paddingBottom: theme.spacing(4) }}
+      contentContainerStyle={{ paddingBottom: theme.spacing(4) + bottomInset }}
       keyboardShouldPersistTaps="handled"
     >
       <AuthHeader

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -11,12 +11,14 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type ImageStyle,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '@/constants/theme';
 
@@ -38,7 +40,11 @@ export function Screen({
   padded?: boolean;
   footer?: ReactNode;
 }) {
-  const body = padded ? styles.screenBodyPadded : styles.screenBody;
+  const bottomInset = useBottomInset();
+  const body = [
+    padded ? styles.screenBodyPadded : styles.screenBody,
+    { paddingBottom: theme.spacing(4) + bottomInset },
+  ];
   return (
     <KeyboardAvoidingView
       style={styles.screen}
@@ -55,9 +61,25 @@ export function Screen({
       ) : (
         <View style={[body, { flex: 1 }]}>{children}</View>
       )}
-      {footer ? <View style={styles.screenFooter}>{footer}</View> : null}
+      {footer ? (
+        <View style={[styles.screenFooter, { paddingBottom: theme.spacing(2) + bottomInset }]}>{footer}</View>
+      ) : null}
     </KeyboardAvoidingView>
   );
+}
+
+/**
+ * How far the bottom of a screen's content must stay clear of the system navigation bar.
+ *
+ * Android draws that bar over the app (edge-to-edge), so anything at the very bottom - a last
+ * button, a footer - sits underneath it and can't be tapped. Zero inside the bottom tab navigator:
+ * the tab bar already clears the bar (UserNavigator adds the inset to it), so its screens end above
+ * it and padding them again would only leave dead space.
+ */
+export function useBottomInset(): number {
+  const insets = useSafeAreaInsets();
+  const insideTabBar = useContext(BottomTabBarHeightContext) !== undefined;
+  return insideTabBar ? 0 : insets.bottom;
 }
 
 /** Branded header used on the login/registration screens. */
@@ -439,8 +461,10 @@ export function Select({
       </Pressable>
       {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
 
+      {/* No scroll area of its own: the Sheet already scrolls, and two nested vertical scrollers
+          fight over the gesture on Android. */}
       <Sheet open={open} onClose={() => setOpen(false)} title={label}>
-        <ScrollView style={{ maxHeight: 380 }}>
+        <View>
           {options.map((o) => (
             <Pressable
               key={o}
@@ -456,7 +480,7 @@ export function Select({
               ) : null}
             </Pressable>
           ))}
-        </ScrollView>
+        </View>
       </Sheet>
     </View>
   );
@@ -474,17 +498,51 @@ export function Sheet({
   children: ReactNode;
 }) {
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+    // Translucent so the dialog is laid out the same way on every Android version - under the status
+    // and navigation bars - rather than depending on the OS default; the SafeAreaProvider inside
+    // then measures the bars from the dialog's own window, which the app-level provider can't do
+    // (a Modal is a separate native window, so the inset it reports there is not the dialog's).
+    <Modal
+      visible={open}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
+      <SafeAreaProvider>
+        <SheetBody title={title} onClose={onClose}>
+          {children}
+        </SheetBody>
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
+
+function SheetBody({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  return (
+    <KeyboardAvoidingView style={styles.sheetRoot} behavior="padding">
       <Pressable style={styles.sheetBackdrop} onPress={onClose} />
-      <View style={styles.sheet}>
+      {/* Capped height + its own scroll: a tall form (add animal, edit profile) would otherwise
+          grow past the screen and push its last button out of reach. The bottom padding clears the
+          system navigation bar, which would otherwise sit on top of that button. */}
+      <View style={[styles.sheet, { maxHeight: height * 0.92, paddingBottom: theme.spacing(2) + insets.bottom }]}>
         <View style={styles.sheetHandle} />
         <View style={styles.sheetHeader}>
           <Text style={styles.sheetTitle}>{title}</Text>
           <IconButton icon="close" onPress={onClose} />
         </View>
-        {children}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ gap: theme.spacing(1) }}
+        >
+          {children}
+        </ScrollView>
       </View>
-    </Modal>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -850,13 +908,13 @@ const styles = StyleSheet.create({
   segmentText: { ...theme.type.label, color: theme.colors.muted, textAlign: 'center' },
   segmentTextActive: { color: theme.colors.onPrimary },
 
+  sheetRoot: { flex: 1 },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(17,24,39,0.45)' },
   sheet: {
     backgroundColor: theme.colors.surface,
     borderTopLeftRadius: theme.radius.xl,
     borderTopRightRadius: theme.radius.xl,
     padding: theme.spacing(2),
-    paddingBottom: theme.spacing(4),
     gap: theme.spacing(1),
   },
   sheetHandle: {

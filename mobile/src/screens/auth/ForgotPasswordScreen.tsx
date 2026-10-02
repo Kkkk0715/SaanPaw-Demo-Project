@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
-import { AuthHeader, Banner, Button, COLUMN, Caption, Field } from '@/components/ui';
+import { AuthHeader, Banner, Button, COLUMN, Caption, Field, useBottomInset } from '@/components/ui';
 import { apiRequest } from '@/services/api';
 import type { MobileRole } from '@/context/AuthContext';
 
@@ -13,6 +13,7 @@ import type { MobileRole } from '@/context/AuthContext';
  */
 export function ForgotPasswordScreen({ route, navigation }: NativeStackScreenProps<any>) {
   const role = (route.params as { role: MobileRole }).role;
+  const bottomInset = useBottomInset();
 
   const [step, setStep] = useState<'request' | 'reset'>('request');
   const [email, setEmail] = useState('');
@@ -85,7 +86,7 @@ export function ForgotPasswordScreen({ route, navigation }: NativeStackScreenPro
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: bottomInset }} keyboardShouldPersistTaps="handled">
         <AuthHeader
           title="Forgot password"
           subtitle={
