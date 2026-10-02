@@ -91,13 +91,15 @@ export function MapCanvas({
       selectedMarkerId,
       radiusMeters,
       radiusCenter,
-      // Where the map's own "recenter" button goes back to. This does not move the camera by
-      // itself - if it did, every tap or drag would immediately re-centre on the spot the user
-      // just placed the pin, fighting the very interaction this map exists for.
+      // Where the map's own "recenter" button goes back to, and - on a map the user can't pin on -
+      // where the camera follows when it changes (see updateData in osmMapHtml.ts). A pin-picking
+      // map never moves its camera from this: every tap or drag would immediately re-centre on
+      // the spot the user just placed the pin, fighting the very interaction it exists for.
       center: initialCenter,
+      zoom: initialZoom,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markers, selectedMarkerId, radiusMeters, radiusCenter?.latitude, radiusCenter?.longitude, initialCenter.latitude, initialCenter.longitude]);
+  }, [markers, selectedMarkerId, radiusMeters, radiusCenter?.latitude, radiusCenter?.longitude, initialCenter.latitude, initialCenter.longitude, initialZoom]);
 
   const handleMessage = (event: WebViewMessageEvent) => {
     let message: { type: string; id?: string; lat?: number; lng?: number; message?: string };
@@ -108,7 +110,16 @@ export function MapCanvas({
     }
     if (message.type === 'ready') {
       ready.current = true;
-      push({ markers: markers.map(toMarkerConfig), selectedMarkerId, radiusMeters, radiusCenter });
+      // Includes the center and zoom so a prop that changed while the page was still loading
+      // (those pushes are dropped until it's ready) isn't lost.
+      push({
+        markers: markers.map(toMarkerConfig),
+        selectedMarkerId,
+        radiusMeters,
+        radiusCenter,
+        center: initialCenter,
+        zoom: initialZoom,
+      });
     } else if (message.type === 'marker' && message.id) {
       onMarkerPressRef.current?.(message.id);
     } else if (message.type === 'pick' && message.lat != null && message.lng != null) {

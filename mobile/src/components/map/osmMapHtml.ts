@@ -219,14 +219,31 @@ export function buildMapHtml(initial: MapInitialState): string {
       // prop follows the pin - snaps back to wherever the pin currently is, not the first view.
       var recenterTarget = CONFIG.center;
 
+      // A map the user can't pin on (registration, shelter profile, the map tab) has to follow
+      // its center and zoom props: picking a different barangay or radius moves the circle, and
+      // if the camera stayed put the circle would land off-screen or beside the wrong labels.
+      // A pin-picking map must not - every tap or drag would fight the camera. Only an actual
+      // change moves it, so an unrelated re-render never snaps the map back under the user.
+      var lastView = { lat: CONFIG.center.latitude, lng: CONFIG.center.longitude, zoom: CONFIG.zoom };
+
       window.updateData = function (data) {
         applyMarkers(data.markers || [], data.selectedMarkerId, CONFIG.pickable);
         applyRadius(data.radiusMeters, data.radiusCenter);
-        if (data.center) recenterTarget = data.center;
+        if (data.center) {
+          recenterTarget = data.center;
+          var zoom = data.zoom != null ? data.zoom : lastView.zoom;
+          if (
+            !CONFIG.pickable &&
+            (data.center.latitude !== lastView.lat || data.center.longitude !== lastView.lng || zoom !== lastView.zoom)
+          ) {
+            lastView = { lat: data.center.latitude, lng: data.center.longitude, zoom: zoom };
+            map.setView([lastView.lat, lastView.lng], zoom);
+          }
+        }
       };
 
       window.__recenter = function () {
-        map.flyTo([recenterTarget.latitude, recenterTarget.longitude], CONFIG.zoom);
+        map.flyTo([recenterTarget.latitude, recenterTarget.longitude], lastView.zoom);
       };
 
       applyMarkers(CONFIG.markers || [], CONFIG.selectedMarkerId, CONFIG.pickable);

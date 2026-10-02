@@ -11,23 +11,33 @@ export interface Barangay {
   center: LatLng;
 }
 
-/** The populated corridors of the city. */
+/**
+ * The populated corridors of the city.
+ *
+ * Each center is where OpenStreetMap places that barangay (its place node, cross-checked against
+ * the barangay hall's own mapped position - the two agree within ~200 m). That matters because
+ * the map tiles label barangays from those same OSM nodes: a center that is off by even a couple
+ * of kilometres draws the alert-radius circle on top of a neighbouring barangay's label. The
+ * earlier hand-typed values were exactly that far out - Tungkong Mangga sat ~2.8 km west of its
+ * real position, inside Gaya-Gaya. Sapang Palay Proper has no place node; its value is the
+ * centre of its OSM boundary relation.
+ */
 export const SJDM_BARANGAYS: Barangay[] = [
-  { name: 'Muzon', center: { latitude: 14.7845, longitude: 121.0287 } },
-  { name: 'Tungkong Mangga', center: { latitude: 14.7972, longitude: 121.0489 } },
-  { name: 'Kaypian', center: { latitude: 14.8043, longitude: 121.0361 } },
-  { name: 'Gaya-Gaya', center: { latitude: 14.7899, longitude: 121.0452 } },
-  { name: 'Poblacion', center: { latitude: 14.8136, longitude: 121.0453 } },
-  { name: 'Poblacion 1', center: { latitude: 14.8168, longitude: 121.0498 } },
-  { name: 'San Manuel', center: { latitude: 14.8251, longitude: 121.0392 } },
-  { name: 'Sto. Cristo', center: { latitude: 14.8302, longitude: 121.0537 } },
-  { name: 'San Rafael V', center: { latitude: 14.8087, longitude: 121.0664 } },
-  { name: 'Graceville', center: { latitude: 14.7961, longitude: 121.0172 } },
-  { name: 'Minuyan Proper', center: { latitude: 14.8449, longitude: 121.0721 } },
-  { name: 'Sapang Palay Proper', center: { latitude: 14.8378, longitude: 121.0596 } },
-  { name: 'Citrus', center: { latitude: 14.8221, longitude: 121.0688 } },
-  { name: 'Dulong Bayan', center: { latitude: 14.8194, longitude: 121.0431 } },
-  { name: 'Paradise III', center: { latitude: 14.8055, longitude: 121.0578 } },
+  { name: 'Muzon', center: { latitude: 14.8019, longitude: 121.0347 } },
+  { name: 'Tungkong Mangga', center: { latitude: 14.7891, longitude: 121.0747 } },
+  { name: 'Kaypian', center: { latitude: 14.8216, longitude: 121.0626 } },
+  { name: 'Gaya-Gaya', center: { latitude: 14.795, longitude: 121.0523 } },
+  { name: 'Poblacion', center: { latitude: 14.815, longitude: 121.0418 } },
+  { name: 'Poblacion 1', center: { latitude: 14.8088, longitude: 121.0456 } },
+  { name: 'San Manuel', center: { latitude: 14.7817, longitude: 121.0685 } },
+  { name: 'Sto. Cristo', center: { latitude: 14.8253, longitude: 121.0789 } },
+  { name: 'San Rafael V', center: { latitude: 14.8499, longitude: 121.045 } },
+  { name: 'Graceville', center: { latitude: 14.7874, longitude: 121.061 } },
+  { name: 'Minuyan Proper', center: { latitude: 14.8428, longitude: 121.0786 } },
+  { name: 'Sapang Palay Proper', center: { latitude: 14.8407, longitude: 121.0449 } },
+  { name: 'Citrus', center: { latitude: 14.8492, longitude: 121.0647 } },
+  { name: 'Dulong Bayan', center: { latitude: 14.8268, longitude: 121.0447 } },
+  { name: 'Paradise III', center: { latitude: 14.8236, longitude: 121.1146 } },
 ];
 
 export const SJDM_BARANGAY_NAMES = SJDM_BARANGAYS.map((b) => b.name);

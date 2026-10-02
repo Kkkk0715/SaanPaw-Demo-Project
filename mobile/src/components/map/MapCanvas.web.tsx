@@ -243,10 +243,26 @@ export function MapCanvas({
     }
   }, [radiusMeters, radiusCenter?.latitude, radiusCenter?.longitude, mapReady]);
 
-  // `initialCenter` only sets where the camera starts. Screens that bind it to the same state as
-  // the pin - e.g. the report form - would otherwise fight the user: every tap or drag would
-  // immediately re-centre the camera on the spot they just placed the pin. The "recenter" button
-  // below (back to this same starting view) is the deliberate way to jump the camera instead.
+  // `initialCenter` only sets where the camera starts on a map the user can pin on. Screens that
+  // bind it to the same state as the pin - e.g. the report form - would otherwise fight the user:
+  // every tap or drag would immediately re-centre the camera on the spot they just placed the
+  // pin. The "recenter" button below (back to this same starting view) is the deliberate way to
+  // jump the camera there instead.
+  //
+  // A map the user can't pin on (registration, shelter profile, the map tab) is the opposite: it
+  // has to follow its center and zoom props, because choosing a different barangay or radius moves
+  // the circle, and a camera left where it was would show the circle off-screen or beside the wrong
+  // labels. Only an actual change moves it, so an unrelated re-render never snaps the map back
+  // under someone who has panned it.
+  const lastViewRef = useRef({ lat: initialCenter.latitude, lng: initialCenter.longitude, zoom: initialZoom });
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || pickable) return;
+    const last = lastViewRef.current;
+    if (last.lat === initialCenter.latitude && last.lng === initialCenter.longitude && last.zoom === initialZoom) return;
+    lastViewRef.current = { lat: initialCenter.latitude, lng: initialCenter.longitude, zoom: initialZoom };
+    map.setView([initialCenter.latitude, initialCenter.longitude], initialZoom);
+  }, [initialCenter.latitude, initialCenter.longitude, initialZoom, pickable, mapReady]);
 
   return (
     <View style={[styles.wrap, { height }]}>
