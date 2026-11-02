@@ -10,11 +10,13 @@ import {
   Choice,
   EmptyState,
   Field,
+  Pager,
   Row,
   Screen,
   SectionHeader,
   Segmented,
   Select,
+  usePagination,
 } from '@/components/ui';
 import { ReportCard } from '@/components/domain';
 
@@ -59,7 +61,7 @@ export function SearchReportsScreen() {
       )
       .filter((r) =>
         q
-          ? [r.name, r.breed, r.color, r.description, r.distinctMarks, r.barangay]
+          ? [r.name, r.breed, r.color, r.description, r.distinctMarks, r.barangay, r.address, r.landmark]
               .filter(Boolean)
               .join(' ')
               .toLowerCase()
@@ -71,6 +73,8 @@ export function SearchReportsScreen() {
         sort === 'nearest' ? a.distance - b.distance : +new Date(b.reportedAt) - +new Date(a.reportedAt),
       );
   }, [reports, query, kind, animalType, barangay, reportedWithin, sort, currentUser.location]);
+
+  const page = usePagination(results, undefined, [query, kind, animalType, barangay, reportedWithin, sort].join('|'));
 
   const clear = () => {
     setQuery('');
@@ -159,7 +163,7 @@ export function SearchReportsScreen() {
       </Row>
 
       {results.length ? (
-        results.map((r) => (
+        page.items.map((r) => (
           <ReportCard
             key={r.id}
             report={r}
@@ -187,6 +191,7 @@ export function SearchReportsScreen() {
           />
         </Card>
       )}
+      <Pager {...page} />
     </Screen>
   );
 }

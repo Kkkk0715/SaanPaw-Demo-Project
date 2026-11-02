@@ -161,7 +161,7 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
           onChange={setAnimalType}
         />
         <Field
-          label="Coat colour"
+          label="Fur Color"
           value={color}
           onChangeText={setColor}
           placeholder="e.g. brown with white chest"

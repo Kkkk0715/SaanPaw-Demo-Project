@@ -36,6 +36,8 @@ const shelterSchema = new Schema(
     resetCodeHash: { type: String },
     resetCodeExpiresAt: { type: Date },
     expoPushToken: { type: String },
+    /** Proof of credentials submitted with the application, reviewed by the Developer. */
+    proofDocumentIds: [{ type: Schema.Types.ObjectId, ref: 'ShelterProofDocument' }],
   },
   { timestamps: { createdAt: 'registeredAt', updatedAt: 'updatedAt' } },
 );

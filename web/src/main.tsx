@@ -7,6 +7,7 @@ import { API_BASE_URL } from '@/lib/api';
 import { Shell } from '@/components/Shell';
 import { Banner, Button, Card } from '@/components/ui';
 import { LoginPage } from '@/pages/Login';
+import { LandingPage } from '@/pages/Landing';
 import { DashboardPage } from '@/pages/Dashboard';
 import { ShelterApprovalsPage } from '@/pages/ShelterApprovals';
 import { ManageSheltersPage } from '@/pages/ManageShelters';
@@ -30,7 +31,14 @@ function StoreProvider({ children }: { children: ReactNode }) {
 function Console() {
   const { signedIn, signOut } = useAuth();
   const { sync } = useApp();
-  if (!signedIn) return <LoginPage />;
+  if (!signedIn) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<LandingPage />} />
+      </Routes>
+    );
+  }
 
   if (sync.status === 'loading') {
     return <div style={{ padding: 48, textAlign: 'center', color: 'var(--muted)' }}>Loading console data...</div>;

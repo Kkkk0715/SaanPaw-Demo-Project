@@ -24,6 +24,9 @@ const foundAnimalReportSchema = new Schema(
     imageUrls: { type: [String], default: [] },
     barangay: { type: String, required: true, trim: true },
     foundLocation: { type: pointSchema, required: true },
+    /** Street-level address of the pin, e.g. "Quirino Hwy, Brgy. Muzon" - auto-filled, editable. */
+    address: { type: String, trim: true },
+    landmark: { type: String, trim: true },
     foundAt: { type: Date },
     status: { type: String, enum: REPORT_STATUSES, default: 'active', index: true },
     caseId: { type: Schema.Types.ObjectId, ref: 'AnimalCase' },

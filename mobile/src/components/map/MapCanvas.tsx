@@ -38,6 +38,8 @@ export function MapCanvas({
   /** Lets the user tap the map or drag a marker to place a pin. */
   onPickLocation,
   selectedMarkerId,
+  /** Dashed line between two points, e.g. a shelter and the report it is recovering. */
+  route,
 }: {
   markers?: MapMarker[];
   initialCenter?: LatLng;
@@ -48,6 +50,7 @@ export function MapCanvas({
   onMarkerPress?: (id: string) => void;
   onPickLocation?: (c: LatLng) => void;
   selectedMarkerId?: string | null;
+  route?: { from: LatLng; to: LatLng } | null;
 }) {
   const webviewRef = useRef<WebView>(null);
   const ready = useRef(false);
@@ -73,6 +76,7 @@ export function MapCanvas({
         selectedMarkerId,
         radiusMeters,
         radiusCenter,
+        route,
       }),
     // Only the very first render's data ends up in the page; everything
     // after that goes through `updateData` so the map never reloads.
@@ -91,6 +95,7 @@ export function MapCanvas({
       selectedMarkerId,
       radiusMeters,
       radiusCenter,
+      route,
       // Where the map's own "recenter" button goes back to, and - on a map the user can't pin on -
       // where the camera follows when it changes (see updateData in osmMapHtml.ts). A pin-picking
       // map never moves its camera from this: every tap or drag would immediately re-centre on
@@ -99,7 +104,7 @@ export function MapCanvas({
       zoom: initialZoom,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markers, selectedMarkerId, radiusMeters, radiusCenter?.latitude, radiusCenter?.longitude, initialCenter.latitude, initialCenter.longitude, initialZoom]);
+  }, [markers, selectedMarkerId, radiusMeters, radiusCenter?.latitude, radiusCenter?.longitude, initialCenter.latitude, initialCenter.longitude, initialZoom, route?.from.latitude, route?.from.longitude, route?.to.latitude, route?.to.longitude]);
 
   const handleMessage = (event: WebViewMessageEvent) => {
     let message: { type: string; id?: string; lat?: number; lng?: number; message?: string };
@@ -117,6 +122,7 @@ export function MapCanvas({
         selectedMarkerId,
         radiusMeters,
         radiusCenter,
+        route,
         center: initialCenter,
         zoom: initialZoom,
       });

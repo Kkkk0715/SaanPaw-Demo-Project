@@ -11,3 +11,5 @@ export { Conversation } from './Conversation';
 export { Message } from './Message';
 export { ModerationFlag } from './ModerationFlag';
 export { Photo } from './Photo';
+export { PhotoFingerprint } from './PhotoFingerprint';
+export { ShelterProofDocument } from './ShelterProofDocument';

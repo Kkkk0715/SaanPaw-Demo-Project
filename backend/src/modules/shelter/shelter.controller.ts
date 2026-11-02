@@ -11,6 +11,7 @@ import {
   shelterAnimalSchema,
   shelterProfileSchema,
 } from '../../utils/validation';
+import { looksLikeImage, looksLikePdf } from '../../services/storage.service';
 import { shelterService } from './shelter.service';
 
 const sid = (req: Request) => req.auth!.shelterId ?? req.auth!.id;
@@ -18,6 +19,19 @@ const sid = (req: Request) => req.auth!.shelterId ?? req.auth!.id;
 export const shelterController = {
   register: async (req: Request, res: Response) =>
     res.status(201).json(await shelterService.register(registerShelterSchema.parse(req.body))),
+
+  uploadProof: async (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file) throw ApiError.badRequest('Attach a file in the "document" field.');
+    const isPdf = file.mimetype === 'application/pdf';
+    if (isPdf ? !looksLikePdf(file.buffer) : !looksLikeImage(file.buffer)) {
+      throw ApiError.badRequest('That file is not a valid PDF or photo.');
+    }
+    res.status(201).json(await shelterService.uploadProofDocument(file));
+  },
+
+  deleteAnimal: async (req: Request, res: Response) =>
+    res.json(await shelterService.deleteAnimal(sid(req), req.params.id)),
 
   me: async (req: Request, res: Response) => res.json(await shelterService.getMe(sid(req))),
 

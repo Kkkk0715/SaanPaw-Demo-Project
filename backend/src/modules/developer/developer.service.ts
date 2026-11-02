@@ -8,12 +8,14 @@ import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
 import { ShelterAnimal } from '../../models/ShelterAnimal';
 import { ModerationFlag } from '../../models/ModerationFlag';
+import { ShelterProofDocument } from '../../models/ShelterProofDocument';
 import { moderationService } from '../../services/moderation.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import { sendEmail, shelterCredentialsEmail } from '../../services/email.service';
 import { statsService } from '../../services/stats.service';
 import { getSystemConfig, updateSystemConfig, type SystemConfigValue } from '../../services/systemConfig.service';
 import { ApiError } from '../../utils/ApiError';
+import { generateTemporaryPassword } from '../../utils/password';
 import {
   combineName,
   serializeFlag,
@@ -25,6 +27,7 @@ import {
 } from '../../utils/geoHelpers';
 
 const OVERVIEW_LIMIT = 500;
+
 
 /** Facts about the running instance, computed fresh on every call - never stored. */
 function deploymentInfo() {
@@ -65,7 +68,7 @@ export const developerService = {
     const shelterById = new Map(shelters.map((s) => [String(s._id), s]));
     return {
       stats,
-      shelters: shelters.map(serializeShelter),
+      shelters: shelters.map((sh) => serializeShelter(sh, { includePrivate: true })),
       users: users.map(serializeUser),
       reports: [...lost.map(serializeLostReport), ...found.map(serializeFoundReport)],
       shelterAnimals: shelterAnimals.map(serializeShelterAnimal),
@@ -85,7 +88,7 @@ export const developerService = {
   // ----- Shelter Approval Management -----
   async listPendingShelters() {
     const shelters = await Shelter.find({ approvalStatus: 'pending' }).sort({ createdAt: 1 }).lean();
-    return shelters.map(serializeShelter);
+    return shelters.map((sh) => serializeShelter(sh, { includePrivate: true }));
   },
 
   /**
@@ -107,14 +110,14 @@ export const developerService = {
       shelter.approvalStatus = 'rejected';
       shelter.rejectionReason = params.reason;
       await shelter.save();
-      return { shelter: serializeShelter(shelter) };
+      return { shelter: serializeShelter(shelter, { includePrivate: true }) };
     }
 
     const adminEmail = (params.adminEmail ?? shelter.email)?.toLowerCase().trim();
     if (!adminEmail) {
       throw ApiError.badRequest('adminEmail is required: this shelter has no contact email on file');
     }
-    const generated = params.temporaryPassword ? undefined : crypto.randomBytes(6).toString('base64url');
+    const generated = params.temporaryPassword ? undefined : generateTemporaryPassword();
     const password = params.temporaryPassword ?? generated!;
 
     shelter.approvalStatus = 'approved';
@@ -127,7 +130,28 @@ export const developerService = {
     // unconfigured send (see email.service.ts) never blocks the approval itself.
     const { sent } = await sendEmail(shelterCredentialsEmail({ shelterName: shelter.name, email: adminEmail, password }));
 
-    return { shelter: serializeShelter(shelter), adminEmail, temporaryPassword: generated, emailSent: sent };
+    return { shelter: serializeShelter(shelter, { includePrivate: true }), adminEmail, temporaryPassword: generated, emailSent: sent };
+  },
+
+  /** The proof of credentials a shelter submitted with its application (metadata only). */
+  async listShelterProofs(shelterId: string) {
+    const docs = await ShelterProofDocument.find({ shelterId }, 'filename contentType size createdAt')
+      .sort({ createdAt: 1 })
+      .lean();
+    return docs.map((d) => ({
+      id: String(d._id),
+      filename: d.filename,
+      contentType: d.contentType,
+      size: d.size,
+      uploadedAt: d.createdAt?.toISOString?.(),
+    }));
+  },
+
+  /** The file itself - only ever served to a signed-in Developer. */
+  async getProofDocument(id: string) {
+    const doc = await ShelterProofDocument.findById(id).lean();
+    if (!doc || !doc.shelterId) throw ApiError.notFound('Document not found');
+    return doc;
   },
 
   // ----- System Management -----
@@ -199,17 +223,17 @@ export const developerService = {
     const escalation =
       params.action === 'remove_report' && !isShelterFlag
         ? await moderationService.escalateReporter(String(flag.reporterId))
-        : { banned: false };
+        : { banned: false, deleted: false, upheldFlags: 0 };
 
     let reporterName = 'Unknown shelter';
-    let reporterBanned = false;
+    let reporterBanned = escalation.banned;
     if (isShelterFlag) {
       const shelter = await Shelter.findById(flag.reporterId, 'name').lean();
       if (shelter) reporterName = shelter.name;
     } else {
       const reporter = await User.findById(flag.reporterId).lean();
-      reporterName = reporter ? combineName(reporter) : 'Unknown user';
-      reporterBanned = Boolean(reporter?.isBanned);
+      reporterName = reporter ? combineName(reporter) : escalation.banned ? 'Deleted account' : 'Unknown user';
+      reporterBanned = reporterBanned || Boolean(reporter?.isBanned);
     }
     return {
       flag: serializeFlag(flag.toObject(), reporterName, reporterBanned),

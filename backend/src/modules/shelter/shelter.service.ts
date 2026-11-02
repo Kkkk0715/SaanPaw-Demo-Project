@@ -6,6 +6,9 @@ import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
 import { MatchSuggestion } from '../../models/MatchSuggestion';
 import { Notification } from '../../models/Notification';
+import { ShelterProofDocument } from '../../models/ShelterProofDocument';
+import { deleteShelterAnimalCascade } from '../../services/cascadeDelete.service';
+import { findDuplicatePhotos } from '../../services/photoFingerprint.service';
 import { notify } from '../../services/pushNotification.service';
 import { findMatchingLostReports, type AnimalType } from '../../services/matching.service';
 import { moderationService } from '../../services/moderation.service';
@@ -22,7 +25,15 @@ import {
   serializeCase,
   latLngToGeoPoint,
 } from '../../utils/geoHelpers';
-import type { ANIMAL_CASE_STATUSES } from '../../config/constants';
+import {
+  CASE_STATUS_LABELS,
+  CLOSING_CASE_STATUSES,
+  canChangeCaseStatus,
+  type ANIMAL_CASE_STATUSES,
+} from '../../config/constants';
+
+/** How long an uploaded proof document waits to be attached to an application before it is ignored. */
+const PROOF_CLAIM_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 type CaseStatus = (typeof ANIMAL_CASE_STATUSES)[number];
 
@@ -76,7 +87,8 @@ async function screenAnimalPosting(
   shelterId: string,
   animal: { _id: unknown; imageUrls: string[] },
   data: Record<string, unknown>,
-): Promise<void> {
+): Promise<string[]> {
+  const duplicates = await findDuplicatePhotos(animal.imageUrls, String(animal._id));
   await moderationService.screenShelterAnimal({
     shelterId,
     animalId: String(animal._id),
@@ -85,8 +97,15 @@ async function screenAnimalPosting(
       .join(' '),
     imageCount: animal.imageUrls.length,
     imageUrl: animal.imageUrls[0],
+    duplicatePhotos: duplicates.length,
   });
+  return duplicates.length ? [duplicatePhotoNotice(duplicates.length)] : [];
 }
+
+export const duplicatePhotoNotice = (count: number) =>
+  count === 1
+    ? 'One of your photos was already used on another report, so this posting was flagged for an admin to review.'
+    : `${count} of your photos were already used on other reports, so this posting was flagged for an admin to review.`;
 
 export const shelterService = {
   // ----- Register -----
@@ -102,7 +121,21 @@ export const shelterService = {
     operatingRadiusMeters: number;
     permitNumber?: string;
     capacity?: number;
+    proofDocumentIds: string[];
   }) {
+    // Only documents uploaded recently and not yet attached to another application can be claimed.
+    const proofs = await ShelterProofDocument.find(
+      {
+        _id: { $in: input.proofDocumentIds },
+        shelterId: { $exists: false },
+        createdAt: { $gte: new Date(Date.now() - PROOF_CLAIM_WINDOW_MS) },
+      },
+      '_id',
+    ).lean();
+    if (!proofs.length) {
+      throw ApiError.badRequest('Your proof documents expired or were not uploaded. Attach them again and resubmit.');
+    }
+
     const shelter = await Shelter.create({
       name: input.name,
       barangay: input.barangay,
@@ -116,8 +149,21 @@ export const shelterService = {
       permitNumber: input.permitNumber,
       capacity: input.capacity,
       approvalStatus: 'pending',
+      proofDocumentIds: proofs.map((p) => p._id),
     });
+    await ShelterProofDocument.updateMany({ _id: { $in: proofs.map((p) => p._id) } }, { shelterId: shelter._id });
     return serializeShelter(shelter);
+  },
+
+  /** Public: one proof document for an application that is about to be submitted. */
+  async uploadProofDocument(file: { buffer: Buffer; mimetype: string; originalname?: string }) {
+    const doc = await ShelterProofDocument.create({
+      filename: (file.originalname || 'document').slice(0, 150),
+      contentType: file.mimetype,
+      size: file.buffer.length,
+      data: file.buffer,
+    });
+    return { id: String(doc._id), filename: doc.filename, contentType: doc.contentType, size: doc.size };
   },
 
   // ----- Dashboard -----
@@ -147,8 +193,14 @@ export const shelterService = {
   async addShelterAnimal(shelterId: string, data: Record<string, unknown>) {
     const animal = await ShelterAnimal.create({ ...data, shelterId });
     await matchAnimalAgainstLostReports(animal);
-    await screenAnimalPosting(shelterId, animal, data);
-    return serializeShelterAnimal(animal);
+    const notices = await screenAnimalPosting(shelterId, animal, data);
+    return { ...serializeShelterAnimal(animal), notices };
+  },
+
+  async deleteAnimal(shelterId: string, id: string) {
+    const removed = await deleteShelterAnimalCascade(shelterId, id);
+    if (!removed) throw ApiError.notFound('Animal not found');
+    return { id };
   },
 
   // ----- Recovered Animals Posting -----
@@ -160,8 +212,8 @@ export const shelterService = {
       caseStatus: 'under_rescue',
     });
     await matchAnimalAgainstLostReports(animal);
-    await screenAnimalPosting(shelterId, animal, data);
-    return serializeShelterAnimal(animal);
+    const notices = await screenAnimalPosting(shelterId, animal, data);
+    return { ...serializeShelterAnimal(animal), notices };
   },
 
   // ----- Animal Report Management (lost/found within operating radius) -----
@@ -244,7 +296,7 @@ export const shelterService = {
       type: 'status_update',
       refId: report._id,
       title: 'A shelter responded to your report',
-      body: `${shelter.name} opened a rescue case. Status: Under rescue.`,
+      body: `${shelter.name} opened a recovery case. Status: ${CASE_STATUS_LABELS.under_rescue}.`,
     });
     return serializeCase(doc.toObject(), shelter.name);
   },
@@ -258,6 +310,14 @@ export const shelterService = {
   }) {
     const doc = await AnimalCase.findOne({ _id: params.caseId, shelterId: params.shelterId });
     if (!doc) throw ApiError.notFound('Animal case not found');
+    // One-way only: under recovery -> one outcome. A closed case can't be reopened or cycled.
+    if (!canChangeCaseStatus(doc.status as CaseStatus, params.status)) {
+      throw ApiError.conflict(
+        doc.status === 'under_rescue'
+          ? `This case is already ${CASE_STATUS_LABELS.under_rescue.toLowerCase()}.`
+          : `This case is closed as "${CASE_STATUS_LABELS[doc.status as CaseStatus]}" and can't be changed.`,
+      );
+    }
     const shelter = await Shelter.findById(params.shelterId).lean();
 
     doc.status = params.status;
@@ -282,6 +342,10 @@ export const shelterService = {
       if (params.status === 'reunited') {
         report.status = doc.lostReportId ? 'recovered' : 'closed';
         await report.save();
+      } else if (CLOSING_CASE_STATUSES.includes(params.status)) {
+        // Adopted or inconclusive: the report stops showing on the map, in search and in alerts.
+        report.status = 'closed';
+        await report.save();
       }
       await notify({
         audienceType: 'user',
@@ -289,16 +353,27 @@ export const shelterService = {
         type: 'status_update',
         refId: report._id,
         title: 'Case status updated',
-        body: `${shelter?.name ?? 'The shelter'} set the case to "${params.status.replace('_', ' ')}". ${params.notes ?? ''}`.trim(),
+        body: `${shelter?.name ?? 'The shelter'} set the case to "${CASE_STATUS_LABELS[params.status]}". ${params.notes ?? ''}`.trim(),
       });
     }
     return serializeCase(doc.toObject(), shelter?.name);
   },
 
   async updateAnimal(shelterId: string, id: string, patch: { caseStatus?: CaseStatus; postedPublicly?: boolean }) {
+    const current = await ShelterAnimal.findOne({ _id: id, shelterId }, 'caseStatus').lean();
+    if (!current) throw ApiError.notFound('Animal not found');
     const update: Record<string, unknown> = {};
-    if (patch.caseStatus !== undefined) update.caseStatus = patch.caseStatus;
-    if (patch.postedPublicly !== undefined) update.postedPublicly = patch.postedPublicly;
+    if (patch.caseStatus !== undefined && patch.caseStatus !== current.caseStatus) {
+      if (!canChangeCaseStatus(current.caseStatus as CaseStatus, patch.caseStatus)) {
+        throw ApiError.conflict(
+          `This animal's status is "${CASE_STATUS_LABELS[current.caseStatus as CaseStatus]}" and can't be changed back.`,
+        );
+      }
+      update.caseStatus = patch.caseStatus;
+      // An adopted or inconclusive animal stops showing publicly.
+      if (CLOSING_CASE_STATUSES.includes(patch.caseStatus)) update.postedPublicly = false;
+    }
+    if (patch.postedPublicly !== undefined && update.postedPublicly === undefined) update.postedPublicly = patch.postedPublicly;
     const animal = await ShelterAnimal.findOneAndUpdate({ _id: id, shelterId }, update, { new: true });
     if (!animal) throw ApiError.notFound('Animal not found');
     return serializeShelterAnimal(animal);
@@ -307,7 +382,7 @@ export const shelterService = {
   async getMe(shelterId: string) {
     const shelter = await Shelter.findById(shelterId).lean();
     if (!shelter) throw ApiError.notFound('Shelter not found');
-    return serializeShelter(shelter);
+    return serializeShelter(shelter, { includePrivate: true });
   },
 
   // ----- Shelter Profile Management -----
@@ -339,7 +414,7 @@ export const shelterService = {
     );
     
     const shelter = await Shelter.findByIdAndUpdate(shelterId, update, { new: true });
-    return shelter ? serializeShelter(shelter) : null;
+    return shelter ? serializeShelter(shelter, { includePrivate: true }) : null;
   },
 
   // ----- Change the password the Developer issued -----

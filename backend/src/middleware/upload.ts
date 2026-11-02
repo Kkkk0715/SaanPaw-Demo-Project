@@ -17,3 +17,15 @@ export const receivePhoto = multer({
     else cb(ApiError.badRequest('Only JPEG, PNG or WebP photos are accepted.'));
   },
 }).single('photo');
+
+const PROOF_MIME_TYPES = new Set([...ALLOWED_MIME_TYPES, 'application/pdf']);
+
+/** Shelter proof of credentials: a photo or a PDF document, one per request. */
+export const receiveProofDocument = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (PROOF_MIME_TYPES.has(file.mimetype)) cb(null, true);
+    else cb(ApiError.badRequest('Proof documents must be a PDF or a JPEG, PNG or WebP photo.'));
+  },
+}).single('document');

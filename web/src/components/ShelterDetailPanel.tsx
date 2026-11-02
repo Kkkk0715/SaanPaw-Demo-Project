@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { approvalMeta, formatDistance, useApp, type Shelter } from '@saanpaw/shared';
-import { Badge, Banner, Button } from './ui';
+import { useEffect, useState } from 'react';
+import { approvalMeta, formatDistance, maskPrivate, useApp, type ProofDocument, type Shelter } from '@saanpaw/shared';
+import { Badge, Banner, Button, Modal, useConfirm } from './ui';
 
 /**
  * Full detail for one shelter plus every account-level action on it: the
@@ -10,6 +10,9 @@ import { Badge, Banner, Button } from './ui';
  * same shelter looks and behaves identically regardless of which page got you
  * there - only the status-dependent buttons change, driven by the shelter's own
  * approvalStatus rather than which page is rendering it.
+ *
+ * Every one of those actions asks "Are you sure?" first. The permit number is
+ * private, so it stays masked until the Developer chooses to show it.
  */
 export function ShelterDetailPanel({
   shelter,
@@ -19,18 +22,45 @@ export function ShelterDetailPanel({
   onAfterAction?: () => void;
 }) {
   const { setShelterApproval, deleteShelterAccount } = useApp();
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { ask, dialog } = useConfirm();
+  const [showPermit, setShowPermit] = useState(false);
+
+  useEffect(() => setShowPermit(false), [shelter.id]);
 
   const decide = (status: 'approved' | 'rejected') => {
     setShelterApproval(shelter.id, status);
     onAfterAction?.();
   };
 
-  const confirmDelete = () => {
-    deleteShelterAccount(shelter.id);
-    setConfirmingDelete(false);
-    onAfterAction?.();
+  const askDecision = (status: 'approved' | 'rejected') => {
+    const pending = shelter.approvalStatus === 'pending';
+    const message =
+      status === 'approved'
+        ? pending
+          ? <>Are you sure you want to approve <strong>{shelter.name}</strong>? Sign-in credentials will be emailed to the shelter and it will start receiving smart alerts.</>
+          : <>Are you sure you want to approve <strong>{shelter.name}</strong> again? It will be able to sign in.</>
+        : pending
+          ? <>Are you sure you want to reject the application from <strong>{shelter.name}</strong>?</>
+          : <>Are you sure you want to revoke access for <strong>{shelter.name}</strong>? It will no longer be able to sign in or receive alerts.</>;
+    ask(message, () => decide(status), {
+      title: status === 'approved' ? 'Approve this shelter?' : pending ? 'Reject this application?' : 'Revoke access?',
+      confirmLabel: 'Yes',
+      tone: status === 'approved' ? 'primary' : 'danger',
+    });
   };
+
+  const askDelete = () =>
+    ask(
+      <>
+        Are you sure you want to delete <strong>{shelter.name}</strong>? Its animals, cases, conversations,
+        notifications and proof documents are deleted too. This cannot be undone.
+      </>,
+      () => {
+        deleteShelterAccount(shelter.id);
+        onAfterAction?.();
+      },
+      { title: 'Are you sure you want to delete this?', confirmLabel: 'Yes, delete' },
+    );
 
   return (
     <div className="card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -45,7 +75,16 @@ export function ShelterDetailPanel({
 
       <dl className="kv">
         <dt>Permit number</dt>
-        <dd>{shelter.permitNumber}</dd>
+        <dd>
+          <span style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 12.5, whiteSpace: 'nowrap' }}>
+            {showPermit ? shelter.permitNumber || '—' : maskPrivate(shelter.permitNumber)}
+          </span>{' '}
+          {shelter.permitNumber ? (
+            <button className="password-toggle" style={{ position: 'static', transform: 'none' }} onClick={() => setShowPermit((v) => !v)}>
+              {showPermit ? 'Hide' : 'Show'}
+            </button>
+          ) : null}
+        </dd>
         <dt>Address</dt>
         <dd>{shelter.address}</dd>
         <dt>Barangay</dt>
@@ -66,47 +105,128 @@ export function ShelterDetailPanel({
         <dd>{new Date(shelter.registeredAt).toLocaleDateString()}</dd>
       </dl>
 
+      <ProofDocuments shelter={shelter} />
+
       <Banner tone="info" title="Verification checklist">
-        Confirm the permit with the city veterinary office; confirm the address is inside San Jose
-        Del Monte; confirm the contact number reaches the shelter.
+        Check the proof documents and confirm the permit with the city veterinary office; confirm the
+        address is inside San Jose Del Monte; confirm the contact number reaches the shelter.
       </Banner>
 
       {shelter.approvalStatus === 'pending' ? (
         <div className="row">
-          <Button variant="danger" onClick={() => decide('rejected')}>
+          <Button variant="danger" onClick={() => askDecision('rejected')}>
             Reject
           </Button>
-          <Button onClick={() => decide('approved')}>Approve access</Button>
+          <Button onClick={() => askDecision('approved')}>Approve access</Button>
         </div>
       ) : (
         <Button
           variant={shelter.approvalStatus === 'approved' ? 'danger' : 'primary'}
-          onClick={() => decide(shelter.approvalStatus === 'approved' ? 'rejected' : 'approved')}
+          onClick={() => askDecision(shelter.approvalStatus === 'approved' ? 'rejected' : 'approved')}
         >
           {shelter.approvalStatus === 'approved' ? 'Revoke access' : 'Approve instead'}
         </Button>
       )}
 
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-        {confirmingDelete ? (
-          <Banner tone="danger" title="Permanently delete this shelter account?">
-            Its animals, cases, conversations, and notifications are deleted too. This cannot be
-            undone.
-            <div className="row" style={{ marginTop: 10 }}>
-              <Button variant="secondary" small onClick={() => setConfirmingDelete(false)}>
-                Cancel
-              </Button>
-              <Button variant="danger" small onClick={confirmDelete}>
-                Yes, delete permanently
+        <Button variant="danger" onClick={askDelete}>
+          Delete shelter account
+        </Button>
+      </div>
+      {dialog}
+    </div>
+  );
+}
+
+const formatSize = (bytes: number) =>
+  bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+/** The proof of credentials the shelter submitted, each openable in a viewer. */
+function ProofDocuments({ shelter }: { shelter: Shelter }) {
+  const { listShelterProofs, openProofDocument, sync } = useApp();
+  const [docs, setDocs] = useState<ProofDocument[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<{ doc: ProofDocument; url: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDocs(null);
+    setError(null);
+    listShelterProofs(shelter.id)
+      .then((d) => !cancelled && setDocs(d))
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load the documents.'));
+    return () => {
+      cancelled = true;
+    };
+  }, [shelter.id, listShelterProofs]);
+
+  // Object URLs hold the file in memory until revoked.
+  useEffect(() => () => {
+    if (viewing) URL.revokeObjectURL(viewing.url);
+  }, [viewing]);
+
+  const open = async (doc: ProofDocument) => {
+    try {
+      const blob = await openProofDocument(doc.id);
+      setViewing({ doc, url: URL.createObjectURL(blob) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open the document.');
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontWeight: 700, fontSize: 13 }}>Proof of credentials</div>
+      {error ? <div style={{ color: 'var(--danger)', fontSize: 12.5 }}>{error}</div> : null}
+      {docs === null && !error ? (
+        <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+          {sync.status === 'ready' ? 'Loading documents…' : 'Documents load once the console is connected.'}
+        </div>
+      ) : null}
+      {docs && !docs.length ? (
+        <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+          No documents on file. Applications made before proof uploads were required have none.
+        </div>
+      ) : null}
+      {docs?.length ? (
+        <div className="proof-list">
+          {docs.map((d) => (
+            <div key={d.id} className="proof-item">
+              <span className="proof-icon" aria-hidden>
+                {d.contentType === 'application/pdf' ? 'PDF' : 'IMG'}
+              </span>
+              <div className="cell-clip" style={{ flex: 1 }}>
+                <div className="cell-title" style={{ fontSize: 13 }}>
+                  {d.filename}
+                </div>
+                <div className="cell-sub">{formatSize(d.size)}</div>
+              </div>
+              <Button variant="secondary" small onClick={() => void open(d)}>
+                View
               </Button>
             </div>
-          </Banner>
-        ) : (
-          <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
-            Delete shelter account
-          </Button>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : null}
+
+      {viewing ? (
+        <Modal
+          title={viewing.doc.filename}
+          sub={`Proof submitted by ${shelter.name}`}
+          onClose={() => setViewing(null)}
+          actions={
+            <a className="btn btn-secondary" href={viewing.url} download={viewing.doc.filename}>
+              Download
+            </a>
+          }
+        >
+          {viewing.doc.contentType === 'application/pdf' ? (
+            <iframe className="proof-frame" src={viewing.url} title={viewing.doc.filename} />
+          ) : (
+            <img className="proof-preview" src={viewing.url} alt={viewing.doc.filename} />
+          )}
+        </Modal>
+      ) : null}
     </div>
   );
 }

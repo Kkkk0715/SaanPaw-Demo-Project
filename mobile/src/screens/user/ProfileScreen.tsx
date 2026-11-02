@@ -194,9 +194,9 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
               <Button label="Change photo" variant="secondary" icon="camera-outline" onPress={pickPhoto} />
             </View>
           </Row>
-          <Field label="First name" value={firstName} onChangeText={setFirstName} icon="person-outline" />
-          <Field label="Middle name (optional)" value={middleName} onChangeText={setMiddleName} icon="person-outline" />
-          <Field label="Last name" value={lastName} onChangeText={setLastName} icon="person-outline" />
+          <Field label="First name" value={firstName} onChangeText={setFirstName} icon="person-outline" only="letters" />
+          <Field label="Middle name (optional)" value={middleName} onChangeText={setMiddleName} icon="person-outline" only="letters" />
+          <Field label="Last name" value={lastName} onChangeText={setLastName} icon="person-outline" only="letters" />
           <PhoneField value={phone} onChangeText={setPhone} />
           <Select label="Barangay" value={barangay} options={SJDM_BARANGAY_NAMES} onChange={setBarangay} />
           {error ? <Caption style={{ color: theme.colors.danger }}>{error}</Caption> : null}

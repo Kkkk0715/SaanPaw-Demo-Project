@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiRequest } from './lib/api';
 
 const SESSION_KEY = 'saanpaw.console.session';
@@ -29,12 +29,29 @@ type Session = { token: string | null } | null;
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+/**
+ * The session lives in localStorage, which every tab of the console shares - so a second tab opens
+ * already signed in, and signing out in one tab signs out the others. (sessionStorage, used before,
+ * is per-tab: every new tab started at the login screen.)
+ */
+const store = {
+  get: (key: string) => localStorage.getItem(key),
+  set: (key: string, value: string) => localStorage.setItem(key, value),
+  remove: (key: string) => localStorage.removeItem(key),
+};
+
 const readStoredSession = (): Session => {
   try {
-    if (sessionStorage.getItem(SESSION_KEY) !== 'developer') return null;
+    // Carry over a session signed in before this change, which was kept in this tab only.
+    if (!store.get(SESSION_KEY) && sessionStorage.getItem(SESSION_KEY) === 'developer') {
+      store.set(SESSION_KEY, 'developer');
+      const legacyToken = sessionStorage.getItem(TOKEN_KEY);
+      if (legacyToken) store.set(TOKEN_KEY, legacyToken);
+    }
+    if (store.get(SESSION_KEY) !== 'developer') return null;
     if (DEMO_MODE) return { token: null };
     // A session without a token (from before sign-in used the API) cannot call the server.
-    const token = sessionStorage.getItem(TOKEN_KEY);
+    const token = store.get(TOKEN_KEY);
     return token ? { token } : null;
   } catch {
     // Private browsing and blocked site data both throw.
@@ -44,6 +61,15 @@ const readStoredSession = (): Session => {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session>(readStoredSession);
+
+  // Another tab signed in or out: follow it, so every open tab shows the same state.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === SESSION_KEY || e.key === TOKEN_KEY) setSession(readStoredSession());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const value = useMemo<AuthState>(
     () => ({
@@ -64,8 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-          sessionStorage.setItem(SESSION_KEY, 'developer');
-          if (token) sessionStorage.setItem(TOKEN_KEY, token);
+          store.set(SESSION_KEY, 'developer');
+          if (token) store.set(TOKEN_KEY, token);
         } catch {
           // session still valid in memory
         }
@@ -73,6 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signOut: () => {
         try {
+          store.remove(SESSION_KEY);
+          store.remove(TOKEN_KEY);
           sessionStorage.removeItem(SESSION_KEY);
           sessionStorage.removeItem(TOKEN_KEY);
         } catch {

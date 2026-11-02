@@ -1,5 +1,31 @@
-import { useApp } from '@saanpaw/shared';
-import { Badge, Banner, Button, Card, CardHead, Toggle } from '@/components/ui';
+import { useApp, type SystemConfig } from '@saanpaw/shared';
+import { Badge, Banner, Button, Card, CardHead, Toggle, useConfirm } from '@/components/ui';
+
+type ConfigKey = Exclude<keyof SystemConfig, 'updatedAt'>;
+
+/** What each switch is called in the confirmation, and what turning it on or off does. */
+const CONFIG_COPY: Record<ConfigKey, { name: string; on: string; off: string }> = {
+  aiModeration: {
+    name: 'AI report moderation',
+    on: 'New reports and photos will be screened and suspicious ones flagged for review.',
+    off: 'New reports will not be screened, and photos will no longer be checked for animals or duplicates.',
+  },
+  smartAlerts: {
+    name: 'Smart alert dispatch',
+    on: 'Users and shelters will be notified about reports inside their radius again.',
+    off: 'Nobody will be alerted about new reports nearby until this is turned back on.',
+  },
+  geoFence: {
+    name: 'San Jose Del Monte geo-fence',
+    on: 'Reports pinned outside the city boundary will be rejected again.',
+    off: 'Reports pinned outside San Jose Del Monte will be accepted.',
+  },
+  maintenanceMode: {
+    name: 'Maintenance mode',
+    on: 'Users and shelter admins will be unable to sign in to the mobile app until it is turned off.',
+    off: 'Users and shelter admins will be able to sign in again.',
+  },
+};
 
 function csvEscape(value: unknown): string {
   const s = value === null || value === undefined ? '' : String(value);
@@ -16,6 +42,24 @@ export function SystemManagementPage() {
     useApp();
 
   const maintenance = systemConfig?.maintenanceMode ?? false;
+  const { ask, dialog } = useConfirm();
+
+  /** Every switch asks first: these change behaviour for everyone using SaanPaw. */
+  const confirmToggle = (key: ConfigKey, next: boolean) => {
+    const copy = CONFIG_COPY[key];
+    ask(
+      <>
+        Are you sure you want to turn <strong>{next ? 'on' : 'off'}</strong> {copy.name.toLowerCase()}?{' '}
+        {next ? copy.on : copy.off}
+      </>,
+      () => updateSystemConfig({ [key]: next }),
+      {
+        title: `Turn ${next ? 'on' : 'off'} ${copy.name}?`,
+        confirmLabel: 'Yes',
+        tone: (key === 'maintenanceMode' ? next : !next) ? 'danger' : 'primary',
+      },
+    );
+  };
 
   const collections = [
     { name: 'reports', count: reports.length },
@@ -81,25 +125,25 @@ export function SystemManagementPage() {
             <div className="card-pad">
               <Toggle
                 on={systemConfig?.aiModeration ?? true}
-                onChange={(v) => updateSystemConfig({ aiModeration: v })}
+                onChange={(v) => confirmToggle('aiModeration', v)}
                 label="AI report moderation"
                 hint="Auto-flag false and inappropriate reports for review."
               />
               <Toggle
                 on={systemConfig?.smartAlerts ?? true}
-                onChange={(v) => updateSystemConfig({ smartAlerts: v })}
+                onChange={(v) => confirmToggle('smartAlerts', v)}
                 label="Smart alert dispatch"
                 hint="Notify users and shelters when a report lands inside their radius."
               />
               <Toggle
                 on={systemConfig?.geoFence ?? true}
-                onChange={(v) => updateSystemConfig({ geoFence: v })}
+                onChange={(v) => confirmToggle('geoFence', v)}
                 label="San Jose Del Monte geo-fence"
                 hint="Reject any report pinned outside the city boundary (Limitation 1)."
               />
               <Toggle
                 on={maintenance}
-                onChange={(v) => updateSystemConfig({ maintenanceMode: v })}
+                onChange={(v) => confirmToggle('maintenanceMode', v)}
                 label="Maintenance mode"
                 hint="Block user and shelter sign-in while updates are deployed."
               />
@@ -210,6 +254,7 @@ export function SystemManagementPage() {
           </Card>
         </div>
       </div>
+      {dialog}
     </>
   );
 }

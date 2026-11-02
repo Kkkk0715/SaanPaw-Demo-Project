@@ -88,7 +88,7 @@ export function LoginForm({
             hitSlop={8}
             style={{ alignSelf: 'center' }}
           >
-            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.muted }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>
               Forgot password?
             </Text>
           </Pressable>

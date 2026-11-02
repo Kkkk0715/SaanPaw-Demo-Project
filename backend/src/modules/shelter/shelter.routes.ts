@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { receiveProofDocument } from '../../middleware/upload';
 import { authenticate, authorize } from '../../middleware/auth';
 import { geoFence } from '../../middleware/geoFence';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -8,6 +10,19 @@ const router = Router();
 
 // Register is public (account is created in `pending` state, Developer approves).
 router.post('/register', geoFence, asyncHandler(shelterController.register));
+
+// Proof of credentials, uploaded one file at a time before the application is submitted.
+// Public (the shelter has no account yet), so it is rate-limited per address.
+router.post(
+  '/register/proof',
+  rateLimit({
+    windowMs: 15 * 60_000,
+    max: 20,
+    message: { error: 'Too many uploads. Try again in a few minutes.', details: null },
+  }),
+  receiveProofDocument,
+  asyncHandler(shelterController.uploadProof),
+);
 
 router.use(authenticate, authorize('shelter_admin'));
 
@@ -19,6 +34,7 @@ router.get('/animals', asyncHandler(shelterController.listShelterAnimals));
 router.post('/animals', asyncHandler(shelterController.addShelterAnimal));
 router.post('/animals/recovered', asyncHandler(shelterController.postRecovered));
 router.patch('/animals/:id', asyncHandler(shelterController.updateAnimal));
+router.delete('/animals/:id', asyncHandler(shelterController.deleteAnimal));
 
 // Animal Report Management + Animal Status Management
 router.get('/reports', asyncHandler(shelterController.listAreaReports));

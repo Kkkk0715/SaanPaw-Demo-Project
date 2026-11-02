@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
-import { Banner, Button } from '@/components/ui';
+import { useNavigate } from 'react-router-dom';
+import { Banner, Button, PasswordInput } from '@/components/ui';
 import { DEMO_DEVELOPER, DEMO_MODE, useAuth } from '@/auth';
 
 /** Developer Module - Login. Accounts are provisioned, so there is no sign-up. */
 export function LoginPage() {
   const { signIn } = useAuth();
+  const navigate = useNavigate();
   // Demo accounts only exist in the static demo build, so a real deployment starts blank.
   const [email, setEmail] = useState(DEMO_MODE ? DEMO_DEVELOPER.email : '');
   const [password, setPassword] = useState(DEMO_MODE ? DEMO_DEVELOPER.password : '');
@@ -23,6 +25,9 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
+        <button type="button" className="login-back" onClick={() => navigate('/')}>
+          &larr; Back to SaanPaw
+        </button>
         <div className="login-mark" aria-hidden>
           🐾
         </div>
@@ -53,13 +58,7 @@ export function LoginPage() {
 
         <div className="field">
           <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            autoComplete="current-password"
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <PasswordInput id="password" value={password} onChange={setPassword} />
         </div>
 
         <Button type="submit">Sign in</Button>

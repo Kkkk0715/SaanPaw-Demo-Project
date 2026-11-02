@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
-import { RADIUS_OPTIONS, SJDM_BARANGAYS, SJDM_BARANGAY_NAMES } from '@saanpaw/shared';
+import { RADIUS_OPTIONS, SJDM_BARANGAYS, SJDM_BARANGAY_NAMES, passwordMeetsRules } from '@saanpaw/shared';
 import {
   AuthHeader,
   Banner,
@@ -10,6 +10,7 @@ import {
   COLUMN,
   Choice,
   Field,
+  PasswordRules,
   PhoneField,
   Select,
   useBottomInset,
@@ -18,7 +19,8 @@ import { MapCanvas } from '@/components/map/MapCanvas';
 import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/services/api';
 
-const GMAIL_PATTERN = /^[^\s@]+@gmail\.com$/i;
+/** Any provider - Gmail, Yahoo, Outlook, a school or work address. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
  * User Module - Registration.
@@ -49,9 +51,9 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
     const next: Record<string, string> = {};
     if (!firstName.trim()) next.firstName = 'Enter your first name.';
     if (!lastName.trim()) next.lastName = 'Enter your last name.';
-    if (!GMAIL_PATTERN.test(email)) next.email = 'Enter a Gmail address (must end in @gmail.com).';
+    if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Enter a valid email address.';
     if (phone.length !== 13) next.phone = 'Enter a complete mobile number.';
-    if (password.length < 8) next.password = 'Use at least 8 characters.';
+    if (!passwordMeetsRules(password)) next.password = 'Your password does not meet all the requirements below yet.';
     if (!barangay) next.barangay = 'Select your barangay.';
     setErrors(next);
     if (Object.keys(next).length) return;
@@ -64,7 +66,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           firstName,
           middleName: middleName.trim() || undefined,
           lastName,
-          email,
+          email: email.trim(),
           phone,
           password,
           barangay,
@@ -101,6 +103,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           onChangeText={setFirstName}
           placeholder="Juan"
           icon="person-outline"
+          only="letters"
           error={errors.firstName}
         />
         <Field
@@ -109,6 +112,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           onChangeText={setMiddleName}
           placeholder="Santos"
           icon="person-outline"
+          only="letters"
         />
         <Field
           label="Last name"
@@ -116,16 +120,17 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           onChangeText={setLastName}
           placeholder="Dela Cruz"
           icon="person-outline"
+          only="letters"
           error={errors.lastName}
         />
         <Field
           label="Email address"
           value={email}
           onChangeText={setEmail}
-          placeholder="you@gmail.com"
+          placeholder="you@example.com"
           keyboardType="email-address"
           icon="mail-outline"
-          hint="Only Gmail addresses are accepted."
+          hint="Any email provider works - Gmail, Yahoo, Outlook and others."
           error={errors.email}
         />
         <PhoneField
@@ -138,11 +143,12 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           label="Password"
           value={password}
           onChangeText={setPassword}
-          placeholder="At least 8 characters"
+          placeholder="Create a password"
           secureTextEntry
           icon="lock-closed-outline"
           error={errors.password}
         />
+        <PasswordRules password={password} />
 
         <Select
           label="Barangay"

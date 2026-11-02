@@ -3,6 +3,7 @@ import { theme } from '@/constants/theme';
 import { ShelterDashboardScreen } from '@/screens/shelter/DashboardScreen';
 import { ShelterAnimalsScreen } from '@/screens/shelter/ShelterAnimalsScreen';
 import { RecoveredAnimalsScreen } from '@/screens/shelter/RecoveredAnimalsScreen';
+import { RescuedAnimalsScreen } from '@/screens/shelter/RescuedAnimalsScreen';
 import { AnimalReportsScreen } from '@/screens/shelter/AnimalReportsScreen';
 import { AnimalStatusScreen } from '@/screens/shelter/AnimalStatusScreen';
 import { MessagesScreen } from '@/screens/shelter/MessagesScreen';
@@ -22,6 +23,7 @@ export function ShelterNavigator() {
       <Stack.Screen name="AnimalReports" component={AnimalReportsScreen} options={{ title: 'Animal Reports' }} />
       <Stack.Screen name="ShelterAnimals" component={ShelterAnimalsScreen} options={{ title: 'Shelter Animals' }} />
       <Stack.Screen name="RecoveredAnimals" component={RecoveredAnimalsScreen} options={{ title: 'Recovered Animals' }} />
+      <Stack.Screen name="RescuedAnimals" component={RescuedAnimalsScreen} options={{ title: 'Rescued Pets & Strays' }} />
       <Stack.Screen name="AnimalStatus" component={AnimalStatusScreen} options={{ title: 'Animal Status' }} />
       <Stack.Screen name="Messages" component={MessagesScreen} options={{ title: 'Message Box' }} />
       <Stack.Screen name="ShelterNotifications" component={ShelterNotificationsScreen} options={{ title: 'Notifications' }} />

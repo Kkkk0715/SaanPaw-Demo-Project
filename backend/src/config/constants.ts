@@ -24,3 +24,30 @@ export const NOTIFICATION_TYPES = [
   'status_update',
   'moderation',
 ] as const;
+
+type CaseStatusValue = (typeof ANIMAL_CASE_STATUSES)[number];
+
+/**
+ * A case only moves forward: it opens as "under recovery" and ends in exactly one outcome.
+ * Once reunited, adopted or inconclusive it is closed, so a status can never loop back.
+ */
+export const CASE_STATUS_TRANSITIONS: Record<CaseStatusValue, readonly CaseStatusValue[]> = {
+  under_rescue: ['reunited', 'adopted', 'inconclusive'],
+  reunited: [],
+  adopted: [],
+  inconclusive: [],
+};
+
+export const canChangeCaseStatus = (from: CaseStatusValue, to: CaseStatusValue) =>
+  CASE_STATUS_TRANSITIONS[from].includes(to);
+
+/** Wording shown to people. The stored value stays `under_rescue` so existing data keeps working. */
+export const CASE_STATUS_LABELS: Record<CaseStatusValue, string> = {
+  under_rescue: 'Under recovery',
+  reunited: 'Reunited',
+  adopted: 'Adopted',
+  inconclusive: 'Inconclusive',
+};
+
+/** Outcomes after which the report behind a case stops being listed. */
+export const CLOSING_CASE_STATUSES: readonly CaseStatusValue[] = ['adopted', 'inconclusive'];

@@ -67,7 +67,17 @@ export function serializeUser(doc: any) {
   };
 }
 
-export function serializeShelter(doc: any) {
+/**
+ * Permit number and proof documents are private: only the Developer (who verifies them) and the
+ * shelter itself get them. Everyone else - the public shelter list in the User module - doesn't.
+ */
+export function serializeShelter(doc: any, options: { includePrivate?: boolean } = {}) {
+  const privateFields = options.includePrivate
+    ? {
+        permitNumber: doc.permitNumber,
+        proofDocumentIds: (doc.proofDocumentIds ?? []).map((id: unknown) => String(id)),
+      }
+    : {};
   return {
     id: String(doc._id),
     name: doc.name,
@@ -83,7 +93,7 @@ export function serializeShelter(doc: any) {
     operatingRadiusMeters: doc.operatingRadiusMeters,
     approvalStatus: doc.approvalStatus,
     registeredAt: doc.registeredAt?.toISOString?.(),
-    permitNumber: doc.permitNumber,
+    ...privateFields,
     capacity: doc.capacity,
     currentOccupancy: doc.currentOccupancy,
     logoColor: doc.logoColor,
@@ -110,6 +120,8 @@ export function serializeLostReport(doc: any) {
     reporterName: doc.reporterName,
     reporterPhone: doc.reporterPhone,
     barangay: doc.barangay,
+    address: doc.address,
+    landmark: doc.landmark,
     location: { latitude: lat, longitude: lng },
     caseId: doc.caseId ? String(doc.caseId) : undefined,
     moderationFlagId: doc.moderationFlagId ? String(doc.moderationFlagId) : undefined,
@@ -135,6 +147,8 @@ export function serializeFoundReport(doc: any) {
     reporterName: doc.reporterName,
     reporterPhone: doc.reporterPhone,
     barangay: doc.barangay,
+    address: doc.address,
+    landmark: doc.landmark,
     location: { latitude: lat, longitude: lng },
     caseId: doc.caseId ? String(doc.caseId) : undefined,
     moderationFlagId: doc.moderationFlagId ? String(doc.moderationFlagId) : undefined,

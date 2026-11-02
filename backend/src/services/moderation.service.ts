@@ -6,7 +6,11 @@ import { FoundAnimalReport } from '../models/FoundAnimalReport';
 import { ShelterAnimal } from '../models/ShelterAnimal';
 import { assessAnimalPhoto } from './gemini.service';
 import { getSystemConfig } from './systemConfig.service';
+import { deleteUserCascade } from './cascadeDelete.service';
+import { accountDeletedEmail, sendEmail } from './email.service';
+import { notify } from './pushNotification.service';
 import { logger } from '../utils/logger';
+import { combineName } from '../utils/geoHelpers';
 
 /**
  * Report Monitoring - automatic flagging.
@@ -88,6 +92,8 @@ export function assessReport(input: {
   text: string;
   imageCount: number;
   duplicate?: boolean;
+  /** How many of the report's photos were already used on another report or shelter animal. */
+  duplicatePhotos?: number;
   photoSignal?: { looksLikeAnimal: boolean; inappropriate: boolean; reasoning: string };
 }): Assessment {
   const text = normalize(input.text);
@@ -126,6 +132,17 @@ export function assessReport(input: {
     });
   }
 
+  if (input.duplicatePhotos) {
+    signals.push({
+      reason: 'duplicate',
+      weight: 0.6,
+      detail:
+        input.duplicatePhotos === 1
+          ? 'A photo on this report was already used on another report.'
+          : `${input.duplicatePhotos} photos on this report were already used on other reports.`,
+    });
+  }
+
   // Weak signals: not enough alone, but they tip a borderline report over the threshold.
   if (input.imageCount === 0) {
     signals.push({ reason: 'ai_false_positive', weight: 0.25, detail: 'The report has no photo.' });
@@ -160,6 +177,29 @@ export function assessReport(input: {
     detail: signals.length ? signals.map((s) => s.detail).join(' ') : '',
     signals: signals.map((s) => s.detail),
   };
+}
+
+export interface ScreenOutcome {
+  flagged: boolean;
+  /** What the screen found, for the person who filed it. */
+  detail?: string;
+}
+const NOT_FLAGGED: ScreenOutcome = { flagged: false };
+
+const REASON_WORDS: Record<string, string> = {
+  ai_false_positive: 'Report looked false or like test content',
+  inappropriate: 'Inappropriate language or image',
+  duplicate: 'Duplicate report or reused photo',
+  manual: 'Spam or promotional content',
+};
+
+/** One line per upheld flag for the account-deletion email: when, what, and the admin's note. */
+function describeFlag(f: { createdAt?: Date; reason: string; detail?: string | null; resolutionNote?: string | null; reportType: string }) {
+  const when = f.createdAt ? new Date(f.createdAt).toLocaleDateString('en-PH', { dateStyle: 'medium' }) : 'Unknown date';
+  const parts = [`${when} - ${f.reportType} report: ${REASON_WORDS[f.reason] ?? f.reason}`];
+  if (f.detail) parts.push(f.detail);
+  if (f.resolutionNote) parts.push(`Admin note: ${f.resolutionNote}`);
+  return parts.join('. ');
 }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -215,9 +255,10 @@ export const moderationService = {
     color?: string;
     barangay: string;
     description?: string;
-  }): Promise<void> {
+    duplicatePhotos?: number;
+  }): Promise<ScreenOutcome> {
     try {
-      if (!(await getSystemConfig()).aiModeration) return;
+      if (!(await getSystemConfig()).aiModeration) return NOT_FLAGGED;
       const [duplicate, photoSignal] = await Promise.all([
         this.isDuplicate(params),
         params.imageUrl ? assessAnimalPhoto(params.imageUrl) : Promise.resolve(null),
@@ -226,9 +267,10 @@ export const moderationService = {
         text: params.text,
         imageCount: params.imageCount,
         duplicate,
+        duplicatePhotos: params.duplicatePhotos,
         photoSignal: photoSignal ?? undefined,
       });
-      if (result.confidence < REVIEW_THRESHOLD) return;
+      if (result.confidence < REVIEW_THRESHOLD) return NOT_FLAGGED;
 
       const flag = await ModerationFlag.create({
         reportType: params.reportType,
@@ -246,8 +288,18 @@ export const moderationService = {
       logger.warn(
         `moderation: flagged ${params.reportType} ${params.reportId} as ${result.reason} (confidence ${result.confidence.toFixed(2)})`,
       );
+      await notify({
+        audienceType: 'user',
+        audienceId: params.reporterId,
+        type: 'moderation',
+        refId: params.reportId,
+        title: 'Your report was flagged for review',
+        body: `Our automatic check flagged your ${params.reportType} report: ${result.detail} An admin will review it. It stays visible until then.`,
+      });
+      return { flagged: true, detail: result.detail };
     } catch (err) {
       logger.error('moderation: screening failed, report left unflagged', err);
+      return NOT_FLAGGED;
     }
   },
 
@@ -262,17 +314,19 @@ export const moderationService = {
     text: string;
     imageCount: number;
     imageUrl?: string;
-  }): Promise<void> {
+    duplicatePhotos?: number;
+  }): Promise<ScreenOutcome> {
     try {
-      if (!(await getSystemConfig()).aiModeration) return;
+      if (!(await getSystemConfig()).aiModeration) return NOT_FLAGGED;
       const photoSignal = params.imageUrl ? await assessAnimalPhoto(params.imageUrl) : null;
       const result = assessReport({
         text: params.text,
         imageCount: params.imageCount,
         duplicate: false,
+        duplicatePhotos: params.duplicatePhotos,
         photoSignal: photoSignal ?? undefined,
       });
-      if (result.confidence < REVIEW_THRESHOLD) return;
+      if (result.confidence < REVIEW_THRESHOLD) return NOT_FLAGGED;
 
       const flag = await ModerationFlag.create({
         reportType: 'shelter_animal',
@@ -286,25 +340,58 @@ export const moderationService = {
       logger.warn(
         `moderation: flagged shelter_animal ${params.animalId} as ${result.reason} (confidence ${result.confidence.toFixed(2)})`,
       );
+      await notify({
+        audienceType: 'shelter',
+        audienceId: params.shelterId,
+        type: 'moderation',
+        refId: params.animalId,
+        title: 'Your animal posting was flagged for review',
+        body: `Our automatic check flagged one of your animal postings: ${result.detail} An admin will review it.`,
+      });
+      return { flagged: true, detail: result.detail };
     } catch (err) {
       logger.error('moderation: shelter animal screening failed, posting left unflagged', err);
+      return NOT_FLAGGED;
     }
   },
 
-  /** Called by the Developer controller after actioning a flag. */
-  async escalateReporter(reporterId: string): Promise<{ banned: boolean }> {
-    const actioned = await ModerationFlag.countDocuments({
-      reporterId,
-      status: 'actioned',
-    });
-    if (actioned >= env.moderation.falseReportBanThreshold) {
-      await User.findByIdAndUpdate(reporterId, { isBanned: true });
-      await Promise.all([
-        LostPetReport.updateMany({ reporterId }, { isHiddenByModeration: true }),
-        FoundAnimalReport.updateMany({ reporterId }, { isHiddenByModeration: true }),
-      ]);
-      return { banned: true };
+  /**
+   * Called by the Developer controller after upholding a flag. Only flags a Developer upheld
+   * ("actioned") count - an automatic flag alone never costs anyone their account. At the
+   * threshold (3 by default) the account is deleted, after emailing the person why.
+   * Otherwise the person is told how many upheld flags they have and what happens at the limit.
+   */
+  async escalateReporter(reporterId: string): Promise<{ banned: boolean; deleted: boolean; upheldFlags: number }> {
+    const upheld = await ModerationFlag.find({ reporterId, status: 'actioned' }).sort({ createdAt: 1 }).lean();
+    const limit = env.moderation.falseReportBanThreshold;
+
+    if (upheld.length < limit) {
+      await notify({
+        audienceType: 'user',
+        audienceId: reporterId,
+        type: 'moderation',
+        title: 'Your account was flagged',
+        body:
+          `An admin upheld a flag on one of your reports and removed it. This is flag ${upheld.length} of ${limit}. ` +
+          `At ${limit} upheld flags your account will be deleted.`,
+      });
+      return { banned: false, deleted: false, upheldFlags: upheld.length };
     }
-    return { banned: false };
+
+    const user = await User.findById(reporterId).lean();
+    if (!user) return { banned: false, deleted: false, upheldFlags: upheld.length };
+
+    // Email first: once the cascade runs, the address and the flag history are gone.
+    await sendEmail(
+      accountDeletedEmail({
+        name: combineName(user),
+        email: user.email,
+        reasons: upheld.map((f) => describeFlag(f)),
+        limit,
+      }),
+    );
+    await deleteUserCascade(reporterId);
+    logger.warn(`moderation: deleted user ${reporterId} after ${upheld.length} upheld flags`);
+    return { banned: true, deleted: true, upheldFlags: upheld.length };
   },
 };

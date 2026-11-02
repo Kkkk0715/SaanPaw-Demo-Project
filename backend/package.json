@@ -15,7 +15,9 @@
     "create-admin": "ts-node-dev --transpile-only src/scripts/create-admin.ts",
     "create-admin:prod": "node dist/scripts/create-admin.js",
     "fix-barangay-centers": "ts-node-dev --transpile-only src/scripts/fix-barangay-centers.ts",
-    "fix-barangay-centers:prod": "node dist/scripts/fix-barangay-centers.js"
+    "fix-barangay-centers:prod": "node dist/scripts/fix-barangay-centers.js",
+    "backfill-addresses": "ts-node-dev --transpile-only src/scripts/backfill-report-addresses.ts",
+    "backfill-addresses:prod": "node dist/scripts/backfill-report-addresses.js"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
@@ -32,6 +34,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^10.0.13",
+    "sharp": "^0.34.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {

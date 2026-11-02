@@ -12,49 +12,77 @@ import {
   Choice,
   EmptyState,
   Field,
+  Pager,
   Row,
   Screen,
   SectionHeader,
   Sheet,
+  usePagination,
 } from '@/components/ui';
 import { CASE_ICONS, CaseStatusPill, ShelterAnimalCard, describeAnimal, timeAgo } from '@/components/domain';
-import { caseStatusMeta, useApp } from '@saanpaw/shared';
-import type { AnimalCase, AnimalCaseStatus } from '@saanpaw/shared';
+import { RecoveryTracker } from '@/components/domain/RecoveryTracker';
+import { caseStatusMeta, isCaseClosed, nextCaseStatuses, reportPlace, useApp } from '@saanpaw/shared';
+import type { AnimalCase, AnimalCaseStatus, AnimalReport } from '@saanpaw/shared';
+import { confirmAsync } from '@/services/confirm';
 
-const STATUS_OPTIONS: { label: string; value: AnimalCaseStatus }[] = [
-  { label: 'Under rescue', value: 'under_rescue' },
-  { label: 'Reunited', value: 'reunited' },
-  { label: 'Adopted', value: 'adopted' },
-  { label: 'Inconclusive', value: 'inconclusive' },
-];
+const statusOptions = (from: AnimalCaseStatus) =>
+  nextCaseStatuses(from).map((value) => ({ label: caseStatusMeta[value].label, value }));
 
 /**
- * Shelter Admin Module - Case status: under rescue, reunited, adopted,
- * inconclusive. Covers both public reports and the shelter own animals.
+ * Shelter Admin Module - Case status: under recovery, then one outcome (reunited, adopted or
+ * inconclusive). A case only moves forward: once it has an outcome it is closed and can't be
+ * changed back, so a status can never loop. Covers both public reports and the shelter's own animals.
  */
 export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) {
-  const { cases, currentShelter, reportById, setCaseStatus, shelterAnimals, setShelterAnimalStatus } =
-    useApp();
+  const { cases, currentShelter, reportById, setCaseStatus, shelterAnimals, setShelterAnimalStatus } = useApp();
 
   const [editing, setEditing] = useState<AnimalCase | null>(null);
-  const [status, setStatus] = useState<AnimalCaseStatus>('under_rescue');
+  const [status, setStatus] = useState<AnimalCaseStatus>('reunited');
   const [note, setNote] = useState('');
+  const [tracking, setTracking] = useState<AnimalReport | null>(null);
 
   const myCases = cases
     .filter((c) => c.shelterId === currentShelter.id)
     .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
   const myAnimals = shelterAnimals.filter((a) => a.shelterId === currentShelter.id);
+  const animalsInRecovery = myAnimals.filter((a) => !isCaseClosed(a.caseStatus));
+
+  const casePage = usePagination(myCases);
+  const animalPage = usePagination(myAnimals);
 
   const open = (c: AnimalCase) => {
+    const next = nextCaseStatuses(c.status);
+    if (!next.length) return;
     setEditing(c);
-    setStatus(c.status);
+    setStatus(next[0]);
     setNote('');
   };
 
-  const save = () => {
+  const save = async () => {
     if (!editing) return;
-    setCaseStatus(editing.id, status, note.trim() || `Status set to ${status.replace('_', ' ')}.`);
+    const label = caseStatusMeta[status].label;
+    const ok = await confirmAsync({
+      title: `Set this case to "${label}"?`,
+      message: `This closes the case and notifies the reporter. A closed case can't be changed back afterwards.${
+        status === 'adopted' || status === 'inconclusive' ? ' The report will also stop showing in report lists.' : ''
+      }`,
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    });
+    if (!ok) return;
+    setCaseStatus(editing.id, status, note.trim() || `Status set to ${label.toLowerCase()}.`);
     setEditing(null);
+  };
+
+  const setAnimalStatus = async (animalId: string, name: string, next: AnimalCaseStatus) => {
+    const label = caseStatusMeta[next].label;
+    const ok = await confirmAsync({
+      title: `Mark ${name} as "${label}"?`,
+      message: "This is final - the status can't be changed back afterwards.",
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    });
+    if (ok) setShelterAnimalStatus(animalId, next);
   };
 
   return (
@@ -63,26 +91,25 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
         tone="info"
         icon="pulse"
         title="Case status management"
-        message="Updating a case notifies the person who filed the report, and a 'Reunited' status closes their report automatically."
+        message="A case moves from Under recovery to one outcome. Updating it notifies the person who filed the report; 'Reunited' closes their report, and 'Adopted' or 'Inconclusive' stop it showing in report lists."
       />
 
-      <SectionHeader title={`Rescue cases (${myCases.length})`} />
+      <SectionHeader title={`Recovery cases (${myCases.length})`} />
       <Caption>Cases opened in response to public lost and found reports.</Caption>
 
       {myCases.length ? (
-        myCases.map((c) => {
+        casePage.items.map((c) => {
           const report = reportById(c.reportId);
           const meta = caseStatusMeta[c.status];
+          const closed = isCaseClosed(c.status);
           return (
             <Card key={c.id}>
               <Row gap={1.5} align="flex-start">
                 <AnimalPhoto uri={report?.imageUrls[0]} size={68} tint={meta.soft} iconColor={meta.color} />
                 <View style={{ flex: 1, gap: 5 }}>
-                  <Text style={styles.caseTitle}>
-                    {report ? describeAnimal(report) : 'Unknown animal'}
-                  </Text>
+                  <Text style={styles.caseTitle}>{report ? describeAnimal(report) : 'Unknown animal'}</Text>
                   <Caption>
-                    {report?.barangay ?? 'Unknown'} · reported by {report?.reporterName ?? 'a user'}
+                    {report ? reportPlace(report) : 'Unknown location'} · reported by {report?.reporterName ?? 'a user'}
                   </Caption>
                   <CaseStatusPill status={c.status} />
                   <Caption>Updated {timeAgo(c.updatedAt)}</Caption>
@@ -92,12 +119,7 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
               <View style={styles.timeline}>
                 {c.timeline.map((t, i) => (
                   <Row key={i} gap={0.75} align="flex-start">
-                    <Ionicons
-                      name={CASE_ICONS[t.status]}
-                      size={13}
-                      color={caseStatusMeta[t.status].color}
-                      style={{ marginTop: 2 }}
-                    />
+                    <Ionicons name={CASE_ICONS[t.status]} size={13} color={caseStatusMeta[t.status].color} style={{ marginTop: 2 }} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.timelineNote}>{t.note}</Text>
                       <Caption>{timeAgo(t.at)}</Caption>
@@ -106,7 +128,19 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
                 ))}
               </View>
 
-              <Button label="Update case status" icon="create-outline" onPress={() => open(c)} />
+              {closed ? (
+                <Row gap={0.75}>
+                  <Ionicons name="lock-closed-outline" size={14} color={theme.colors.muted} />
+                  <Caption>Case closed as {meta.label.toLowerCase()} - its status can no longer change.</Caption>
+                </Row>
+              ) : (
+                <Row gap={1} style={{ flexWrap: 'wrap' }}>
+                  {report ? (
+                    <Button label="Track on map" icon="navigate-outline" variant="secondary" full={false} onPress={() => setTracking(report)} />
+                  ) : null}
+                  <Button label="Update case status" icon="create-outline" full={false} onPress={() => open(c)} />
+                </Row>
+              )}
             </Card>
           );
         })
@@ -115,36 +149,34 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
           <EmptyState
             icon="pulse-outline"
             title="No open cases"
-            message="Respond to a report from Animal Reports to open a rescue case here."
+            message="Respond to a report from Animal Reports to open a recovery case here."
             action="Animal reports"
             onAction={() => navigation.navigate('AnimalReports')}
           />
         </Card>
       )}
+      <Pager {...casePage} />
 
       <SectionHeader title={`Animals in care (${myAnimals.length})`} />
-      <Caption>Set the status of animals recorded directly in your shelter database.</Caption>
+      <Caption>Set the outcome for animals recorded directly in your shelter database.</Caption>
 
-      {myAnimals.map((a) => (
-        <ShelterAnimalCard
-          key={a.id}
-          animal={a}
-          right={null}
-        />
+      {animalPage.items.map((a) => (
+        <ShelterAnimalCard key={a.id} animal={a} right={null} />
       ))}
+      <Pager {...animalPage} />
 
-      {myAnimals.length ? (
+      {animalsInRecovery.length ? (
         <Card>
-          <Caption>Quick status change</Caption>
-          {myAnimals.map((a) => (
+          <Caption>Set an outcome - animals still under recovery</Caption>
+          {animalsInRecovery.map((a) => (
             <View key={a.id} style={styles.quickRow}>
               <Text style={styles.quickName} numberOfLines={1}>
                 {a.name}
               </Text>
               <Choice
-                options={STATUS_OPTIONS}
-                value={a.caseStatus}
-                onChange={(v) => setShelterAnimalStatus(a.id, v as AnimalCaseStatus)}
+                options={statusOptions(a.caseStatus)}
+                value={null}
+                onChange={(v) => void setAnimalStatus(a.id, a.name, v as AnimalCaseStatus)}
               />
             </View>
           ))}
@@ -152,12 +184,9 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
       ) : null}
 
       <Sheet open={Boolean(editing)} onClose={() => setEditing(null)} title="Update case status">
-        <Choice
-          label="New status"
-          options={STATUS_OPTIONS}
-          value={status}
-          onChange={(v) => setStatus(v as AnimalCaseStatus)}
-        />
+        {editing ? (
+          <Choice label="Outcome" options={statusOptions(editing.status)} value={status} onChange={(v) => setStatus(v as AnimalCaseStatus)} />
+        ) : null}
         <Field
           label="Note for the reporter"
           value={note}
@@ -165,7 +194,11 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
           placeholder="e.g. Owner verified via image match. Released to the family."
           multiline
         />
-        <Button label="Save and notify reporter" icon="send-outline" onPress={save} />
+        <Button label="Save and notify reporter" icon="send-outline" onPress={() => void save()} />
+      </Sheet>
+
+      <Sheet open={Boolean(tracking)} onClose={() => setTracking(null)} title="Where the report came from">
+        {tracking ? <RecoveryTracker shelter={currentShelter} report={tracking} /> : null}
       </Sheet>
     </Screen>
   );

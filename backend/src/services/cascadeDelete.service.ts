@@ -8,8 +8,13 @@ import { ModerationFlag } from '../models/ModerationFlag';
 import { Notification } from '../models/Notification';
 import { Shelter } from '../models/Shelter';
 import { ShelterAnimal } from '../models/ShelterAnimal';
+import { ShelterProofDocument } from '../models/ShelterProofDocument';
 import { User } from '../models/User';
 import { deleteStoredPhoto } from './storage.service';
+import { forgetPhoto } from './photoFingerprint.service';
+
+/** Removes the stored file and its duplicate-check fingerprint together. */
+const removePhoto = (url: string) => Promise.all([deleteStoredPhoto(url), forgetPhoto(url)]);
 
 /**
  * A developer deleting an account, shelter, or report is a true delete, not a soft hide (that's
@@ -43,7 +48,7 @@ export async function deleteReportCascade(kind: 'lost' | 'found', reportId: stri
     kind === 'lost'
       ? FoundAnimalReport.updateMany({ matchedLostReportId: reportId }, { $unset: { matchedLostReportId: 1 } })
       : LostPetReport.updateMany({ matchedFoundReportId: reportId }, { $unset: { matchedFoundReportId: 1 } }),
-    ...((report as { imageUrls?: string[] }).imageUrls ?? []).map((url) => deleteStoredPhoto(url)),
+    ...((report as { imageUrls?: string[] }).imageUrls ?? []).map((url) => removePhoto(url)),
   ]);
 
   return report;
@@ -63,13 +68,16 @@ export async function deleteShelterCascade(shelterId: string) {
     AnimalCase.deleteMany({ shelterId }),
     deleteConversationsCascade({ shelterId }),
     Notification.deleteMany({ audienceType: 'shelter', audienceId: shelterId }),
+    ShelterProofDocument.deleteMany({ shelterId }),
+    ModerationFlag.deleteMany({ reportType: 'shelter_animal', reporterId: shelterId }),
+    MatchSuggestion.deleteMany({ candidateId: { $in: animals.map((a) => a._id) }, candidateSource: 'shelter_animal' }),
     caseIds.length
       ? Promise.all([
           LostPetReport.updateMany({ caseId: { $in: caseIds } }, { $unset: { caseId: 1 } }),
           FoundAnimalReport.updateMany({ caseId: { $in: caseIds } }, { $unset: { caseId: 1 } }),
         ])
       : Promise.resolve(),
-    ...animals.flatMap((a) => a.imageUrls.map((url) => deleteStoredPhoto(url))),
+    ...animals.flatMap((a) => a.imageUrls.map((url) => removePhoto(url))),
     shelter.photoUrl ? deleteStoredPhoto(shelter.photoUrl) : Promise.resolve(),
   ]);
 
@@ -95,4 +103,16 @@ export async function deleteUserCascade(userId: string) {
   ]);
 
   return user;
+}
+
+/** Deletes one of a shelter's animal records, its photos, flags and the match suggestions pointing at it. */
+export async function deleteShelterAnimalCascade(shelterId: string, animalId: string) {
+  const animal = await ShelterAnimal.findOneAndDelete({ _id: animalId, shelterId }).lean();
+  if (!animal) return null;
+  await Promise.all([
+    ModerationFlag.deleteMany({ reportType: 'shelter_animal', reportId: animalId }),
+    MatchSuggestion.deleteMany({ candidateId: animalId, candidateSource: 'shelter_animal' }),
+    ...animal.imageUrls.map((url) => removePhoto(url)),
+  ]);
+  return animal;
 }

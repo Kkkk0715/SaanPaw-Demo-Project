@@ -2,7 +2,15 @@ import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Text, View } from 'react-native';
 import { theme } from '@/constants/theme';
-import { RADIUS_OPTIONS, SJDM_BARANGAYS, SJDM_BARANGAY_NAMES, formatDistance, useApp } from '@saanpaw/shared';
+import {
+  RADIUS_OPTIONS,
+  SJDM_BARANGAYS,
+  SJDM_BARANGAY_NAMES,
+  formatDistance,
+  maskPrivate,
+  passwordMeetsRules,
+  useApp,
+} from '@saanpaw/shared';
 import {
   AnimalPhoto,
   Badge,
@@ -13,6 +21,7 @@ import {
   Choice,
   Field,
   KeyValue,
+  PasswordRules,
   PhoneField,
   Row,
   Screen,
@@ -86,8 +95,8 @@ export function ShelterProfileScreen() {
       setPasswordError('Enter your current password.');
       return;
     }
-    if (newPassword.length < 8) {
-      setPasswordError('Use at least 8 characters for the new password.');
+    if (!passwordMeetsRules(newPassword)) {
+      setPasswordError('Your new password does not meet all the requirements yet.');
       return;
     }
     setChangingPassword(true);
@@ -122,15 +131,15 @@ export function ShelterProfileScreen() {
 
       <Card>
         <SectionHeader title="Verification" />
-        <KeyValue label="Permit number" value={currentShelter.permitNumber} />
+        <KeyValue label="Permit number" value={maskPrivate(currentShelter.permitNumber)} />
         <KeyValue label="Registered" value={new Date(currentShelter.registeredAt).toLocaleDateString()} />
         <Row gap={0.75}>
           <Caption>Status</Caption>
           <Badge label="Approved by Developer" icon="shield-checkmark" />
         </Row>
         <Caption>
-          The permit number was verified with the San Jose Del Monte local government. Contact the
-          Developer to change it.
+          The permit number was verified with the San Jose Del Monte local government. It is kept private
+          and hidden from the public. Contact the Developer to change it.
         </Caption>
       </Card>
 
@@ -155,14 +164,14 @@ export function ShelterProfileScreen() {
           onChangeText={setEmail}
           keyboardType="email-address"
           icon="mail-outline"
-          hint="Only Gmail addresses are accepted."
+          hint="Any email provider works."
         />
         <Row gap={1} align="flex-start">
           <View style={{ flex: 1 }}>
-            <Field label="Capacity" value={capacity} onChangeText={setCapacity} keyboardType="numeric" />
+            <Field label="Capacity" value={capacity} onChangeText={setCapacity} only="digits" maxLength={5} />
           </View>
           <View style={{ flex: 1 }}>
-            <Field label="Current occupancy" value={occupancy} onChangeText={setOccupancy} keyboardType="numeric" />
+            <Field label="Current occupancy" value={occupancy} onChangeText={setOccupancy} only="digits" maxLength={5} />
           </View>
         </Row>
       </Card>
@@ -210,10 +219,11 @@ export function ShelterProfileScreen() {
           label="New password"
           value={newPassword}
           onChangeText={setNewPassword}
-          placeholder="At least 8 characters"
+          placeholder="Create a new password"
           secureTextEntry
           icon="key-outline"
         />
+        <PasswordRules password={newPassword} />
         {passwordError ? <Caption style={{ color: theme.colors.danger }}>{passwordError}</Caption> : null}
         <Button label="Change password" variant="secondary" icon="key-outline" loading={changingPassword} onPress={savePassword} />
       </Card>

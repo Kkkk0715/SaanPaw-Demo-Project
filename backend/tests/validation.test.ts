@@ -37,6 +37,12 @@ describe('reportSchema', () => {
     expect(parsed.location).toEqual({ latitude: 14.8, longitude: 121 });
   });
 
+  it('keeps the address and landmark of the pin', () => {
+    const parsed = reportSchema.parse({ ...report, address: ' 12 Quirino Hwy, Muzon ', landmark: 'Near the chapel' });
+    expect(parsed.address).toBe('12 Quirino Hwy, Muzon');
+    expect(parsed.landmark).toBe('Near the chapel');
+  });
+
   it('allows at most five photos', () => {
     expect(() => reportSchema.parse({ ...report, imageUrls: Array(6).fill('/uploads/a.jpg') })).toThrow();
   });
@@ -48,7 +54,7 @@ describe('registerUserSchema', () => {
     lastName: 'Reyes',
     email: 'ana@gmail.com',
     phone: '+639171234567',
-    password: 'password1',
+    password: 'Passw0rd!',
     barangay: 'Muzon',
     location,
   };
@@ -57,10 +63,36 @@ describe('registerUserSchema', () => {
     expect(registerUserSchema.parse(user).alertRadiusMeters).toBe(3000);
   });
 
-  it('rejects a short password and a non-Gmail email', () => {
-    expect(() => registerUserSchema.parse({ ...user, password: 'short' })).toThrow();
-    expect(() => registerUserSchema.parse({ ...user, email: 'ana@yahoo.com' })).toThrow();
+  it('accepts any email provider but rejects a malformed address', () => {
+    expect(registerUserSchema.parse({ ...user, email: 'Ana@Yahoo.com' }).email).toBe('ana@yahoo.com');
+    expect(registerUserSchema.parse({ ...user, email: 'ana@stisjdm.edu.ph' }).email).toBe('ana@stisjdm.edu.ph');
     expect(() => registerUserSchema.parse({ ...user, email: 'nope' })).toThrow();
+  });
+
+  it.each([
+    ['short', 'Sh0rt!'],
+    ['no number', 'Password!'],
+    ['no special character', 'Password1'],
+  ])('rejects a password with %s', (_label, password) => {
+    expect(() => registerUserSchema.parse({ ...user, password })).toThrow();
+  });
+
+  it('names every password rule that is not met', () => {
+    const result = registerUserSchema.safeParse({ ...user, password: 'abc' });
+    expect(result.success).toBe(false);
+    const messages = result.success ? [] : result.error.issues.map((i) => i.message);
+    expect(messages).toEqual(
+      expect.arrayContaining(['Use at least 8 characters', 'Include at least 1 number', expect.stringMatching(/special/)]),
+    );
+  });
+
+  it('only accepts letters in names', () => {
+    expect(registerUserSchema.parse({ ...user, firstName: 'María Ñiña', lastName: "O'Neil-Santos" }).firstName).toBe(
+      'María Ñiña',
+    );
+    expect(() => registerUserSchema.parse({ ...user, firstName: 'Ana2' })).toThrow();
+    expect(() => registerUserSchema.parse({ ...user, lastName: 'Reyes!' })).toThrow();
+    expect(() => registerUserSchema.parse({ ...user, middleName: '123' })).toThrow();
   });
 
   it('only accepts a PH mobile number in +639XXXXXXXXX form', () => {
@@ -84,12 +116,19 @@ describe('registerShelterSchema', () => {
     contactNumber: '+639171234567',
     email: 'shelter@gmail.com',
     location,
+    proofDocumentIds: ['64b7f0c2a1b2c3d4e5f60718'],
   };
 
-  it('requires a Gmail email and a PH mobile contact number', () => {
+  it('accepts any email provider and requires a PH mobile contact number', () => {
     expect(registerShelterSchema.parse(shelter).email).toBe('shelter@gmail.com');
-    expect(() => registerShelterSchema.parse({ ...shelter, email: 'shelter@yahoo.com' })).toThrow();
+    expect(registerShelterSchema.parse({ ...shelter, email: 'shelter@yahoo.com' }).email).toBe('shelter@yahoo.com');
     expect(() => registerShelterSchema.parse({ ...shelter, contactNumber: '0917 123 4567' })).toThrow();
+  });
+
+  it('requires at least one proof document', () => {
+    expect(() => registerShelterSchema.parse({ ...shelter, proofDocumentIds: [] })).toThrow(/proof document/);
+    expect(() => registerShelterSchema.parse({ ...shelter, proofDocumentIds: undefined })).toThrow();
+    expect(() => registerShelterSchema.parse({ ...shelter, proofDocumentIds: ['not-an-id'] })).toThrow();
   });
 
   it('accepts the broken-down address parts', () => {
@@ -135,17 +174,19 @@ describe('status and profile schemas', () => {
     expect(shelterProfileSchema.parse({ email: '' }).email).toBe('');
   });
 
-  it('rejects a non-Gmail email on the shelter profile', () => {
-    expect(() => shelterProfileSchema.parse({ email: 'shelter@yahoo.com' })).toThrow();
+  it('accepts any valid email on the shelter profile', () => {
+    expect(shelterProfileSchema.parse({ email: 'shelter@yahoo.com' }).email).toBe('shelter@yahoo.com');
+    expect(() => shelterProfileSchema.parse({ email: 'not an email' })).toThrow();
   });
 });
 
 describe('changePasswordSchema', () => {
-  it('requires both a current and a new password of at least 8 characters', () => {
-    expect(() => changePasswordSchema.parse({ currentPassword: '', newPassword: 'password1' })).toThrow();
+  it('requires a current password and a new one that meets the password rules', () => {
+    expect(() => changePasswordSchema.parse({ currentPassword: '', newPassword: 'Passw0rd!' })).toThrow();
     expect(() => changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'short' })).toThrow();
-    expect(changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'password1' }).newPassword).toBe(
-      'password1',
+    expect(() => changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'longenough' })).toThrow();
+    expect(changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'Passw0rd!' }).newPassword).toBe(
+      'Passw0rd!',
     );
   });
 });
@@ -162,15 +203,15 @@ describe('forgotPasswordSchema', () => {
 });
 
 describe('resetPasswordSchema', () => {
-  it('requires a 6-digit code and a new password of at least 8 characters', () => {
+  it('requires a 6-digit code and a new password that meets the password rules', () => {
     expect(() =>
-      resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '12345', newPassword: 'password1' }),
+      resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '12345', newPassword: 'Passw0rd!' }),
     ).toThrow();
     expect(() =>
       resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '123456', newPassword: 'short' }),
     ).toThrow();
     expect(
-      resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '123456', newPassword: 'password1' }).code,
+      resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '123456', newPassword: 'Passw0rd!' }).code,
     ).toBe('123456');
   });
 });

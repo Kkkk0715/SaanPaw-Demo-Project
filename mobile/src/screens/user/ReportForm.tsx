@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -42,7 +42,7 @@ export function ReportForm({
   kind: ReportKind;
   navigation: { navigate: (screen: string, params?: object) => void; goBack: () => void };
 }) {
-  const { createReport, currentUser, reportById, shelterById, matchesForReport } = useApp();
+  const { createReport, currentUser, reportById, shelterById, matchesForReport, lookupAddress } = useApp();
   const style = reportKindStyle[kind];
 
   const [images, setImages] = useState<string[]>([]);
@@ -56,8 +56,13 @@ export function ReportForm({
   const [description, setDescription] = useState('');
   const [barangay, setBarangay] = useState<string | null>(currentUser.barangay);
   const [pin, setPin] = useState<LatLng>(currentUser.location);
+  /** Street-level address of the pin: filled in from the map, then editable. */
+  const [address, setAddress] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [addressLookup, setAddressLookup] = useState<'idle' | 'looking' | 'found' | 'none'>('idle');
+  const lookupSeq = useRef(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitted, setSubmitted] = useState<AnimalReport | null>(null);
+  const [submitted, setSubmitted] = useState<(AnimalReport & { notices?: string[] }) | null>(null);
   // Remounts AnimalTypeAndBreed on 'Submit another report' so its own internal picker state clears too.
   const [formKey, setFormKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -111,6 +116,28 @@ export function ReportForm({
     // Once, on open.
   }, []);
 
+  // Whenever the pin moves, look up the street address for the new spot (after a short pause, so
+  // tapping around the map doesn't fire a lookup per tap). The reporter can still edit it.
+  useEffect(() => {
+    if (!isWithinSJDM(pin.latitude, pin.longitude)) {
+      setAddressLookup('none');
+      return;
+    }
+    const seq = ++lookupSeq.current;
+    setAddressLookup('looking');
+    const timer = setTimeout(async () => {
+      const result = await lookupAddress(pin);
+      if (seq !== lookupSeq.current) return; // the pin moved again meanwhile
+      if (result?.address) {
+        setAddress(result.address);
+        setAddressLookup('found');
+      } else {
+        setAddressLookup('none');
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [pin, lookupAddress]);
+
   const pickImage = async (source: 'camera' | 'library') => {
     const perm =
       source === 'camera'
@@ -137,7 +164,7 @@ export function ReportForm({
     const next: Record<string, string> = {};
     if (!images.length) next.images = 'Attach at least one photo - matching is image-based.';
     if (kind === 'lost' && !name.trim()) next.name = "Enter your pet's name.";
-    if (!color.trim()) next.color = 'Describe the coat colour - this drives the match score.';
+    if (!color.trim()) next.color = 'Describe the fur color - this drives the match score.';
     if (!barangay) next.barangay = 'Select the barangay.';
     if (outOfArea) next.location = 'The pin is outside San Jose Del Monte.';
     setErrors(next);
@@ -158,6 +185,8 @@ export function ReportForm({
         imageUrls: images,
         barangay: barangay!,
         location: pin,
+        address: address.trim() || undefined,
+        landmark: landmark.trim() || undefined,
       });
       setSubmitted(report);
     } catch (e) {
@@ -184,6 +213,10 @@ export function ReportForm({
           }
         />
 
+        {(submitted.notices ?? []).map((n) => (
+          <Banner key={n} tone="warning" icon="copy-outline" title="Heads up" message={n} />
+        ))}
+
         <Card>
           <Row gap={1.5} align="flex-start">
             <AnimalPhoto uri={submitted.imageUrls[0]} size={80} tint={style.soft} iconColor={style.color} />
@@ -193,7 +226,7 @@ export function ReportForm({
               </Text>
               <Caption>Reference {submitted.id.toUpperCase()}</Caption>
               <Caption>
-                {submitted.barangay} · reported just now
+                {submitted.address || `Brgy. ${submitted.barangay}`} · reported just now
               </Caption>
             </View>
           </Row>
@@ -250,6 +283,7 @@ export function ReportForm({
             setColor('');
             setMarks('');
             setDescription('');
+            setLandmark('');
           }}
         />
       </Screen>
@@ -274,7 +308,7 @@ export function ReportForm({
       <SectionHeader title="Photos" />
       <Card>
         <Caption>
-          Attach up to 5 clear photos. The image recognition matcher uses coat colour, markings, and
+          Attach up to 5 clear photos. The image recognition matcher uses fur color, markings, and
           build - a full-body shot in good light works best.
         </Caption>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -321,7 +355,7 @@ export function ReportForm({
 
         <AnimalTypeAndBreed key={formKey} animalType={animalType} breed={breed} onBreedChange={setBreed} />
         <Field
-          label="Coat colour"
+          label="Fur Color"
           value={color}
           onChangeText={setColor}
           placeholder="e.g. brown with white chest"
@@ -424,6 +458,27 @@ export function ReportForm({
               setBarangay(nearestBarangay(point).name);
             }
           }}
+        />
+        <Field
+          label="Specific address"
+          value={address}
+          onChangeText={setAddress}
+          placeholder="House no., street, subdivision"
+          icon="home-outline"
+          hint={
+            addressLookup === 'looking'
+              ? 'Looking up the address of the pin…'
+              : addressLookup === 'found'
+                ? 'Filled in from the map pin. Correct it or add a house number if needed.'
+                : 'Type the street, subdivision or house number where the animal was seen.'
+          }
+        />
+        <Field
+          label="Nearby landmark (optional)"
+          value={landmark}
+          onChangeText={setLandmark}
+          placeholder="e.g. beside the chapel, across the 7-Eleven"
+          icon="flag-outline"
         />
         <Row gap={0.5}>
           <Ionicons name="navigate-outline" size={13} color={theme.colors.muted} />

@@ -5,16 +5,31 @@ import {
   flagReasonLabel,
   humanizeStatus,
   reportKindStyle,
+  reportPlace,
+  reportStatusMeta,
   timeAgo,
   useApp,
   type AnimalReport,
   type ModerationFlag,
   type ShelterAnimal,
 } from '@saanpaw/shared';
-import { Badge, Banner, Button, Card, CardHead, EmptyState, Meter, Tabs, Thumb } from '@/components/ui';
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  CardHead,
+  EmptyState,
+  Meter,
+  Pagination,
+  Tabs,
+  Thumb,
+  useConfirm,
+  usePagination,
+} from '@/components/ui';
 import { ReportDetailModal } from '@/components/ReportDetailModal';
 
-/** Upheld flags needed before an account is banned. */
+/** Upheld flags at which the server deletes the account and emails the person why. */
 const BAN_THRESHOLD = 3;
 
 /**
@@ -26,26 +41,71 @@ export function ReportMonitoringPage() {
   const [tab, setTab] = useState<'flagged' | 'all' | 'accounts'>('flagged');
   const [acting, setActing] = useState<ModerationFlag | null>(null);
   const [selectedReport, setSelectedReport] = useState<AnimalReport | null>(null);
-  const [confirmingUserId, setConfirmingUserId] = useState<string | null>(null);
+  const { ask, dialog } = useConfirm();
 
   const pending = flags.filter((f) => f.resolution === 'pending');
   const resolved = flags.filter((f) => f.resolution !== 'pending');
   const accountRows = [...users].sort((a, b) => b.flaggedReportCount - a.flaggedReportCount);
+  const allReports = [...reports].sort((a, b) => +new Date(b.reportedAt) - +new Date(a.reportedAt));
+
+  const pendingPage = usePagination(pending, 10, tab);
+  const resolvedPage = usePagination(resolved, 10, tab);
+  const reportsPage = usePagination(allReports, 10, tab);
+  const accountsPage = usePagination(accountRows, 10, tab);
 
   /** A flag's target: a citizen's lost/found report, or a shelter's own animal posting. */
   const flaggedItem = (f: ModerationFlag): AnimalReport | ShelterAnimal | undefined =>
     f.reportType === 'shelter_animal' ? shelterAnimals.find((a) => a.id === f.reportId) : reportById(f.reportId);
 
   const act = (resolution: ModerationFlag['resolution']) => {
-    if (!acting) return;
-    resolveFlag(acting.id, resolution);
-    setActing(null);
+    const target = acting;
+    if (!target) return;
+    const reporter = users.find((u) => u.id === target.reporterId);
+    const upheldAfter = (reporter?.flaggedReportCount ?? 0) + 1;
+    const run = () => {
+      resolveFlag(target.id, resolution);
+      setActing(null);
+    };
+    if (resolution === 'dismissed') {
+      ask(<>Are you sure you want to dismiss this flag? The {target.reportType === 'shelter_animal' ? 'posting' : 'report'} stays live.</>, run, {
+        title: 'Dismiss this flag?',
+        tone: 'primary',
+      });
+      return;
+    }
+    const warning =
+      target.reportType !== 'shelter_animal' && upheldAfter >= BAN_THRESHOLD ? (
+        <>
+          {' '}
+          This will be upheld flag {upheldAfter} for <strong>{target.reporterName}</strong>, so their account will be
+          deleted and they will be emailed the reason.
+        </>
+      ) : null;
+    ask(
+      resolution === 'account_banned' ? (
+        <>Are you sure you want to remove this report and ban <strong>{target.reporterName}</strong>?{warning}</>
+      ) : (
+        <>Are you sure you want to remove this {target.reportType === 'shelter_animal' ? 'posting' : 'report'}?{warning}</>
+      ),
+      run,
+      { title: 'Are you sure you want to delete this?' },
+    );
   };
 
-  const removeUser = (id: string) => {
-    deleteUserAccount(id);
-    setConfirmingUserId(null);
-  };
+  const confirmBan = (id: string, name: string) =>
+    ask(<>Are you sure you want to ban <strong>{name}</strong>? Their reports will be hidden and they can no longer sign in.</>, () => banUser(id), {
+      title: 'Ban this account?',
+    });
+
+  const confirmDeleteUser = (id: string, name: string) =>
+    ask(
+      <>
+        Are you sure you want to delete <strong>{name}</strong>&apos;s account? Their reports, messages and notifications are
+        deleted too. This cannot be undone.
+      </>,
+      () => deleteUserAccount(id),
+      { title: 'Are you sure you want to delete this?', confirmLabel: 'Yes, delete' },
+    );
 
   return (
     <>
@@ -82,7 +142,7 @@ export function ReportMonitoringPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pending.map((f) => {
+                  {pendingPage.items.map((f) => {
                     const item = flaggedItem(f);
                     const isShelterFlag = f.reportType === 'shelter_animal';
                     const note = item ? (item as AnimalReport).description ?? (item as ShelterAnimal).notes : undefined;
@@ -135,6 +195,7 @@ export function ReportMonitoringPage() {
                 The AI moderation pass has not flagged any open reports.
               </EmptyState>
             )}
+            <Pagination {...pendingPage} />
           </Card>
 
           {acting ? (
@@ -152,7 +213,7 @@ export function ReportMonitoringPage() {
                 <p style={{ color: 'var(--text-soft)' }}>
                   {acting.reportType === 'shelter_animal'
                     ? 'Dismissing keeps the posting live. Removing unpublishes it. A shelter account itself is revoked by hand from Manage Shelters, not from here.'
-                    : 'Dismissing keeps the report live. Removing deletes it. Banning removes the account and every report it has submitted.'}
+                    : `Dismissing keeps the report live. Removing deletes it and counts as an upheld flag - at ${BAN_THRESHOLD} upheld flags the account is deleted and the person is emailed why. Banning also locks the account now.`}
                 </p>
                 <div className="row row-wrap">
                   <Button variant="secondary" onClick={() => act('dismissed')}>
@@ -185,7 +246,7 @@ export function ReportMonitoringPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {resolved.map((f) => (
+                  {resolvedPage.items.map((f) => (
                     <tr key={f.id}>
                       <td>{flagReasonLabel[f.reason]}</td>
                       <td>
@@ -202,6 +263,7 @@ export function ReportMonitoringPage() {
                   ))}
                 </tbody>
               </table>
+              <Pagination {...resolvedPage} />
             </Card>
           ) : null}
         </>
@@ -217,17 +279,17 @@ export function ReportMonitoringPage() {
                 <th>Reference</th>
                 <th>Animal</th>
                 <th>Kind</th>
-                <th>Barangay</th>
+                <th>Report Status</th>
+                <th>Location</th>
                 <th>Reporter</th>
                 <th>Reported</th>
                 <th>Flag</th>
               </tr>
             </thead>
             <tbody>
-              {[...reports]
-                .sort((a, b) => +new Date(b.reportedAt) - +new Date(a.reportedAt))
-                .map((r) => {
+              {reportsPage.items.map((r) => {
                   const kind = reportKindStyle[r.kind];
+                  const status = reportStatusMeta[r.status];
                   return (
                     <tr key={r.id} onClick={() => setSelectedReport(r)} style={{ cursor: 'pointer' }}>
                       <td>
@@ -240,7 +302,10 @@ export function ReportMonitoringPage() {
                       <td>
                         <Badge label={kind.label} color={kind.color} soft={kind.soft} />
                       </td>
-                      <td>{r.barangay}</td>
+                      <td>
+                        <Badge label={status.label} color={status.color} soft={status.soft} />
+                      </td>
+                      <td style={{ maxWidth: 220 }}>{reportPlace(r)}</td>
                       <td>{r.reporterName}</td>
                       <td style={{ color: 'var(--muted)' }}>{timeAgo(r.reportedAt)}</td>
                       <td>
@@ -255,6 +320,7 @@ export function ReportMonitoringPage() {
                 })}
             </tbody>
           </table>
+          <Pagination {...reportsPage} />
         </Card>
       ) : null}
 
@@ -262,7 +328,7 @@ export function ReportMonitoringPage() {
         <Card>
           <CardHead
             title="Accounts"
-            sub={`Every registered user, sorted by upheld flags. Accounts are banned at ${BAN_THRESHOLD} or more`}
+            sub={`Every registered user, sorted by upheld flags. At ${BAN_THRESHOLD} upheld flags an account is deleted automatically and the person is emailed why`}
           />
           {accountRows.length ? (
             <table>
@@ -278,7 +344,7 @@ export function ReportMonitoringPage() {
                 </tr>
               </thead>
               <tbody>
-                {accountRows.map((u) => {
+                {accountsPage.items.map((u) => {
                   const atThreshold = u.flaggedReportCount >= BAN_THRESHOLD;
                   return (
                     <tr key={u.id}>
@@ -313,27 +379,16 @@ export function ReportMonitoringPage() {
                           <Button
                             variant={atThreshold ? 'danger' : 'secondary'}
                             small
-                            onClick={() => banUser(u.id)}
+                            onClick={() => confirmBan(u.id, u.fullName)}
                           >
                             {atThreshold ? 'Ban (threshold reached)' : 'Ban account'}
                           </Button>
                         )}
                       </td>
                       <td>
-                        {confirmingUserId === u.id ? (
-                          <div className="row" style={{ flexWrap: 'nowrap' }}>
-                            <Button variant="secondary" small onClick={() => setConfirmingUserId(null)}>
-                              Cancel
-                            </Button>
-                            <Button variant="danger" small onClick={() => removeUser(u.id)}>
-                              Confirm delete
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button variant="danger" small onClick={() => setConfirmingUserId(u.id)}>
-                            Delete account
-                          </Button>
-                        )}
+                        <Button variant="danger" small onClick={() => confirmDeleteUser(u.id, u.fullName)}>
+                          Delete account
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -345,12 +400,14 @@ export function ReportMonitoringPage() {
               No user has registered yet.
             </EmptyState>
           )}
+          <Pagination {...accountsPage} />
         </Card>
       ) : null}
 
       {selectedReport ? (
         <ReportDetailModal report={selectedReport} onClose={() => setSelectedReport(null)} />
       ) : null}
+      {dialog}
     </>
   );
 }

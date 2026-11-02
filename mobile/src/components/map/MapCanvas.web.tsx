@@ -86,6 +86,7 @@ export function MapCanvas({
   onMarkerPress,
   onPickLocation,
   selectedMarkerId,
+  route,
 }: {
   markers?: MapMarker[];
   initialCenter?: LatLng;
@@ -96,6 +97,8 @@ export function MapCanvas({
   onMarkerPress?: (id: string) => void;
   onPickLocation?: (c: LatLng) => void;
   selectedMarkerId?: string | null;
+  /** Dashed line between two points, e.g. a shelter and the report it is recovering. */
+  route?: { from: LatLng; to: LatLng } | null;
 }) {
   // react-native-web renders `View` as a <div> on the web build and forwards
   // `ref` to that real DOM node, which is what L.map needs to mount into.
@@ -104,6 +107,8 @@ export function MapCanvas({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const markerInstances = useRef<Record<string, L.Marker>>({});
   const radiusCircleRef = useRef<L.Circle | null>(null);
+  const routeLineRef = useRef<L.Polyline | null>(null);
+  const routeKeyRef = useRef<string | null>(null);
   const pickable = useRef(Boolean(onPickLocation)).current;
   const [loadError, setLoadError] = useState<string | null>(null);
   // Bumped once the map object exists, so the marker/radius effects below - which read
@@ -216,18 +221,21 @@ export function MapCanvas({
     });
   }, [markers, selectedMarkerId, pickable, mapReady]);
 
-  // Radius circle.
+  // Radius circle. Depends on the plain coordinates rather than the `radiusCenter` object, which
+  // callers rebuild on every render - depending on the object would redraw the circle each time.
+  const radiusLat = radiusCenter?.latitude;
+  const radiusLng = radiusCenter?.longitude;
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!radiusMeters || !radiusCenter) {
+    if (!radiusMeters || radiusLat == null || radiusLng == null) {
       if (radiusCircleRef.current) {
         radiusCircleRef.current.remove();
         radiusCircleRef.current = null;
       }
       return;
     }
-    const latlng: L.LatLngTuple = [radiusCenter.latitude, radiusCenter.longitude];
+    const latlng: L.LatLngTuple = [radiusLat, radiusLng];
     if (radiusCircleRef.current) {
       radiusCircleRef.current.setLatLng(latlng);
       radiusCircleRef.current.setRadius(radiusMeters);
@@ -241,7 +249,34 @@ export function MapCanvas({
         fillOpacity: 0.14,
       }).addTo(map);
     }
-  }, [radiusMeters, radiusCenter?.latitude, radiusCenter?.longitude, mapReady]);
+  }, [radiusMeters, radiusLat, radiusLng, mapReady]);
+
+  // Route line, with the camera fitted to both ends once per distinct route.
+  const fromLat = route?.from.latitude;
+  const fromLng = route?.from.longitude;
+  const toLat = route?.to.latitude;
+  const toLng = route?.to.longitude;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      routeLineRef.current?.remove();
+      routeLineRef.current = null;
+      routeKeyRef.current = null;
+      return;
+    }
+    const points: L.LatLngTuple[] = [
+      [fromLat, fromLng],
+      [toLat, toLng],
+    ];
+    if (routeLineRef.current) routeLineRef.current.setLatLngs(points);
+    else routeLineRef.current = L.polyline(points, { color: '#2563EB', weight: 3, opacity: 0.85, dashArray: '8 8' }).addTo(map);
+    const key = points.join('|');
+    if (key !== routeKeyRef.current) {
+      routeKeyRef.current = key;
+      map.fitBounds(points, { padding: [48, 48], maxZoom: 16 });
+    }
+  }, [fromLat, fromLng, toLat, toLng, mapReady]);
 
   // `initialCenter` only sets where the camera starts on a map the user can pin on. Screens that
   // bind it to the same state as the pin - e.g. the report form - would otherwise fight the user:
@@ -254,15 +289,17 @@ export function MapCanvas({
   // the circle, and a camera left where it was would show the circle off-screen or beside the wrong
   // labels. Only an actual change moves it, so an unrelated re-render never snaps the map back
   // under someone who has panned it.
+  // A route fits the camera to its own two ends, so the center props don't move it.
+  const hasRoute = fromLat != null;
   const lastViewRef = useRef({ lat: initialCenter.latitude, lng: initialCenter.longitude, zoom: initialZoom });
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || pickable) return;
+    if (!map || pickable || hasRoute) return;
     const last = lastViewRef.current;
     if (last.lat === initialCenter.latitude && last.lng === initialCenter.longitude && last.zoom === initialZoom) return;
     lastViewRef.current = { lat: initialCenter.latitude, lng: initialCenter.longitude, zoom: initialZoom };
     map.setView([initialCenter.latitude, initialCenter.longitude], initialZoom);
-  }, [initialCenter.latitude, initialCenter.longitude, initialZoom, pickable, mapReady]);
+  }, [initialCenter.latitude, initialCenter.longitude, initialZoom, pickable, mapReady, hasRoute]);
 
   return (
     <View style={[styles.wrap, { height }]}>

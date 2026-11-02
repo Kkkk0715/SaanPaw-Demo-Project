@@ -414,7 +414,7 @@ export const seedMatches: MatchSuggestion[] = [
     candidateSource: 'found_report',
     score: 0.93,
     reasons: [
-      'Coat pattern and colour histogram align (brown with white chest patch)',
+      'Fur pattern and color histogram align (brown with white chest patch)',
       'Both records note a torn left ear',
       'Found 1.9 km from the last-seen point, within 2 hours',
     ],
@@ -440,7 +440,7 @@ export const seedMatches: MatchSuggestion[] = [
     candidateSource: 'found_report',
     score: 0.88,
     reasons: [
-      'Orange tabby coat with white paws on both records',
+      'Orange tabby fur with white paws on both records',
       'Same barangay (Muzon), 480 m apart',
       'Found 4 hours after the pet was reported missing',
     ],

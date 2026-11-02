@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
-import { AuthHeader, Banner, Button, COLUMN, Caption, Field, useBottomInset } from '@/components/ui';
+import { passwordMeetsRules } from '@saanpaw/shared';
+import { AuthHeader, Banner, Button, COLUMN, Caption, Field, PasswordRules, useBottomInset } from '@/components/ui';
 import { apiRequest } from '@/services/api';
 import type { MobileRole } from '@/context/AuthContext';
 
@@ -46,8 +47,8 @@ export function ForgotPasswordScreen({ route, navigation }: NativeStackScreenPro
       setError('Enter the 6-digit code from your email.');
       return;
     }
-    if (newPassword.length < 8) {
-      setError('Use at least 8 characters for the new password.');
+    if (!passwordMeetsRules(newPassword)) {
+      setError('Your new password does not meet all the requirements yet.');
       return;
     }
     setBusy(true);
@@ -105,7 +106,7 @@ export function ForgotPasswordScreen({ route, navigation }: NativeStackScreenPro
                 label="Email address"
                 value={email}
                 onChangeText={setEmail}
-                placeholder="you@gmail.com"
+                placeholder="you@example.com"
                 keyboardType="email-address"
                 icon="mail-outline"
               />
@@ -118,17 +119,19 @@ export function ForgotPasswordScreen({ route, navigation }: NativeStackScreenPro
                 value={code}
                 onChangeText={setCode}
                 placeholder="123456"
-                keyboardType="numeric"
+                only="digits"
+                maxLength={6}
                 icon="key-outline"
               />
               <Field
                 label="New password"
                 value={newPassword}
                 onChangeText={setNewPassword}
-                placeholder="At least 8 characters"
+                placeholder="Create a new password"
                 secureTextEntry
                 icon="lock-closed-outline"
               />
+              <PasswordRules password={newPassword} />
               <Button label="Reset password" onPress={resetPassword} loading={busy} icon="checkmark-outline" />
               <Button
                 label="Use a different email"

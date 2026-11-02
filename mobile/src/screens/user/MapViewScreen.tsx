@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme, reportKindStyle } from '@/constants/theme';
-import { distanceMeters, formatDistance, useApp } from '@saanpaw/shared';
+import { distanceMeters, formatDistance, reportPlace, useApp } from '@saanpaw/shared';
 import { Badge, Caption, Card, Choice, Row, SectionHeader } from '@/components/ui';
 import { MapCanvas, type MapMarker } from '@/components/map/MapCanvas';
 import { ReportCard, describeAnimal } from '@/components/domain';
@@ -40,7 +40,7 @@ export function MapViewScreen() {
             id: r.id,
             coordinate: r.location,
             kind: r.kind,
-            label: describeAnimal(r),
+            label: `${describeAnimal(r)} - ${reportPlace(r)}`,
           }));
 
     const shelterPins: MapMarker[] =

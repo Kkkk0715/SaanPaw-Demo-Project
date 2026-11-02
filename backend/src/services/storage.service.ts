@@ -127,3 +127,8 @@ export function looksLikeImage(buffer: Buffer): boolean {
   const isWebp = head.subarray(0, 4).toString('ascii') === 'RIFF' && head.subarray(8, 12).toString('ascii') === 'WEBP';
   return isJpeg || isPng || isWebp;
 }
+
+/** A PDF starts with "%PDF-". Like looksLikeImage, this checks the bytes rather than the client's claim. */
+export function looksLikePdf(buffer: Buffer): boolean {
+  return buffer.length >= 5 && buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+}

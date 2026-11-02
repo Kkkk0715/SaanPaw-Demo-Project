@@ -84,7 +84,7 @@ export const reportKindStyle = {
 
 /** Scope: "under rescue / reunited / adopted / inconclusive". */
 export const caseStatusMeta = {
-  under_rescue: { label: 'Under rescue', color: colors.info, soft: colors.infoSoft },
+  under_rescue: { label: 'Under recovery', color: colors.info, soft: colors.infoSoft },
   reunited: { label: 'Reunited', color: colors.primary, soft: colors.primarySoft },
   adopted: { label: 'Adopted', color: colors.accent, soft: colors.accentSoft },
   inconclusive: { label: 'Inconclusive', color: colors.muted, soft: colors.surfaceAlt },

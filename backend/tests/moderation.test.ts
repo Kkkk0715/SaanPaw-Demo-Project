@@ -121,3 +121,17 @@ describe('the photoSignal input (Gemini\'s verdict on the report\'s own photo)',
     expect(withSignalSkipped.confidence).toBeLessThan(REVIEW_THRESHOLD);
   });
 });
+
+describe('duplicate photos', () => {
+  it('flags a report whose photo was already used on another report', () => {
+    const r = assessReport({ text: 'Brown aspin with a red collar, very friendly', imageCount: 1, duplicatePhotos: 1 });
+    expect(r.confidence).toBeGreaterThanOrEqual(REVIEW_THRESHOLD);
+    expect(r.reason).toBe('duplicate');
+    expect(r.detail).toMatch(/already used/);
+  });
+
+  it('leaves a report with original photos alone', () => {
+    const r = assessReport({ text: 'Brown aspin with a red collar, very friendly', imageCount: 1, duplicatePhotos: 0 });
+    expect(r.confidence).toBeLessThan(REVIEW_THRESHOLD);
+  });
+});

@@ -44,6 +44,10 @@ export interface AnimalReport extends AnimalDescriptor {
   reporterPhone?: string;
   barangay: string;
   location: LatLng;
+  /** Street-level address of the pin, e.g. "12 Quirino Hwy, Muzon". Older reports may not have one. */
+  address?: string;
+  /** Nearby landmark the reporter added, e.g. "beside the chapel". */
+  landmark?: string;
   /** Set once a shelter takes the report on as a case. */
   caseId?: string;
   /** Populated by the developer module's AI moderation pass. */
@@ -82,8 +86,13 @@ export interface Shelter {
   operatingRadiusMeters: number;
   approvalStatus: ShelterApprovalStatus;
   registeredAt: string;
-  /** Local-government permit number the developer verifies before approving. */
-  permitNumber: string;
+  /**
+   * Local-government permit number the developer verifies before approving. Private: only the
+   * Developer console and the shelter itself receive it; the public shelter list does not.
+   */
+  permitNumber?: string;
+  /** Proof-of-credentials documents submitted with the application. Developer console only. */
+  proofDocumentIds?: string[];
   capacity: number;
   currentOccupancy: number;
   logoColor: string;
@@ -208,4 +217,13 @@ export interface DashboardStats {
   reunitedThisMonth: number;
   underRescue: number;
   sheltersOnline: number;
+}
+
+/** A proof-of-credentials file a shelter submitted with its application. */
+export interface ProofDocument {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  uploadedAt?: string;
 }

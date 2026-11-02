@@ -1,6 +1,7 @@
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { readStoredPhoto } from './storage.service';
+import { interpretPrePass, PREPASS_PROMPT, type PrePassVerdict } from './photoPrePass';
 
 /**
  * Vision calls via Gemini's free-tier API (aistudio.google.com/apikey): direct photo-to-photo
@@ -15,12 +16,17 @@ import { readStoredPhoto } from './storage.service';
 const configured = Boolean(env.gemini.apiKey);
 
 /** Calls Gemini with a prompt and 0+ inline images, parsing the JSON response it's asked to return. */
-async function generateJson(prompt: string, images: { mimeType: string; buffer: Buffer }[]): Promise<Record<string, unknown> | null> {
+async function generateJson(
+  prompt: string,
+  images: { mimeType: string; buffer: Buffer }[],
+  timeoutMs?: number,
+): Promise<Record<string, unknown> | null> {
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${env.gemini.model}:generateContent?key=${env.gemini.apiKey}`,
       {
         method: 'POST',
+        signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [
@@ -52,7 +58,7 @@ async function generateJson(prompt: string, images: { mimeType: string; buffer: 
 
 const COMPARE_PROMPT = `You are comparing two photos to help reunite a lost pet with its owner.
 Photo A: a lost pet. Photo B: a candidate - a found stray, or an animal in a shelter's care.
-Judge only visual similarity: coat colour and pattern, breed-typical features, distinctive markings, and build or size. Ignore background, lighting, pose, and image quality differences.
+Judge only visual similarity: fur color and pattern, breed-typical features, distinctive markings, and build or size. Ignore background, lighting, pose, and image quality differences.
 Respond with strict JSON only, no other text, matching this shape exactly:
 {"score": <integer 0-100, how likely these two photos show the same individual animal>, "reasoning": "<one short sentence citing the most important similarity or difference>"}`;
 
@@ -106,6 +112,23 @@ export async function assessAnimalPhoto(photoUrl: string): Promise<PhotoScreenRe
     inappropriate: parsed.inappropriate,
     reasoning: String(parsed.reasoning ?? '').slice(0, 300),
   };
+}
+
+/**
+ * Upload gate: kept short because the person is waiting on the upload, and well under the
+ * 30 s Vercel function limit even when a report attaches several photos in parallel.
+ */
+const PREPASS_TIMEOUT_MS = 12_000;
+
+/**
+ * Pre-pass for a photo that has not been saved yet (the upload route passes the raw bytes).
+ * Returns null when Gemini is unconfigured, unreachable, or answers in an unexpected shape -
+ * the caller decides what "could not screen" means. Never throws.
+ */
+export async function prePassAnimalPhoto(buffer: Buffer, mimeType: string): Promise<PrePassVerdict | null> {
+  if (!configured) return null;
+  const parsed = await generateJson(PREPASS_PROMPT, [{ mimeType, buffer }], PREPASS_TIMEOUT_MS);
+  return interpretPrePass(parsed);
 }
 
 export const geminiConfigured = configured;

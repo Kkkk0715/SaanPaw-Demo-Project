@@ -1,7 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { approvalMeta, formatDistance, timeAgo, useApp, type Shelter, type ShelterApprovalStatus } from '@saanpaw/shared';
-import { Banner, Button, Card, CardHead, EmptyState, Tabs } from '@/components/ui';
+import {
+  approvalMeta,
+  formatDistance,
+  maskPrivate,
+  timeAgo,
+  useApp,
+  type Shelter,
+  type ShelterApprovalStatus,
+} from '@saanpaw/shared';
+import { Banner, Button, Card, CardHead, EmptyState, Pagination, Tabs, usePagination } from '@/components/ui';
+
+/** How long the "credentials emailed" banner stays before fading out. */
+const ISSUED_BANNER_MS = 8000;
 import { ShelterDetailPanel } from '@/components/ShelterDetailPanel';
 
 /**
@@ -17,6 +28,21 @@ export function ShelterApprovalsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const rows = shelters.filter((s) => s.approvalStatus === tab);
+  const pager = usePagination(rows, 10, tab);
+  const [fading, setFading] = useState(false);
+
+  // The credentials are already in the shelter's inbox, so the banner fades away on its own.
+  // When the email could not be sent it stays: the Developer still needs to copy them.
+  useEffect(() => {
+    setFading(false);
+    if (!issuedLogin?.emailSent) return;
+    const fade = setTimeout(() => setFading(true), ISSUED_BANNER_MS);
+    const clear = setTimeout(clearIssuedLogin, ISSUED_BANNER_MS + 1000);
+    return () => {
+      clearTimeout(fade);
+      clearTimeout(clear);
+    };
+  }, [issuedLogin, clearIssuedLogin]);
   const selected: Shelter | undefined =
     shelters.find((s) => s.id === selectedId && s.approvalStatus === tab) ?? rows[0];
 
@@ -32,6 +58,7 @@ export function ShelterApprovalsPage() {
   return (
     <>
       {issuedLogin ? (
+        <div className={fading ? 'fade-out' : undefined}>
         <Banner tone="success" title="Shelter login issued - shown once">
           {issuedLogin.emailSent ? (
             <>
@@ -49,11 +76,12 @@ export function ShelterApprovalsPage() {
             Dismiss
           </Button>
         </Banner>
+        </div>
       ) : null}
 
       <Banner tone={count('pending') ? 'warning' : 'success'} title="Verification is a manual step">
-        Confirm each permit number with the San Jose Del Monte city veterinary office before
-        approving. An approved shelter immediately starts receiving smart alerts for every report
+        Check each application's proof documents and confirm its permit with the San Jose Del Monte
+        city veterinary office before approving. An approved shelter immediately starts receiving smart alerts for every report
         inside its operating radius.
       </Banner>
 
@@ -87,7 +115,7 @@ export function ShelterApprovalsPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((s) => (
+                {pager.items.map((s) => (
                   <tr
                     key={s.id}
                     onClick={() => openShelter(s.id)}
@@ -113,7 +141,7 @@ export function ShelterApprovalsPage() {
                       </div>
                     </td>
                     <td style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 12 }}>
-                      {s.permitNumber}
+                      {maskPrivate(s.permitNumber)}
                     </td>
                     <td>{s.barangay}</td>
                     <td>{formatDistance(s.operatingRadiusMeters)}</td>
@@ -134,6 +162,7 @@ export function ShelterApprovalsPage() {
               verification.
             </EmptyState>
           )}
+          <Pagination {...pager} />
         </Card>
 
         {tab === 'pending' ? (

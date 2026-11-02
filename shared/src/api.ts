@@ -13,6 +13,7 @@ import type {
   Message,
   ModerationFlag,
   NotificationItem,
+  ProofDocument,
   ReportKind,
   ReportStatus,
   Role,
@@ -137,9 +138,17 @@ export const isLocalImageUri = (uri: string) => !/^https?:\/\//.test(uri) && !ur
 
 const guessMime = (uri: string) => (/\.png(\?|$)/i.test(uri) ? 'image/png' : /\.webp(\?|$)/i.test(uri) ? 'image/webp' : 'image/jpeg');
 
+/**
+ * What a photo is for. Animal photos go through the server's Gemini pre-pass and are refused
+ * outright unless they show an accepted animal; profile pictures and shelter logos skip it.
+ */
+export type UploadPurpose = 'animal' | 'profile';
+
 /** Sends one photo and returns its `/uploads/...` path. */
-export async function uploadImage(s: ApiSession, uri: string): Promise<string> {
+export async function uploadImage(s: ApiSession, uri: string, purpose: UploadPurpose = 'animal'): Promise<string> {
   const form = new FormData();
+  // Text fields before the file, so the server has read it by the time the photo arrives.
+  form.append('purpose', purpose);
   if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') {
     // React Native reads the file itself from this descriptor.
     form.append('photo', { uri, name: 'photo', type: guessMime(uri) } as unknown as Blob);
@@ -314,6 +323,43 @@ export interface ReportPayload {
   imageUrls: string[];
   barangay: string;
   location: AnimalReport['location'];
+  address?: string;
+  landmark?: string;
+}
+
+/** What the server tells the person right after a submission, e.g. that a photo was a duplicate. */
+export type WithNotices<T> = T & { notices?: string[] };
+
+/** The street address for a map pin, or null when none could be found. */
+export interface PinAddress {
+  address: string | null;
+  street?: string;
+  houseNumber?: string;
+  area?: string;
+}
+
+/**
+ * Proof of credentials for a shelter application. Public (no account yet), so it takes the API
+ * address rather than a session. Returns the id the application then lists in proofDocumentIds.
+ */
+export async function uploadProofDocument(
+  baseUrl: string,
+  file: { uri: string; name: string; type: string } | Blob,
+  filename = 'document',
+): Promise<ProofDocument> {
+  const form = new FormData();
+  if (typeof Blob !== 'undefined' && file instanceof Blob) form.append('document', file, filename);
+  else form.append('document', file as unknown as Blob); // React Native reads { uri, name, type } itself
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/shelter/register/proof`, { method: 'POST', body: form });
+  } catch {
+    throw new ApiRequestError(networkErrorMessage(baseUrl), 0);
+  }
+  const isJson = (response.headers.get('content-type') ?? '').includes('application/json');
+  const payload: unknown = isJson ? await response.json() : await response.text();
+  if (!response.ok) throw new ApiRequestError(errorText(payload, response.status), response.status);
+  return payload as ProofDocument;
 }
 
 const notificationsBase = (role: Role) => (role === 'shelter_admin' ? '/shelter' : '/user');
@@ -322,7 +368,10 @@ export const apiActions = {
   /** Uploads any photos still on the device first, so the report only ever holds hosted photos. */
   createReport: async (s: ApiSession, kind: ReportKind, body: ReportPayload) => {
     const imageUrls = await uploadPending(s, body.imageUrls);
-    const created = await call<AnimalReport>(s, `/user/reports/${kind}`, { method: 'POST', body: { ...body, imageUrls } });
+    const created = await call<WithNotices<AnimalReport>>(s, `/user/reports/${kind}`, {
+      method: 'POST',
+      body: { ...body, imageUrls },
+    });
     return withImageHosts(s.baseUrl, [created])[0];
   },
 
@@ -384,8 +433,37 @@ export const apiActions = {
 
   addShelterAnimal: async (s: ApiSession, body: Omit<ShelterAnimal, 'id' | 'shelterId'>) => {
     const imageUrls = await uploadPending(s, body.imageUrls);
-    const created = await call<ShelterAnimal>(s, '/shelter/animals', { method: 'POST', body: { ...body, imageUrls } });
+    const created = await call<WithNotices<ShelterAnimal>>(s, '/shelter/animals', {
+      method: 'POST',
+      body: { ...body, imageUrls },
+    });
     return withImageHosts(s.baseUrl, [created])[0];
+  },
+
+  deleteShelterAnimal: (s: ApiSession, id: string) =>
+    call<{ id: string }>(s, `/shelter/animals/${id}`, { method: 'DELETE' }),
+
+  /** Street address for a map pin (OpenStreetMap, looked up by the server). */
+  reverseGeocode: (s: ApiSession, location: LatLng) =>
+    call<PinAddress>(s, `/geo/reverse?lat=${location.latitude}&lng=${location.longitude}`),
+
+  /** Developer: the proof-of-credentials files a shelter submitted. */
+  shelterProofs: (s: ApiSession, shelterId: string) =>
+    call<ProofDocument[]>(s, `/developer/shelters/${shelterId}/proofs`),
+
+  /** Developer: one proof file's bytes. They are private, so this goes through the signed-in session. */
+  proofDocumentBlob: async (s: ApiSession, id: string): Promise<Blob> => {
+    let response: Response;
+    try {
+      response = await fetch(`${s.baseUrl}/developer/proofs/${id}`, { headers: { Authorization: `Bearer ${s.token}` } });
+    } catch {
+      throw new ApiRequestError(networkErrorMessage(s.baseUrl), 0);
+    }
+    if (!response.ok) {
+      if (response.status === 401) s.onUnauthorized?.();
+      throw new ApiRequestError(`Could not open the document (${response.status})`, response.status);
+    }
+    return response.blob();
   },
 
   updateShelterAnimal: (
@@ -405,7 +483,11 @@ export const apiActions = {
     ),
 
   resolveFlag: (s: ApiSession, id: string, action: 'dismiss' | 'remove_report') =>
-    call<{ flag: ModerationFlag }>(s, `/developer/flags/${id}/resolve`, { method: 'PATCH', body: { action } }),
+    call<{ flag: ModerationFlag; escalation?: { banned: boolean; deleted?: boolean; upheldFlags?: number } }>(
+      s,
+      `/developer/flags/${id}/resolve`,
+      { method: 'PATCH', body: { action } },
+    ),
 
   banUser: (s: ApiSession, id: string) => call<AppUser>(s, `/developer/users/${id}/ban`, { method: 'PATCH' }),
 

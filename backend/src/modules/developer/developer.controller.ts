@@ -21,6 +21,17 @@ export const developerController = {
       }),
     ),
 
+  listShelterProofs: async (req: Request, res: Response) =>
+    res.json(await developerService.listShelterProofs(req.params.id)),
+
+  getProofDocument: async (req: Request, res: Response) => {
+    const doc = await developerService.getProofDocument(req.params.id);
+    res.setHeader('Content-Type', doc.contentType);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.filename ?? 'document')}"`);
+    res.end(doc.data as unknown as Buffer);
+  },
+
   systemConfig: async (_req: Request, res: Response) =>
     res.json(await developerService.systemConfig()),
 

@@ -23,24 +23,45 @@ const imageUrls = z.array(text(1000)).max(5).default([]);
 const phMobile = z.string().trim().regex(/^\+639\d{9}$/, 'Enter a valid mobile number (+639 followed by 9 digits)');
 const optionalPhMobile = z.union([z.literal(''), phMobile]).optional();
 
-/** Only Gmail addresses are accepted, per the app's registration policy. */
-const gmailAddress = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .regex(/^[^\s@]+@gmail\.com$/, 'Enter a Gmail address (must end in @gmail.com)')
-  .max(200);
-const optionalGmailAddress = z.union([z.literal(''), gmailAddress]).optional();
+/** Any email provider is accepted (Gmail, Yahoo, Outlook, a school or work domain...). */
+const emailAddress = z.string().trim().toLowerCase().max(200).email('Enter a valid email address');
+const optionalEmailAddress = z.union([z.literal(''), emailAddress]).optional();
 
-const personName = (label: string) => text(60).min(1, `Enter ${label}`);
+/**
+ * Password policy for every password a person chooses (registration, reset, change):
+ * at least 8 characters, at least one number, and at least one special character.
+ * PASSWORD_RULES is exported so the apps can show the same checklist the server enforces.
+ */
+export const PASSWORD_RULES = [
+  { test: (pw: string) => pw.length >= 8, message: 'Use at least 8 characters' },
+  { test: (pw: string) => /\d/.test(pw), message: 'Include at least 1 number' },
+  { test: (pw: string) => /[^A-Za-z0-9\s]/.test(pw), message: 'Include at least 1 special character (e.g. ! @ # $ %)' },
+] as const;
+
+export const strongPassword = z
+  .string()
+  .max(128, 'Use at most 128 characters')
+  .superRefine((pw, ctx) => {
+    for (const rule of PASSWORD_RULES) {
+      if (!rule.test(pw)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: rule.message });
+    }
+  });
+
+/** Letters only (any alphabet, so "Ñ" and accented names work), plus space, hyphen, apostrophe and period. */
+const LETTERS_ONLY = /^[\p{L}][\p{L} .'-]*$/u;
+const personName = (label: string) =>
+  text(60).min(1, `Enter ${label}`).regex(LETTERS_ONLY, `${label[0].toUpperCase()}${label.slice(1)} can only contain letters`);
+const optionalPersonName = z.union([z.literal(''), text(60).regex(LETTERS_ONLY, 'Names can only contain letters')]).optional();
+
+const objectIdList = (max: number) => z.array(z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id')).max(max);
 
 export const registerUserSchema = z.object({
   firstName: personName('your first name'),
-  middleName: optionalText(60),
+  middleName: optionalPersonName,
   lastName: personName('your last name'),
-  email: gmailAddress,
+  email: emailAddress,
   phone: phMobile,
-  password: z.string().min(8, 'Use at least 8 characters').max(128),
+  password: strongPassword,
   barangay: text(100).min(1, 'Select your barangay'),
   alertRadiusMeters: z.coerce.number().positive().max(50_000).default(3000),
   location: latLngSchema,
@@ -50,7 +71,7 @@ export const registerShelterSchema = z.object({
   name: text(150).min(1, 'Enter the shelter name'),
   barangay: text(100).min(1, 'Select the barangay'),
   contactNumber: phMobile,
-  email: gmailAddress,
+  email: emailAddress,
   houseUnitNo: optionalText(100),
   street: optionalText(150),
   subdivision: optionalText(150),
@@ -58,6 +79,8 @@ export const registerShelterSchema = z.object({
   operatingRadiusMeters: z.coerce.number().positive().max(50_000).default(5000),
   permitNumber: optionalText(100),
   capacity: z.coerce.number().int().min(0).max(100_000).optional(),
+  /** Proof of credentials uploaded first via POST /shelter/register/proof (documents, photos). */
+  proofDocumentIds: objectIdList(10).min(1, 'Attach at least one proof document (permit, registration, ID or photos)'),
 });
 
 export const reportSchema = z.object({
@@ -72,6 +95,10 @@ export const reportSchema = z.object({
   imageUrls,
   barangay: text(100).min(1, 'Select the barangay'),
   location: latLngSchema,
+  /** Street-level address of the pin, auto-filled from the map and editable by the reporter. */
+  address: optionalText(300),
+  /** Nearby landmark, e.g. "beside the 7-Eleven on Quirino Hwy". */
+  landmark: optionalText(200),
 });
 
 export const matchScanSchema = z.object({
@@ -84,9 +111,9 @@ export const matchScanSchema = z.object({
 });
 
 export const userProfileSchema = z.object({
-  firstName: text(60).min(1).optional(),
-  middleName: optionalText(60),
-  lastName: text(60).min(1).optional(),
+  firstName: personName('your first name').optional(),
+  middleName: optionalPersonName,
+  lastName: personName('your last name').optional(),
   phone: optionalPhMobile,
   photoUrl: optionalText(1000),
   barangay: text(100).min(1).optional(),
@@ -104,14 +131,14 @@ export const shelterProfileSchema = z.object({
   barangay: text(100).min(1).optional(),
   location: latLngSchema.optional(),
   operatingRadiusMeters: z.coerce.number().positive().max(50_000).optional(),
-  email: optionalGmailAddress,
+  email: optionalEmailAddress,
   capacity: z.coerce.number().int().min(0).max(100_000).optional(),
   currentOccupancy: z.coerce.number().int().min(0).max(100_000).optional(),
 });
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Enter your current password'),
-  newPassword: z.string().min(8, 'Use at least 8 characters').max(128),
+  newPassword: strongPassword,
 });
 
 const resettableRole = z.enum(['user', 'shelter_admin']);
@@ -125,7 +152,7 @@ export const resetPasswordSchema = z.object({
   role: resettableRole,
   email: z.string().trim().toLowerCase().email('Enter a valid email address'),
   code: z.string().trim().length(6, 'Enter the 6-digit code'),
-  newPassword: z.string().min(8, 'Use at least 8 characters').max(128),
+  newPassword: strongPassword,
 });
 
 const caseStatus = z.enum(ANIMAL_CASE_STATUSES);

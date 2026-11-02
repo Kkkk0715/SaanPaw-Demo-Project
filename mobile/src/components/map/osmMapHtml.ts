@@ -37,6 +37,8 @@ export interface MapInitialState {
   selectedMarkerId?: string | null;
   radiusMeters?: number;
   radiusCenter?: LatLng;
+  /** A dashed line between two points (shelter -> report), with the camera fitted to both. */
+  route?: { from: LatLng; to: LatLng } | null;
 }
 
 export function buildMapHtml(initial: MapInitialState): string {
@@ -212,6 +214,34 @@ export function buildMapHtml(initial: MapInitialState): string {
         }
       }
 
+      // ------------------------------------------------------------- route
+
+      var routeLine = null;
+      var routeKey = null;
+
+      function applyRoute(route) {
+        if (!route) {
+          if (routeLine) {
+            map.removeLayer(routeLine);
+            routeLine = null;
+          }
+          routeKey = null;
+          return;
+        }
+        var points = [
+          [route.from.latitude, route.from.longitude],
+          [route.to.latitude, route.to.longitude],
+        ];
+        if (routeLine) routeLine.setLatLngs(points);
+        else routeLine = L.polyline(points, { color: '#2563EB', weight: 3, opacity: 0.85, dashArray: '8 8' }).addTo(map);
+        // Fit the camera to both ends once per distinct route, not on every re-render.
+        var key = points.join('|');
+        if (key !== routeKey) {
+          routeKey = key;
+          map.fitBounds(points, { padding: [48, 48], maxZoom: 16 });
+        }
+      }
+
       // -------------------------------------------------------- RN bridge
 
       // Where "recenter" goes back to. Starts at the page's own opening view, but tracks the
@@ -229,7 +259,8 @@ export function buildMapHtml(initial: MapInitialState): string {
       window.updateData = function (data) {
         applyMarkers(data.markers || [], data.selectedMarkerId, CONFIG.pickable);
         applyRadius(data.radiusMeters, data.radiusCenter);
-        if (data.center) {
+        applyRoute(data.route || null);
+        if (data.center && !data.route) {
           recenterTarget = data.center;
           var zoom = data.zoom != null ? data.zoom : lastView.zoom;
           if (
@@ -248,6 +279,7 @@ export function buildMapHtml(initial: MapInitialState): string {
 
       applyMarkers(CONFIG.markers || [], CONFIG.selectedMarkerId, CONFIG.pickable);
       applyRadius(CONFIG.radiusMeters, CONFIG.radiusCenter);
+      applyRoute(CONFIG.route || null);
 
       map.on('click', function (e) {
         if (!CONFIG.pickable) return;

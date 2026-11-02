@@ -6,6 +6,7 @@ import {
   caseStatusMeta,
   describeAnimal,
   formatDistance,
+  reportPlace,
   reportStatusMeta,
   timeAgo,
 } from '@saanpaw/shared';
@@ -67,11 +68,13 @@ export function ReportCard({
               .filter(Boolean)
               .join(' · ')}
           </Text>
+          <Row gap={0.4} align="flex-start">
+            <Ionicons name="location-outline" size={12} color={theme.colors.muted} style={{ marginTop: 2 }} />
+            <Text style={[styles.cardMeta, { flex: 1 }]} numberOfLines={2}>
+              {reportPlace(report)}
+            </Text>
+          </Row>
           <Row gap={1}>
-            <Row gap={0.4}>
-              <Ionicons name="location-outline" size={12} color={theme.colors.muted} />
-              <Text style={styles.cardMeta}>{report.barangay}</Text>
-            </Row>
             {distance !== undefined ? (
               <Row gap={0.4}>
                 <Ionicons name="navigate-outline" size={12} color={theme.colors.muted} />

@@ -2,13 +2,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { formatDistance, useApp } from '@saanpaw/shared';
+import { caseStatusMeta, countBy, formatDistance, reportPlace, reportsPerDay, useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
-import { Card, ListRow, Row, Screen, SectionHeader } from '@/components/ui';
+import { BarChart, BreakdownBars, Card, ListRow, Row, Screen, SectionHeader } from '@/components/ui';
 import { MapCanvas, type MapMarker } from '@/components/map/MapCanvas';
 import { ReportCard, describeAnimal } from '@/components/domain';
 
-/** Shelter Admin Module - Dashboard. Active reports, ongoing rescues, occupancy. */
+/** Shelter Admin Module - Dashboard. Active reports, ongoing recoveries, occupancy - as charts. */
 export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<any>) {
   const { currentShelter, shelterAreaReports, shelterAnimals, cases, notificationsFor, conversations } =
     useApp();
@@ -21,6 +21,13 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
     .filter((c) => c.shelterId === currentShelter.id)
     .reduce((sum, c) => sum + c.unreadForShelter, 0);
   const unhandled = areaReports.filter((r) => !r.caseId).length;
+  const perDay = reportsPerDay(areaReports, 7);
+  const byStatus = countBy(mine, (a) => a.caseStatus);
+  const statusRows = (Object.keys(caseStatusMeta) as (keyof typeof caseStatusMeta)[]).map((k) => ({
+    label: caseStatusMeta[k].label,
+    value: byStatus[k] ?? 0,
+    color: caseStatusMeta[k].color,
+  }));
 
   const occupancyPct = Math.min(
     100,
@@ -32,15 +39,16 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
       id: r.id,
       coordinate: r.location,
       kind: r.kind,
-      label: describeAnimal(r),
+      label: `${describeAnimal(r)} - ${reportPlace(r)}`,
     })),
     { id: currentShelter.id, coordinate: currentShelter.location, kind: 'shelter' as const, label: currentShelter.name },
   ];
 
-  const counters = [
-    { value: areaReports.length, label: 'In radius', color: theme.colors.danger, soft: theme.colors.dangerSoft, icon: 'documents' as const },
-    { value: openCases.length, label: 'Rescuing', color: theme.colors.info, soft: theme.colors.infoSoft, icon: 'medkit' as const },
-    { value: mine.filter((a) => a.caseStatus === 'reunited').length, label: 'Reunited', color: theme.colors.primary, soft: theme.colors.primarySoft, icon: 'heart' as const },
+  const glance = [
+    { label: 'Open in radius', value: areaReports.length, color: theme.colors.danger },
+    { label: 'Not responded', value: unhandled, color: theme.colors.accent },
+    { label: 'Cases recovering', value: openCases.length, color: theme.colors.info },
+    { label: 'Reunited', value: mine.filter((a) => a.caseStatus === 'reunited').length, color: theme.colors.primary },
   ];
 
   /** The four daily jobs get colour; everything else sits in the list below. */
@@ -86,17 +94,6 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
           </View>
         </View>
 
-        <View style={styles.counterStrip}>
-          {counters.map((c, i) => (
-            <View key={c.label} style={[styles.counter, i < counters.length - 1 && styles.counterEdge]}>
-              <View style={[styles.counterIcon, { backgroundColor: c.soft }]}>
-                <Ionicons name={c.icon} size={13} color={c.color} />
-              </View>
-              <Text style={styles.counterValue}>{c.value}</Text>
-              <Text style={styles.counterLabel}>{c.label}</Text>
-            </View>
-          ))}
-        </View>
       </SafeAreaView>
 
       <View style={styles.body}>
@@ -122,6 +119,23 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
               ]}
             />
           </View>
+        </Card>
+
+        <Card>
+          <Text style={styles.occTitle}>Reports in your radius · last 7 days</Text>
+          <BarChart
+            categories={perDay.map((d) => d.label)}
+            series={[
+              { label: 'Lost', color: theme.colors.danger, values: perDay.map((d) => d.lost) },
+              { label: 'Found', color: theme.colors.accent, values: perDay.map((d) => d.found) },
+            ]}
+          />
+          <BreakdownBars rows={glance} />
+        </Card>
+
+        <Card>
+          <Text style={styles.occTitle}>Animals in your care</Text>
+          <BreakdownBars rows={statusRows} />
         </Card>
 
         <Text style={styles.prompt}>Daily tasks</Text>
@@ -170,6 +184,14 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
         ))}
 
         <SectionHeader title="Shelter management" />
+        <ListRow
+          icon="paw"
+          title="Rescued pets & strays"
+          subtitle={`${openCases.length + mine.filter((a) => a.caseStatus === 'under_rescue').length} still recovering`}
+          iconColor={theme.colors.primary}
+          iconSoft={theme.colors.primarySoft}
+          onPress={() => navigation.navigate('RescuedAnimals')}
+        />
         <ListRow
           icon="chatbubbles"
           title="Message box"

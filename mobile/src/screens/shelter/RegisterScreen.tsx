@@ -15,14 +15,16 @@ import {
   useBottomInset,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
+import { ProofUploader, type ProofFile } from '@/components/domain/ProofUploader';
 import { apiRequest } from '@/services/api';
 
-const GMAIL_PATTERN = /^[^\s@]+@gmail\.com$/i;
+/** Any provider - Gmail, Yahoo, Outlook, an organisation's own domain. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
  * Shelter Admin Module - Register.
  * Submitting creates a pending application, not a session. The Developer
- * verifies the permit and issues credentials afterwards.
+ * verifies the permit and the proof documents, and issues credentials afterwards.
  */
 export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any>) {
   const bottomInset = useBottomInset();
@@ -36,6 +38,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
   const [capacity, setCapacity] = useState('');
   const [barangay, setBarangay] = useState<string | null>(null);
   const [radius, setRadius] = useState(5000);
+  const [proofs, setProofs] = useState<ProofFile[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,11 +52,14 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Enter the shelter name.';
     if (!permit.trim()) next.permit = 'The city permit number is required for verification.';
-    if (!GMAIL_PATTERN.test(email)) next.email = 'Enter a Gmail address (must end in @gmail.com).';
+    if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Enter a valid email address.';
     if (contact.length !== 13) next.contact = 'Enter a complete contact number.';
     if (!street.trim()) next.street = 'Enter the street.';
     if (!Number(capacity)) next.capacity = 'Enter the animal capacity.';
     if (!barangay) next.barangay = 'Select the barangay.';
+    if (proofs.some((p) => p.status === 'uploading')) next.proofs = 'Wait for your documents to finish uploading.';
+    else if (!proofs.some((p) => p.status === 'done')) next.proofs = 'Attach at least one proof document (permit, registration, ID or photos).';
+    else if (proofs.some((p) => p.status === 'failed')) next.proofs = 'Remove or re-attach the documents that failed to upload.';
     setErrors(next);
     if (Object.keys(next).length) return;
 
@@ -65,7 +71,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           name,
           barangay,
           contactNumber: contact,
-          email,
+          email: email.trim(),
           houseUnitNo: houseUnitNo.trim() || undefined,
           street,
           subdivision: subdivision.trim() || undefined,
@@ -73,6 +79,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           operatingRadiusMeters: radius,
           permitNumber: permit,
           capacity: Number(capacity),
+          proofDocumentIds: proofs.filter((p) => p.status === 'done' && p.id).map((p) => p.id),
         }),
       });
       setSubmitted(true);
@@ -92,13 +99,13 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
             tone="success"
             icon="checkmark-circle"
             title={`${name} submitted for review`}
-            message={`Permit ${permit} will be verified with the local government. Once approved, your login credentials are emailed to ${email}.`}
+            message={`Your permit and ${proofs.length} proof ${proofs.length === 1 ? 'document' : 'documents'} will be verified with the local government. Once approved, your login credentials are emailed to ${email}.`}
           />
           <Banner
             tone="info"
             icon="time-outline"
             title="What happens next"
-            message="1. The Developer verifies your permit with the city. 2. Your account is approved or rejected. 3. Approved shelters receive smart alerts for every report inside the operating radius you selected."
+            message="1. The Developer checks your documents and verifies your permit with the city. 2. Your account is approved or rejected. 3. Approved shelters receive smart alerts for every report inside the operating radius you selected."
           />
           <Button label="Back to shelter login" onPress={() => navigation.navigate('ShelterLogin')} />
         </View>
@@ -135,17 +142,17 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           label="Official email"
           value={email}
           onChangeText={setEmail}
-          placeholder="shelter@gmail.com"
+          placeholder="shelter@example.com"
           keyboardType="email-address"
           icon="mail-outline"
-          hint="Only Gmail addresses are accepted. Login credentials are emailed here once approved."
+          hint="Any email provider works. Login credentials are emailed here once approved."
           error={errors.email}
         />
         <PhoneField label="Contact number" value={contact} onChangeText={setContact} error={errors.contact} />
         <Field label="House/Unit No. (optional)" value={houseUnitNo} onChangeText={setHouseUnitNo} placeholder="e.g. Blk 5 Lot 12" icon="location-outline" />
         <Field label="Street" value={street} onChangeText={setStreet} placeholder="e.g. Sampaguita St." icon="location-outline" error={errors.street} />
         <Field label="Subdivision/Village (optional)" value={subdivision} onChangeText={setSubdivision} placeholder="e.g. Greenfields Subdivision" icon="location-outline" />
-        <Field label="Animal capacity" value={capacity} onChangeText={setCapacity} placeholder="e.g. 30" keyboardType="numeric" icon="albums-outline" error={errors.capacity} />
+        <Field label="Animal capacity" value={capacity} onChangeText={setCapacity} placeholder="e.g. 30" only="digits" maxLength={5} icon="albums-outline" error={errors.capacity} />
 
         <Select label="Barangay" value={barangay} options={SJDM_BARANGAY_NAMES} onChange={setBarangay} placeholder="Select the barangay" hint={errors.barangay} />
 
@@ -165,6 +172,8 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           radiusCenter={center}
           markers={[{ id: 'shelter', coordinate: center, kind: 'shelter', label: name || 'Your shelter' }]}
         />
+
+        <ProofUploader files={proofs} onChange={setProofs} error={errors.proofs} />
 
         <Button label="Submit for verification" onPress={submit} loading={busy} variant="accent" icon="send-outline" />
         <Button label="Back to login" variant="ghost" onPress={() => navigation.goBack()} />

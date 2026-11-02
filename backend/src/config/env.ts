@@ -84,5 +84,10 @@ export const env = {
     // An alias Google keeps pointed at their current recommended flash-lite model, rather than a
     // dated model name that eventually gets retired (as gemini-2.0-flash was).
     model: optional('GEMINI_MODEL', 'gemini-flash-lite-latest'),
+    /**
+     * Upload pre-pass when Gemini is configured but cannot answer (timeout, rate limit, outage):
+     * off (default) accepts the photo unscreened; on refuses it until Gemini is reachable again.
+     */
+    prePassStrict: optional('PHOTO_PREPASS_STRICT', '0') === '1',
   },
 };

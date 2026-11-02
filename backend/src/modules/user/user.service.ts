@@ -10,6 +10,8 @@ import { smartAlertService } from '../../services/smartAlert.service';
 import { moderationService } from '../../services/moderation.service';
 import { findMatches, findMatchingLostReports } from '../../services/matching.service';
 import { statsService } from '../../services/stats.service';
+import { deleteReportCascade } from '../../services/cascadeDelete.service';
+import { findDuplicatePhotos } from '../../services/photoFingerprint.service';
 import { geolocationService } from '../../services/geolocation.service';
 import { authService } from '../auth/auth.service';
 import { REPORT_STATUSES } from '../../config/constants';
@@ -123,7 +125,8 @@ export const userService = {
     });
     
     const [lng, lat] = report.lastSeenLocation.coordinates as number[];
-    await moderationService.screenReport({
+    const duplicates = await findDuplicatePhotos(report.imageUrls, String(report._id));
+    const screen = await moderationService.screenReport({
       reportType: 'lost',
       reportId: String(report._id),
       reporterId: String(reporterId),
@@ -134,6 +137,7 @@ export const userService = {
       color: data.color,
       barangay: report.barangay,
       description: data.description,
+      duplicatePhotos: duplicates.length,
     });
     
     await smartAlertService.dispatchReportAlert({
@@ -173,7 +177,7 @@ export const userService = {
       logger.error('matching: failed to rank candidates for new lost report', err);
     }
 
-    return serializeLostReport(report);
+    return { ...serializeLostReport(report), notices: submissionNotices(duplicates.length, screen.flagged) };
   },
 
   // ----- Reported Lost Pet Status Update -----
@@ -195,13 +199,17 @@ export const userService = {
     return serializeFoundReport(report);
   },
 
+  /**
+   * Same full cleanup as a Developer delete (cases, flags, matches, photos, conversations), so a
+   * deleted report can't resurface through a shelter case or match suggestion that still points to it.
+   */
   async deleteReport(reporterId: string, kind: 'lost' | 'found', id: string) {
-    const removed =
+    const owned =
       kind === 'lost'
-        ? await LostPetReport.findOneAndDelete({ _id: id, reporterId })
-        : await FoundAnimalReport.findOneAndDelete({ _id: id, reporterId });
-    if (!removed) throw ApiError.notFound('Report not found');
-    if (kind === 'lost') await MatchSuggestion.deleteMany({ lostReportId: id });
+        ? await LostPetReport.exists({ _id: id, reporterId })
+        : await FoundAnimalReport.exists({ _id: id, reporterId });
+    if (!owned) throw ApiError.notFound('Report not found');
+    await deleteReportCascade(kind, id);
     return { id };
   },
 
@@ -219,7 +227,8 @@ export const userService = {
     });
     
     const [lng, lat] = report.foundLocation.coordinates as number[];
-    await moderationService.screenReport({
+    const duplicates = await findDuplicatePhotos(report.imageUrls, String(report._id));
+    const screen = await moderationService.screenReport({
       reportType: 'found',
       reportId: String(report._id),
       reporterId: String(reporterId),
@@ -230,6 +239,7 @@ export const userService = {
       color: data.color,
       barangay: report.barangay,
       description: data.description,
+      duplicatePhotos: duplicates.length,
     });
     
     await smartAlertService.dispatchReportAlert({
@@ -269,19 +279,20 @@ export const userService = {
       logger.error('matching: failed to rank lost reports for new found report', err);
     }
 
-    return serializeFoundReport(report);
+    return { ...serializeFoundReport(report), notices: submissionNotices(duplicates.length, screen.flagged) };
   },
 
   // ----- Shelter View -----
   async listShelters() {
     const shelters = await Shelter.find({ approvalStatus: 'approved' }).lean();
-    return shelters.map(serializeShelter);
+    return shelters.map((sh) => serializeShelter(sh));
   },
 
   async listShelterAnimals(shelterId: string) {
     const animals = await ShelterAnimal.find({
       shelterId,
-      caseStatus: { $ne: 'adopted' },
+      // Adopted and inconclusive animals stop showing to the public.
+      caseStatus: { $nin: ['adopted', 'inconclusive'] },
       isHiddenByModeration: false,
     }).lean();
     return animals.map(serializeShelterAnimal);
@@ -407,6 +418,20 @@ export const userService = {
   },
 };
 
+/** What the reporter is told right after submitting. */
+function submissionNotices(duplicatePhotos: number, flagged: boolean): string[] {
+  const notices: string[] = [];
+  if (duplicatePhotos) {
+    notices.push(
+      duplicatePhotos === 1
+        ? 'One of your photos was already used on another report.'
+        : `${duplicatePhotos} of your photos were already used on other reports.`,
+    );
+  }
+  if (flagged) notices.push('Your report was flagged for an admin to review. It stays visible until then.');
+  return notices;
+}
+
 function toFeature(r: any, kind: 'lost' | 'found', point: any) {
   return {
     type: 'Feature' as const,
@@ -417,6 +442,9 @@ function toFeature(r: any, kind: 'lost' | 'found', point: any) {
       animalType: r.animalType,
       color: r.color,
       breed: r.breed,
+      barangay: r.barangay,
+      address: r.address,
+      landmark: r.landmark,
       reportedAt: r.reportedAt,
     },
   };

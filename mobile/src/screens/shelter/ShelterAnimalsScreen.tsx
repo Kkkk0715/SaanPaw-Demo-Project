@@ -11,12 +11,15 @@ import {
   Choice,
   EmptyState,
   Field,
+  Pager,
   Row,
   Screen,
   SectionHeader,
   Segmented,
   Sheet,
+  usePagination,
 } from '@/components/ui';
+import { confirmDelete } from '@/services/confirm';
 import { AnimalTypeAndBreed, ShelterAnimalCard } from '@/components/domain';
 import { shrinkPhoto } from '@/services/photo';
 import { useApp } from '@saanpaw/shared';
@@ -24,7 +27,8 @@ import type { AnimalCaseStatus, AnimalType, ShelterAnimal } from '@saanpaw/share
 
 /** Shelter Admin Module - The animals in this shelter's care. */
 export function ShelterAnimalsScreen() {
-  const { shelterAnimals, currentShelter, addShelterAnimal, toggleAnimalPublic } = useApp();
+  const { shelterAnimals, currentShelter, addShelterAnimal, toggleAnimalPublic, deleteShelterAnimal } = useApp();
+  const [notices, setNotices] = useState<string[]>([]);
 
   const [filter, setFilter] = useState<AnimalCaseStatus | 'all'>('all');
   const [adding, setAdding] = useState(false);
@@ -43,6 +47,13 @@ export function ShelterAnimalsScreen() {
 
   const mine = shelterAnimals.filter((a) => a.shelterId === currentShelter.id);
   const shown = mine.filter((a) => (filter === 'all' ? true : a.caseStatus === filter));
+  const page = usePagination(shown, undefined, filter);
+
+  const remove = async (id: string, name: string) => {
+    if (await confirmDelete(name, 'Its photos and any match suggestions pointing to it are removed too. This cannot be undone.')) {
+      deleteShelterAnimal(id);
+    }
+  };
 
   const pick = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -53,10 +64,11 @@ export function ShelterAnimalsScreen() {
 
   const save = () => {
     if (!name.trim() || !color.trim()) {
-      setError('A name and coat colour are required so the animal can be matched.');
+      setError('A name and fur color are required so the animal can be matched.');
       return;
     }
-    addShelterAnimal({
+    setNotices([]);
+    void addShelterAnimal({
       name: name.trim(),
       animalType,
       breed: breed.trim() || undefined,
@@ -68,7 +80,7 @@ export function ShelterAnimalsScreen() {
       caseStatus: 'under_rescue',
       postedPublicly: false,
       notes: notes.trim() || undefined,
-    });
+    }).then(setNotices);
     setAdding(false);
     setFormKey((k) => k + 1);
     setName('');
@@ -88,12 +100,16 @@ export function ShelterAnimalsScreen() {
         message={`Animals in ${currentShelter.name}'s care. Anything marked public also appears to users under Shelter View and is included in image-recognition matching.`}
       />
 
+      {notices.map((n) => (
+        <Banner key={n} tone="warning" icon="copy-outline" title="Heads up" message={n} />
+      ))}
+
       <Button label="Add an animal to the database" icon="add-circle-outline" onPress={() => setAdding(true)} />
 
       <Segmented
         options={[
           { label: 'All', value: 'all' },
-          { label: 'Under rescue', value: 'under_rescue', color: theme.colors.info },
+          { label: 'Under recovery', value: 'under_rescue', color: theme.colors.info },
           { label: 'Reunited', value: 'reunited' },
           { label: 'Adopted', value: 'adopted', color: theme.colors.accent },
         ]}
@@ -104,18 +120,21 @@ export function ShelterAnimalsScreen() {
       <SectionHeader title={`${shown.length} ${shown.length === 1 ? 'animal' : 'animals'}`} />
 
       {shown.length ? (
-        shown.map((a) => (
+        page.items.map((a) => (
           <ShelterAnimalCard
             key={a.id}
             animal={a}
             right={
-              <Button
-                label={a.postedPublicly ? 'Unpublish' : 'Publish'}
-                variant={a.postedPublicly ? 'ghost' : 'secondary'}
-                icon={a.postedPublicly ? 'eye-off-outline' : 'eye-outline'}
-                full={false}
-                onPress={() => toggleAnimalPublic(a.id)}
-              />
+              <View style={{ gap: 6, alignItems: 'flex-end' }}>
+                <Button
+                  label={a.postedPublicly ? 'Unpublish' : 'Publish'}
+                  variant={a.postedPublicly ? 'ghost' : 'secondary'}
+                  icon={a.postedPublicly ? 'eye-off-outline' : 'eye-outline'}
+                  full={false}
+                  onPress={() => toggleAnimalPublic(a.id)}
+                />
+                <Button label="Delete" variant="ghost" icon="trash-outline" full={false} onPress={() => void remove(a.id, a.name)} />
+              </View>
             }
           />
         ))
@@ -130,6 +149,7 @@ export function ShelterAnimalsScreen() {
           />
         </Card>
       )}
+      <Pager {...page} />
 
       <Sheet open={adding} onClose={() => setAdding(false)} title="Add animal to shelter database">
         <View style={{ gap: theme.spacing(1.5) }}>
@@ -153,7 +173,7 @@ export function ShelterAnimalsScreen() {
             onChange={setAnimalType}
           />
           <AnimalTypeAndBreed key={formKey} animalType={animalType} breed={breed} onBreedChange={setBreed} />
-          <Field label="Coat colour" value={color} onChangeText={setColor} placeholder="e.g. black with white paws" />
+          <Field label="Fur Color" value={color} onChangeText={setColor} placeholder="e.g. black with white paws" />
           <Choice
             label="Size"
             options={[

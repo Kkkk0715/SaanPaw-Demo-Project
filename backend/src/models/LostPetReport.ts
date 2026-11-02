@@ -25,6 +25,9 @@ const lostPetReportSchema = new Schema(
     imageUrls: { type: [String], default: [] },
     barangay: { type: String, required: true, trim: true },
     lastSeenLocation: { type: pointSchema, required: true },
+    /** Street-level address of the pin, e.g. "Quirino Hwy, Brgy. Muzon" - auto-filled, editable. */
+    address: { type: String, trim: true },
+    landmark: { type: String, trim: true },
     lastSeenAt: { type: Date },
     status: { type: String, enum: REPORT_STATUSES, default: 'active', index: true },
     caseId: { type: Schema.Types.ObjectId, ref: 'AnimalCase' },

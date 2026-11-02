@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   colors,
   describeAnimal,
@@ -7,22 +6,28 @@ import {
   useApp,
   type AnimalReport,
 } from '@saanpaw/shared';
-import { Badge, Banner, Button, Modal } from './ui';
+import { Badge, Button, Modal, useConfirm } from './ui';
 
 /** Full detail for one report, opened by clicking a row in Recent reports / All reports. */
 export function ReportDetailModal({ report, onClose }: { report: AnimalReport; onClose: () => void }) {
   const { deleteReport } = useApp();
-  const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const { ask, dialog } = useConfirm();
 
   const kind = reportKindStyle[report.kind];
   const status = reportStatusMeta[report.status];
 
-  const confirmDelete = () => {
-    setDeleting(true);
-    deleteReport(report.id);
-    onClose();
-  };
+  const confirmDelete = () =>
+    ask(
+      <>
+        Are you sure you want to delete this report? Any match suggestions, linked case and moderation flag tied
+        to it are removed too. This cannot be undone.
+      </>,
+      () => {
+        deleteReport(report.id);
+        onClose();
+      },
+      { title: 'Are you sure you want to delete this?', confirmLabel: 'Yes, delete' },
+    );
 
   return (
     <Modal
@@ -30,20 +35,9 @@ export function ReportDetailModal({ report, onClose }: { report: AnimalReport; o
       sub={`${kind.label} report · ${report.barangay}`}
       onClose={onClose}
       actions={
-        confirming ? (
-          <>
-            <Button variant="secondary" onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-            <Button variant="danger" disabled={deleting} onClick={confirmDelete}>
-              {deleting ? 'Deleting…' : 'Yes, delete permanently'}
-            </Button>
-          </>
-        ) : (
-          <Button variant="danger" onClick={() => setConfirming(true)}>
-            Delete report
-          </Button>
-        )
+        <Button variant="danger" onClick={confirmDelete}>
+          Delete report
+        </Button>
       }
     >
       {report.imageUrls[0] ? (
@@ -79,7 +73,7 @@ export function ReportDetailModal({ report, onClose }: { report: AnimalReport; o
         ) : null}
         {report.color ? (
           <>
-            <dt>Coat colour</dt>
+            <dt>Fur color</dt>
             <dd>{report.color}</dd>
           </>
         ) : null}
@@ -107,6 +101,14 @@ export function ReportDetailModal({ report, onClose }: { report: AnimalReport; o
             <dd>{report.description}</dd>
           </>
         ) : null}
+        <dt>Address</dt>
+        <dd>{report.address || '—'}</dd>
+        {report.landmark ? (
+          <>
+            <dt>Landmark</dt>
+            <dd>{report.landmark}</dd>
+          </>
+        ) : null}
         <dt>Barangay</dt>
         <dd>{report.barangay}</dd>
         <dt>Coordinates</dt>
@@ -126,12 +128,7 @@ export function ReportDetailModal({ report, onClose }: { report: AnimalReport; o
         </dd>
       </dl>
 
-      {confirming ? (
-        <Banner tone="danger" title="This permanently deletes the report">
-          Any match suggestions, linked case, and moderation flag tied to it are removed too. This
-          cannot be undone.
-        </Banner>
-      ) : null}
+      {dialog}
     </Modal>
   );
 }

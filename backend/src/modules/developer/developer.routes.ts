@@ -15,6 +15,8 @@ router.delete('/users/:id', asyncHandler(developerController.deleteUser));
 router.get('/shelters/pending', asyncHandler(developerController.listPendingShelters));
 router.patch('/shelters/:id/review', asyncHandler(developerController.reviewShelter));
 router.delete('/shelters/:id', asyncHandler(developerController.deleteShelter));
+router.get('/shelters/:id/proofs', asyncHandler(developerController.listShelterProofs));
+router.get('/proofs/:id', asyncHandler(developerController.getProofDocument));
 
 // System Management
 router.get('/system', asyncHandler(developerController.systemConfig));

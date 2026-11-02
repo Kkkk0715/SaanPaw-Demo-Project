@@ -2,14 +2,15 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { formatDistance, useApp } from '@saanpaw/shared';
+import { formatDistance, reportsPerDay, useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
-import { Card, EmptyState, Row, Screen, SectionHeader } from '@/components/ui';
+import { BarChart, BreakdownBars, Card, EmptyState, Row, Screen, SectionHeader } from '@/components/ui';
 import { ReportCard } from '@/components/domain';
 
 /** User Module - Dashboard. Daily stats, plus the way in to every user feature. */
 export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
-  const { stats, currentUser, myReports, nearbyReports, notificationsFor } = useApp();
+  const { stats, currentUser, myReports, nearbyReports, notificationsFor, reports } = useApp();
+  const perDay = reportsPerDay(reports, 7);
 
   const nearby = nearbyReports();
   const unread = notificationsFor('user').filter((n) => !n.isRead).length;
@@ -23,10 +24,11 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
     { label: 'Browse\nshelters', icon: 'home' as const, bg: theme.colors.info, route: 'ShelterView' },
   ];
 
-  const counters = [
-    { value: stats.lostToday, label: 'Lost today', color: theme.colors.danger, soft: theme.colors.dangerSoft, icon: 'alert-circle' as const },
-    { value: stats.foundToday, label: 'Found today', color: theme.colors.accent, soft: theme.colors.accentSoft, icon: 'paw' as const },
-    { value: stats.reunitedThisMonth, label: 'Reunited', color: theme.colors.primary, soft: theme.colors.primarySoft, icon: 'heart' as const },
+  const glance = [
+    { label: 'Lost (24h)', value: stats.lostToday, color: theme.colors.danger },
+    { label: 'Found (24h)', value: stats.foundToday, color: theme.colors.accent },
+    { label: 'Open reports', value: stats.activeReports, color: theme.colors.info },
+    { label: 'Reunited (30d)', value: stats.reunitedThisMonth, color: theme.colors.primary },
   ];
 
   return (
@@ -53,20 +55,21 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
           </Pressable>
         </Row>
 
-        <View style={styles.counterStrip}>
-          {counters.map((c, i) => (
-            <View key={c.label} style={[styles.counter, i < counters.length - 1 && styles.counterEdge]}>
-              <View style={[styles.counterIcon, { backgroundColor: c.soft }]}>
-                <Ionicons name={c.icon} size={13} color={c.color} />
-              </View>
-              <Text style={styles.counterValue}>{c.value}</Text>
-              <Text style={styles.counterLabel}>{c.label}</Text>
-            </View>
-          ))}
-        </View>
       </SafeAreaView>
 
       <View style={styles.body}>
+        <Card>
+          <Text style={styles.chartTitle}>San Jose Del Monte · last 7 days</Text>
+          <BarChart
+            categories={perDay.map((d) => d.label)}
+            series={[
+              { label: 'Lost', color: theme.colors.danger, values: perDay.map((d) => d.lost) },
+              { label: 'Found', color: theme.colors.accent, values: perDay.map((d) => d.found) },
+            ]}
+          />
+          <BreakdownBars rows={glance} />
+        </Card>
+
         <Text style={styles.prompt}>What do you need?</Text>
         <View style={styles.actionGrid}>
           {actions.map((a) => (
@@ -136,7 +139,7 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
           <View style={{ flex: 1 }}>
             <Text style={styles.tipTitle}>Clear photos match better</Text>
             <Text style={styles.tipBody}>
-              The matcher compares coat colour, markings, and build. A well-lit shot of the whole
+              The matcher compares fur color, markings, and build. A well-lit shot of the whole
               animal raises the confidence score.
             </Text>
           </View>
@@ -147,6 +150,7 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
 }
 
 const styles = StyleSheet.create({
+  chartTitle: { ...theme.type.h3, color: theme.colors.text },
   hero: {
     backgroundColor: theme.colors.primaryDark,
     paddingHorizontal: theme.spacing(2),

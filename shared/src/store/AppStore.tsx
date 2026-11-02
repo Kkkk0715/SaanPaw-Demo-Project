@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { SJDM_BARANGAYS, distanceMeters } from '../sjdm';
+import { CASE_STATUS_NEXT, humanizeStatus, isReportHidingStatus } from '../describe';
 import {
   apiActions,
   isLocalImageUri,
@@ -16,7 +17,9 @@ import {
   toStoredImageUrl,
   uploadImage,
   type ApiSession,
+  type PinAddress,
   type Snapshot,
+  type WithNotices,
 } from '../api';
 import {
   CURRENT_SHELTER_ID,
@@ -46,6 +49,7 @@ import type {
   Message,
   ModerationFlag,
   NotificationItem,
+  ProofDocument,
   ReportKind,
   ReportStatus,
   Role,
@@ -153,6 +157,8 @@ export interface NewReportInput {
   imageUrls: string[];
   barangay: string;
   location: LatLng;
+  address?: string;
+  landmark?: string;
 }
 
 interface AppState {
@@ -214,15 +220,27 @@ interface AppState {
   }) => Promise<{ candidateId: string; candidateSource: 'found_report' | 'shelter_animal'; score: number; reasons: string[] }[]>;
 
   // ---- actions
-  /** Rejects when the server refuses the report, e.g. a pin outside the service area. */
-  createReport: (input: NewReportInput) => Promise<AnimalReport>;
+  /**
+   * Rejects when the server refuses the report, e.g. a pin outside the service area. Resolves with
+   * `notices` the reporter should see right away (a reused photo, the report being flagged).
+   */
+  createReport: (input: NewReportInput) => Promise<WithNotices<AnimalReport>>;
   setReportStatus: (reportId: string, status: ReportStatus) => void;
   deleteReport: (reportId: string) => void;
   setShelterApproval: (shelterId: string, status: 'approved' | 'rejected') => void;
   openCase: (reportId: string, note: string) => void;
   setCaseStatus: (caseId: string, status: AnimalCaseStatus, note: string) => void;
   setShelterAnimalStatus: (animalId: string, status: AnimalCaseStatus) => void;
-  addShelterAnimal: (input: Omit<ShelterAnimal, 'id' | 'shelterId'>) => void;
+  /** Resolves with notices for the shelter, e.g. that a photo was already used elsewhere. */
+  addShelterAnimal: (input: Omit<ShelterAnimal, 'id' | 'shelterId'>) => Promise<string[]>;
+  /** Shelter-only: permanently deletes one of its animal records. */
+  deleteShelterAnimal: (animalId: string) => void;
+  /** Street address for a map pin. Null offline or when nothing is found. */
+  lookupAddress: (location: LatLng) => Promise<PinAddress | null>;
+  /** Developer-only: the proof-of-credentials files a shelter submitted. */
+  listShelterProofs: (shelterId: string) => Promise<ProofDocument[]>;
+  /** Developer-only: one proof file, fetched with the signed-in session. */
+  openProofDocument: (documentId: string) => Promise<Blob>;
   toggleAnimalPublic: (animalId: string) => void;
   updateShelterProfile: (patch: Partial<Shelter>) => void;
   updateUserProfile: (patch: Partial<AppUser>) => void;
@@ -273,6 +291,12 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const statusRef = useRef(status);
   statusRef.current = status;
   const pending = useRef(0);
+  /**
+   * Bumped by every change sent to the server. A reload that was already in flight when a change
+   * started carries the old data (a just-deleted report, say), so it is thrown away rather than
+   * applied - otherwise a deleted item could briefly reappear until the next reload.
+   */
+  const mutations = useRef(0);
 
   const currentUser =
     users.find((u) => u.id === (live ? (session!.role === 'user' ? selfId : '') : CURRENT_USER_ID)) ??
@@ -313,9 +337,10 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const refresh = useCallback(async () => {
     const s = sessionRef.current;
     if (!s || pending.current > 0) return;
+    const startedAt = mutations.current;
     try {
       const snap = await loadSnapshot(s);
-      if (sessionRef.current?.token !== s.token || pending.current > 0) return;
+      if (sessionRef.current?.token !== s.token || pending.current > 0 || mutations.current !== startedAt) return;
       applySnapshot(snap);
       // Recovering from a failed first load: the load error no longer applies.
       if (statusRef.current !== 'ready') setError(null);
@@ -374,6 +399,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const send = useCallback(
     (task: Promise<unknown>) => {
       pending.current += 1;
+      mutations.current += 1;
       task
         .finally(() => {
           pending.current -= 1;
@@ -501,7 +527,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
         const overlap = colorWords.filter((w) => candColor.includes(w));
         if (overlap.length) {
           s += Math.min(0.3, 0.15 * overlap.length);
-          reasons.push(`Coat colour overlap on "${overlap.join(', ')}"`);
+          reasons.push(`Fur color overlap on "${overlap.join(', ')}"`);
         }
 
         if (input.breed && c.breed && norm(c.breed).includes(norm(input.breed).split(' ')[0])) {
@@ -574,11 +600,12 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const createReport = useCallback<AppState['createReport']>(
     async (input) => {
       const session = sessionRef.current;
-      let report: AnimalReport;
+      let report: WithNotices<AnimalReport>;
       if (session) {
         const { kind, ...payload } = input;
         // The server assigns the id, so wait for it. The caller shows the error if it refuses.
         pending.current += 1;
+        mutations.current += 1;
         try {
           report = await apiActions.createReport(session, kind, payload);
         } finally {
@@ -737,7 +764,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
         audience: 'user',
         type: 'case_update',
         title: 'A shelter responded to your report',
-        body: `${currentShelter.name} opened a rescue case. Status: Under rescue.`,
+        body: `${currentShelter.name} opened a recovery case. Status: Under recovery.`,
         relatedReportId: reportId,
       });
     },
@@ -747,6 +774,9 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const setCaseStatus = useCallback<AppState['setCaseStatus']>(
     (caseId, status, note) => {
       const session = sessionRef.current;
+      const current = cases.find((c) => c.id === caseId);
+      // One-way only, same rule as the server: a closed case can't be reopened or cycled.
+      if (!current || !CASE_STATUS_NEXT[current.status].includes(status)) return;
       if (session) send(apiActions.setCaseStatus(session, caseId, status, note));
       const at = new Date().toISOString();
       let reportId: string | undefined;
@@ -763,38 +793,86 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
         }),
       );
       if (status === 'reunited' && reportId) {
-        setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status: 'recovered' } : r)));
+        setReports((prev) =>
+          prev.map((r) => (r.id === reportId ? { ...r, status: r.kind === 'lost' ? 'recovered' : 'closed' } : r)),
+        );
+      } else if (isReportHidingStatus(status) && reportId) {
+        setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status: 'closed' } : r)));
       }
       pushNotification({
         audience: 'user',
         type: 'case_update',
         title: 'Case status updated',
-        body: `${currentShelter.name} set the case to "${status.replace('_', ' ')}". ${note}`,
+        body: `${currentShelter.name} set the case to "${humanizeStatus(status)}". ${note}`,
         relatedReportId: reportId,
       });
     },
-    [currentShelter, pushNotification, send],
+    [cases, currentShelter, pushNotification, send],
   );
 
   const setShelterAnimalStatus = useCallback<AppState['setShelterAnimalStatus']>(
     (animalId, status) => {
       const session = sessionRef.current;
+      const current = shelterAnimals.find((a) => a.id === animalId);
+      if (!current || !CASE_STATUS_NEXT[current.caseStatus].includes(status)) return;
       setShelterAnimals((prev) =>
-        prev.map((a) => (a.id === animalId ? { ...a, caseStatus: status } : a)),
+        prev.map((a) =>
+          a.id === animalId
+            ? { ...a, caseStatus: status, postedPublicly: isReportHidingStatus(status) ? false : a.postedPublicly }
+            : a,
+        ),
       );
       if (session) send(apiActions.updateShelterAnimal(session, animalId, { caseStatus: status }));
+    },
+    [shelterAnimals, send],
+  );
+
+  const deleteShelterAnimal = useCallback<AppState['deleteShelterAnimal']>(
+    (animalId) => {
+      const session = sessionRef.current;
+      setShelterAnimals((prev) => prev.filter((a) => a.id !== animalId));
+      setMatches((prev) => prev.filter((m) => m.candidateId !== animalId));
+      if (session) send(apiActions.deleteShelterAnimal(session, animalId));
     },
     [send],
   );
 
+  const lookupAddress = useCallback<AppState['lookupAddress']>(async (location) => {
+    const session = sessionRef.current;
+    if (!session) return null;
+    try {
+      const result = await apiActions.reverseGeocode(session, location);
+      return result.address ? result : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const listShelterProofs = useCallback<AppState['listShelterProofs']>(async (shelterId) => {
+    const session = sessionRef.current;
+    if (!session) return [];
+    return apiActions.shelterProofs(session, shelterId);
+  }, []);
+
+  const openProofDocument = useCallback<AppState['openProofDocument']>(async (documentId) => {
+    const session = sessionRef.current;
+    if (!session) throw new Error('Proof documents can only be opened while signed in to the server.');
+    return apiActions.proofDocumentBlob(session, documentId);
+  }, []);
+
   const addShelterAnimal = useCallback<AppState['addShelterAnimal']>(
-    (input) => {
+    async (input) => {
       const session = sessionRef.current;
       if (session) {
-        send(apiActions.addShelterAnimal(session, input).then((created) => setShelterAnimals((prev) => [created, ...prev])));
-        return;
+        const task = apiActions.addShelterAnimal(session, input).then((created) => {
+          setShelterAnimals((prev) => [created, ...prev]);
+          return created.notices ?? [];
+        });
+        send(task);
+        return task.catch(() => []);
       }
       setShelterAnimals((prev) => [{ ...input, id: uid('sa'), shelterId: currentShelter.id }, ...prev]);
+      return [];
     },
     [currentShelter.id, send],
   );
@@ -820,7 +898,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       if (!session) return;
       const ready =
         patch.photoUrl && isLocalImageUri(patch.photoUrl)
-          ? uploadImage(session, patch.photoUrl).then((photoUrl) => ({ ...patch, photoUrl }))
+          ? uploadImage(session, patch.photoUrl, 'profile').then((photoUrl) => ({ ...patch, photoUrl }))
           : Promise.resolve(
               patch.photoUrl ? { ...patch, photoUrl: toStoredImageUrl(patch.photoUrl, session.baseUrl) } : patch,
             );
@@ -836,7 +914,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       if (!session) return;
       const ready =
         patch.photoUrl && isLocalImageUri(patch.photoUrl)
-          ? uploadImage(session, patch.photoUrl).then((photoUrl) => ({ ...patch, photoUrl }))
+          ? uploadImage(session, patch.photoUrl, 'profile').then((photoUrl) => ({ ...patch, photoUrl }))
           : Promise.resolve(
               patch.photoUrl ? { ...patch, photoUrl: toStoredImageUrl(patch.photoUrl, session.baseUrl) } : patch,
             );
@@ -956,7 +1034,12 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
             ? apiActions.resolveFlag(session, flagId, 'dismiss')
             : apiActions
                 .resolveFlag(session, flagId, 'remove_report')
-                .then(() => (resolution === 'account_banned' ? apiActions.banUser(session, target.reporterId) : undefined)),
+                // At the upheld-flag limit the server deletes the account itself - nothing left to ban.
+                .then((res) =>
+                  resolution === 'account_banned' && !res.escalation?.deleted
+                    ? apiActions.banUser(session, target.reporterId)
+                    : undefined,
+                ),
         );
       }
       setFlags((prev) => {
@@ -1069,6 +1152,10 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       setCaseStatus,
       setShelterAnimalStatus,
       addShelterAnimal,
+      deleteShelterAnimal,
+      lookupAddress,
+      listShelterProofs,
+      openProofDocument,
       toggleAnimalPublic,
       updateShelterProfile,
       updateUserProfile,
@@ -1091,6 +1178,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       myReports, nearbyReports, shelterAreaReports, matchesForReport, notificationsFor,
       messagesIn, caseForReport, runImageMatch, scanPhotoMatch, createReport, setReportStatus, deleteReport,
       setShelterApproval, openCase, setCaseStatus, setShelterAnimalStatus, addShelterAnimal,
+      deleteShelterAnimal, lookupAddress, listShelterProofs, openProofDocument,
       toggleAnimalPublic, updateShelterProfile, updateUserProfile, sendMessage,
       startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,
       deleteUserAccount, deleteShelterAccount, changeShelterPassword, updateSystemConfig,

@@ -71,7 +71,7 @@ export function attributeScore(input: MatchInput, candidate: ScorableCandidate):
   const overlap = colorWords.filter((w) => candidateColor.includes(w));
   if (overlap.length) {
     score += Math.min(0.3, 0.15 * overlap.length);
-    reasons.push(`Coat colour overlap on "${overlap.join(', ')}"`);
+    reasons.push(`Fur color overlap on "${overlap.join(', ')}"`);
   }
 
   if (input.breed && candidate.breed && candidate.breed.toLowerCase().includes(input.breed.toLowerCase().split(' ')[0])) {

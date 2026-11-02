@@ -20,6 +20,7 @@ import {
 import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { digitsOnly, lettersOnly } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -256,20 +257,30 @@ export function Field({
   error,
   icon,
   autoCapitalize,
+  only,
+  maxLength,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
   secureTextEntry?: boolean;
-  keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'numeric';
+  keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'numeric' | 'number-pad';
   multiline?: boolean;
   hint?: string;
   error?: string;
   icon?: IconName;
   autoCapitalize?: 'none' | 'sentences' | 'words';
+  /**
+   * Restricts what can be typed: `digits` for number-only boxes (capacity, codes, house no.),
+   * `letters` for name boxes. Anything else is dropped as it is typed or pasted.
+   */
+  only?: 'digits' | 'letters';
+  maxLength?: number;
 }) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
+  const accept = (text: string) =>
+    onChangeText(only === 'digits' ? digitsOnly(text) : only === 'letters' ? lettersOnly(text) : text);
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -284,13 +295,14 @@ export function Field({
         <TextInput
           style={[styles.input, multiline && styles.inputMultiline]}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={accept}
           placeholder={placeholder}
           placeholderTextColor={theme.colors.muted}
           secureTextEntry={hidden}
-          keyboardType={keyboardType}
+          keyboardType={keyboardType ?? (only === 'digits' ? 'number-pad' : undefined)}
           multiline={multiline}
-          autoCapitalize={autoCapitalize ?? (keyboardType === 'email-address' ? 'none' : 'sentences')}
+          maxLength={maxLength}
+          autoCapitalize={autoCapitalize ?? (keyboardType === 'email-address' ? 'none' : only === 'letters' ? 'words' : 'sentences')}
           autoCorrect={false}
         />
         {secureTextEntry ? (
@@ -1014,3 +1026,5 @@ const styles = StyleSheet.create({
   bannerTitle: { ...theme.type.label },
   bannerMessage: { ...theme.type.caption, color: theme.colors.textSoft, marginTop: 2 },
 });
+
+export * from './extras';

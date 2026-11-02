@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { approvalMeta, useApp, type Shelter } from '@saanpaw/shared';
-import { Badge, Card, CardHead, EmptyState } from '@/components/ui';
+import { Badge, Card, CardHead, EmptyState, Pagination, usePagination } from '@/components/ui';
 import { ShelterDetailPanel } from '@/components/ShelterDetailPanel';
 
 /**
@@ -25,6 +25,7 @@ export function ManageSheltersPage() {
     [shelters, query],
   );
   const selected: Shelter | undefined = shelters.find((s) => s.id === selectedId) ?? rows[0];
+  const pager = usePagination(rows, 10, query);
 
   const select = (id: string | null) => setParams(id ? { id } : {}, { replace: true });
 
@@ -55,7 +56,7 @@ export function ManageSheltersPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((s) => (
+              {pager.items.map((s) => (
                 <tr
                   key={s.id}
                   onClick={() => select(s.id)}
@@ -96,6 +97,7 @@ export function ManageSheltersPage() {
         ) : (
           <EmptyState title="No shelters match">Try a different search term.</EmptyState>
         )}
+        <Pagination {...pager} />
       </Card>
 
       <Card>

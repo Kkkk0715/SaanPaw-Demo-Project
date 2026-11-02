@@ -10,11 +10,14 @@ import {
   Caption,
   Choice,
   EmptyState,
+  Pager,
   Row,
   Screen,
   SectionHeader,
   Sheet,
+  usePagination,
 } from '@/components/ui';
+import { confirmDelete } from '@/services/confirm';
 import { ReportCard, timeAgo } from '@/components/domain';
 import { caseStatusMeta, useApp } from '@saanpaw/shared';
 import type { AnimalReport, ReportStatus } from '@saanpaw/shared';
@@ -22,12 +25,25 @@ import type { AnimalReport, ReportStatus } from '@saanpaw/shared';
 /**
  * User Module - Update the status of your own reports.
  * The shelter case timeline is shown underneath so the owner can follow a
- * rescue without leaving the screen.
+ * recovery without leaving the screen.
  */
 export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>) {
   const { myReports, setReportStatus, deleteReport, caseForReport, matchesForReport } = useApp();
   const [editing, setEditing] = useState<AnimalReport | null>(null);
   const [draftStatus, setDraftStatus] = useState<ReportStatus>('active');
+  const page = usePagination(myReports);
+
+  const remove = async () => {
+    const target = editing;
+    if (!target) return;
+    const ok = await confirmDelete(
+      target.name ? `Your report for ${target.name}` : 'This report',
+      'Any shelter case, match suggestions and messages about it are removed too. This cannot be undone.',
+    );
+    if (!ok) return;
+    deleteReport(target.id);
+    setEditing(null);
+  };
 
   const openEditor = (report: AnimalReport) => {
     setEditing(report);
@@ -64,7 +80,7 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
 
       <SectionHeader title={`My reports (${myReports.length})`} />
 
-      {myReports.map((report) => {
+      {page.items.map((report) => {
         const linkedCase = caseForReport(report.id);
         const matchCount = matchesForReport(report.id).length;
 
@@ -133,6 +149,7 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
           />
         );
       })}
+      <Pager {...page} />
 
       <Sheet open={Boolean(editing)} onClose={() => setEditing(null)} title="Update report status">
         <Caption>
@@ -154,10 +171,7 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
           label="Delete this report"
           variant="danger"
           icon="trash-outline"
-          onPress={() => {
-            if (editing) deleteReport(editing.id);
-            setEditing(null);
-          }}
+          onPress={() => void remove()}
         />
       </Sheet>
     </Screen>

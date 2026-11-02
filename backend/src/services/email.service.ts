@@ -85,3 +85,37 @@ export function passwordResetEmail(params: { email: string; code: string }): Ema
   `;
   return { to: params.email, subject: 'Your SaanPaw password reset code', text, html };
 }
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * Sent just before an account is deleted for reaching the upheld-flag limit, listing each upheld
+ * flag so the person knows exactly what caused it.
+ */
+export function accountDeletedEmail(params: { name: string; email: string; reasons: string[]; limit: number }): EmailMessage {
+  const list = params.reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
+  const text =
+    `Hi ${params.name},\n\n` +
+    `Your SaanPaw account (${params.email}) has been deleted.\n\n` +
+    `Why: ${params.limit} of your reports were flagged and, after review by a SaanPaw administrator, ` +
+    `the flags were upheld and the reports removed. Accounts that reach ${params.limit} upheld flags are deleted ` +
+    `to keep lost-pet alerts in San Jose Del Monte trustworthy.\n\n` +
+    `The upheld flags were:\n${list}\n\n` +
+    `Your reports, messages and notifications have been removed along with the account. ` +
+    `If you believe this was a mistake, reply to this email.\n\n` +
+    `- SaanPaw, San Jose Del Monte, Bulacan`;
+  const html = `
+    <p>Hi ${escapeHtml(params.name)},</p>
+    <p>Your SaanPaw account (<b>${escapeHtml(params.email)}</b>) has been <b>deleted</b>.</p>
+    <p><b>Why:</b> ${params.limit} of your reports were flagged and, after review by a SaanPaw administrator,
+    the flags were upheld and the reports removed. Accounts that reach ${params.limit} upheld flags are deleted
+    to keep lost-pet alerts in San Jose Del Monte trustworthy.</p>
+    <p>The upheld flags were:</p>
+    <ol>${params.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ol>
+    <p>Your reports, messages and notifications have been removed along with the account.
+    If you believe this was a mistake, reply to this email.</p>
+    <p>- SaanPaw, San Jose Del Monte, Bulacan</p>
+  `;
+  return { to: params.email, subject: 'Your SaanPaw account has been deleted', text, html };
+}
