@@ -7,25 +7,15 @@ import { Link } from 'react-router-dom';
  */
 
 /**
- * Photos behind the hero. Same photo service the demo data uses, with a fixed `lock` per tile so
- * every visit shows the same montage. A tile whose photo can't load falls back to a green shade,
- * so the hero still looks finished offline. Swap these for your own photos (e.g. files in
- * web/public/landing/) whenever you like - any square-ish image works.
+ * Photos behind the hero, shipped with the console itself: web/public/landing/01.jpg to 12.jpg.
+ * Kept in the project rather than loaded from a photo website, so the montage never depends on
+ * someone else's server being up. A missing or broken file shows a green tile instead.
+ * BASE_URL keeps the paths right when the console is served from a subfolder (GitHub Pages).
  */
-const MONTAGE = [
-  'dog?lock=11',
-  'cat?lock=12',
-  'puppy?lock=13',
-  'kitten?lock=14',
-  'dog?lock=15',
-  'rabbit?lock=16',
-  'cat?lock=17',
-  'dog?lock=18',
-  'kitten?lock=19',
-  'puppy?lock=20',
-  'cat?lock=21',
-  'dog?lock=22',
-].map((q) => `https://loremflickr.com/480/480/${q}`);
+const MONTAGE = Array.from(
+  { length: 12 },
+  (_, i) => `${import.meta.env.BASE_URL}landing/${String(i + 1).padStart(2, '0')}.jpg`,
+);
 
 const MODULES = [
   {
