@@ -144,12 +144,7 @@ export function LandingPage() {
       <header className="landing-hero">
         <HeroSlideshow />
         <div className="landing-hero-content">
-          <div className="landing-wordmark">
-            <span className="landing-wordmark-name">
-              <span aria-hidden>🐾</span> SaanPaw
-            </span>
-            <span className="landing-wordmark-tag">Developer Console</span>
-          </div>
+          <div className="landing-wordmark">SaanPaw</div>
           <div className="eyebrow">San Jose Del Monte, Bulacan</div>
           <h1>Bringing lost pets home and getting strays to safety.</h1>
           <p>

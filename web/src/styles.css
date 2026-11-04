@@ -1260,33 +1260,11 @@ tbody tr[data-selected='true'] {
 
 /* The system's name, the first and largest thing in the hero. */
 .landing-wordmark {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  margin-bottom: 18px;
-}
-
-.landing-wordmark-name {
   font-size: clamp(48px, 8vw, 88px);
   font-weight: 800;
   line-height: 1;
   letter-spacing: -1.5px;
-}
-
-.landing-wordmark-name span {
-  font-size: 0.7em;
-  vertical-align: 0.08em;
-}
-
-.landing-wordmark-tag {
-  padding: 5px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 18px;
 }
 
 .landing-hero .eyebrow {
