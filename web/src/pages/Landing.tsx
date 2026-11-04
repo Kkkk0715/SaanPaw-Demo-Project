@@ -9,12 +9,17 @@ import { Link } from 'react-router-dom';
 /**
  * Photos behind the hero, shipped with the console itself: web/public/landing/01.jpg to 12.jpg.
  * Kept in the project rather than loaded from a photo website, so the slideshow never depends on
- * someone else's server being up. A missing or broken file is skipped; with none, the hero is green.
+ * someone else's server being up. Each file is cropped square around its animal, and shown three
+ * to a slide. A missing or broken file leaves a green panel in its place.
  * BASE_URL keeps the paths right when the console is served from a subfolder (GitHub Pages).
  */
-const SLIDES = Array.from(
+const PHOTOS = Array.from(
   { length: 12 },
   (_, i) => `${import.meta.env.BASE_URL}landing/${String(i + 1).padStart(2, '0')}.jpg`,
+);
+const PER_SLIDE = 3;
+const SLIDES = Array.from({ length: Math.ceil(PHOTOS.length / PER_SLIDE) }, (_, i) =>
+  PHOTOS.slice(i * PER_SLIDE, i * PER_SLIDE + PER_SLIDE),
 );
 
 const MODULES = [
@@ -83,77 +88,52 @@ const FEATURES = [
   { title: 'Photo-based identity', body: 'No collars, tags or microchips needed - a clear photo is enough to start a match.' },
 ];
 
-/** How long each photo stays up before crossfading to the next. */
+/** How long each slide stays up before crossfading to the next. */
 const SLIDE_MS = 5000;
 
-/** Full-bleed crossfading slideshow behind the hero text, with dots to jump to a photo. */
+function SlidePhoto({ src, eager }: { src: string; eager: boolean }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="slide-photo">
+      {failed ? null : <img src={src} alt="" loading={eager ? 'eager' : 'lazy'} onError={() => setFailed(true)} />}
+    </div>
+  );
+}
+
+/** Full-bleed crossfading slideshow behind the hero text, three photos a slide, with dots to jump. */
 function HeroSlideshow() {
   const [active, setActive] = useState(0);
-  const [failed, setFailed] = useState<ReadonlySet<number>>(new Set());
-  const [paused, setPaused] = useState(false);
 
-  // Advance to the next photo that loaded; restarting the timer whenever `active` changes means a
-  // dot click gets a full SLIDE_MS before the slideshow moves on.
+  // Restarting the timer whenever `active` changes gives a dot click a full SLIDE_MS on screen.
   useEffect(() => {
-    if (paused || failed.size >= SLIDES.length - 1) return;
-    const timer = window.setTimeout(() => {
-      setActive((current) => {
-        for (let step = 1; step <= SLIDES.length; step++) {
-          const next = (current + step) % SLIDES.length;
-          if (!failed.has(next)) return next;
-        }
-        return current;
-      });
-    }, SLIDE_MS);
+    const timer = window.setTimeout(() => setActive((current) => (current + 1) % SLIDES.length), SLIDE_MS);
     return () => window.clearTimeout(timer);
-  }, [active, failed, paused]);
-
-  const markFailed = (index: number) => {
-    setFailed((prev) => new Set(prev).add(index));
-    if (index === active) setActive((index + 1) % SLIDES.length);
-  };
+  }, [active]);
 
   return (
     <>
       <div className="slideshow" aria-hidden>
-        {SLIDES.map((src, i) =>
-          failed.has(i) ? null : (
-            <img
-              key={src}
-              src={src}
-              alt=""
-              className={i === active ? 'slide active' : 'slide'}
-              // The first two load straight away; the rest wait until the browser is idle.
-              loading={i < 2 ? 'eager' : 'lazy'}
-              onError={() => markFailed(i)}
-            />
-          ),
-        )}
+        {SLIDES.map((photos, i) => (
+          <div key={i} className={i === active ? 'slide active' : 'slide'}>
+            {photos.map((src) => (
+              // The first two slides load straight away; the rest wait until the browser is idle.
+              <SlidePhoto key={src} src={src} eager={i < 2} />
+            ))}
+          </div>
+        ))}
       </div>
-      {failed.size < SLIDES.length - 1 ? (
-        <div className="slide-controls">
+      <div className="slide-controls">
+        {SLIDES.map((_, i) => (
           <button
+            key={i}
             type="button"
-            className="slide-pause"
-            onClick={() => setPaused((p) => !p)}
-            aria-label={paused ? 'Play slideshow' : 'Pause slideshow'}
-          >
-            {paused ? '▶' : '❚❚'}
-          </button>
-          {SLIDES.map((src, i) =>
-            failed.has(i) ? null : (
-              <button
-                key={src}
-                type="button"
-                className={i === active ? 'slide-dot active' : 'slide-dot'}
-                onClick={() => setActive(i)}
-                aria-label={`Show photo ${i + 1}`}
-                aria-current={i === active}
-              />
-            ),
-          )}
-        </div>
-      ) : null}
+            className={i === active ? 'slide-dot active' : 'slide-dot'}
+            onClick={() => setActive(i)}
+            aria-label={`Show slide ${i + 1} of ${SLIDES.length}`}
+            aria-current={i === active}
+          />
+        ))}
+      </div>
     </>
   );
 }
