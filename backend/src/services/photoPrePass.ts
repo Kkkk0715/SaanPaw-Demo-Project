@@ -48,20 +48,54 @@ const SPECIES_LABEL: Record<PrePassSpecies, string> = {
 
 const ACCEPTED_HINT = 'Please upload a clear, real photo of the dog, cat, or other pet.';
 
+/** Words Gemini sometimes uses instead of the exact values it was asked for. */
+const SPECIES_ALIASES: Record<string, PrePassSpecies> = {
+  puppy: 'dog',
+  dogs: 'dog',
+  kitten: 'cat',
+  cats: 'cat',
+  other: 'other_pet',
+  pet: 'other_pet',
+  otherpet: 'other_pet',
+};
+
 /**
- * Turns Gemini's parsed JSON into a verdict. Returns null when the answer is missing or malformed,
- * which the caller treats as "could not screen" rather than as a rejection.
+ * Reads the species loosely ("Dog", " cat ", "other pet", "kitten"), because a strict match turned
+ * small wording slips into "could not screen". Anything that is not one of the accepted animals,
+ * including words like "human", "hand" or "object", counts as "none" - refused, not waved through.
+ */
+function normaliseSpecies(value: unknown): PrePassSpecies {
+  if (typeof value !== 'string') return 'none';
+  const key = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if ((PREPASS_SPECIES as readonly string[]).includes(key)) return key as PrePassSpecies;
+  return SPECIES_ALIASES[key.replace(/_/g, '')] ?? SPECIES_ALIASES[key] ?? 'none';
+}
+
+/** true / false, also accepting the strings "true" / "false". Anything else is unknown (null). */
+function readBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase();
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+  }
+  return null;
+}
+
+/**
+ * Turns Gemini's parsed JSON into a verdict. Fails closed wherever the answer allows it: a photo
+ * that is not clearly an accepted animal is refused even when the rest of the answer is garbled.
+ * Returns null only when Gemini gave no answer at all, or named an accepted animal but did not
+ * say whether it is a real photo - the caller treats that as "could not screen".
  */
 export function interpretPrePass(parsed: Record<string, unknown> | null): PrePassVerdict | null {
   if (!parsed) return null;
-  const species = parsed.species;
-  if (typeof species !== 'string' || !(PREPASS_SPECIES as readonly string[]).includes(species)) return null;
-  if (typeof parsed.isRealPhoto !== 'boolean' || typeof parsed.inappropriate !== 'boolean') return null;
-
-  const s = species as PrePassSpecies;
+  const s = normaliseSpecies(parsed.species);
+  const isRealPhoto = readBoolean(parsed.isRealPhoto);
+  const inappropriate = readBoolean(parsed.inappropriate);
   const reasoning = String(parsed.reasoning ?? '').slice(0, 300);
 
-  if (parsed.inappropriate) {
+  if (inappropriate) {
     return { allowed: false, species: s, reasoning, message: 'This photo was refused because it contains inappropriate content.' };
   }
   if (!ALLOWED_PREPASS_SPECIES.includes(s)) {
@@ -72,7 +106,9 @@ export function interpretPrePass(parsed: Record<string, unknown> | null): PrePas
       message: `This photo was refused: it appears to show ${SPECIES_LABEL[s]}, not an animal SaanPaw accepts. ${ACCEPTED_HINT}`,
     };
   }
-  if (!parsed.isRealPhoto) {
+  // An accepted animal, but no clear yes/no on whether the photo is real: unknown, not a pass.
+  if (isRealPhoto === null || inappropriate === null) return null;
+  if (!isRealPhoto) {
     return {
       allowed: false,
       species: s,

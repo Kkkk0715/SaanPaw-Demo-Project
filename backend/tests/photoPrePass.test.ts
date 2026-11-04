@@ -50,12 +50,39 @@ describe('interpretPrePass - unusable answers', () => {
     expect(interpretPrePass(null)).toBeNull();
   });
 
-  it('returns null for an unknown species value', () => {
-    expect(interpretPrePass(answer({ species: 'dragon' }))).toBeNull();
-  });
-
-  it('returns null when the booleans are missing or the wrong type', () => {
+  it('returns null when an accepted animal comes without a clear real-photo answer', () => {
     expect(interpretPrePass(answer({ isRealPhoto: 'yes' }))).toBeNull();
     expect(interpretPrePass({ species: 'dog' })).toBeNull();
+  });
+});
+
+describe('interpretPrePass - loosely worded answers', () => {
+  it.each(['human', 'hand', 'object', 'dragon', '', undefined])('refuses an unexpected species %p', (species) => {
+    const verdict = interpretPrePass(answer({ species }));
+    expect(verdict?.allowed).toBe(false);
+    expect(verdict?.species).toBe('none');
+  });
+
+  it('refuses a non-animal even when the rest of the answer is garbled', () => {
+    expect(interpretPrePass({ species: 'person' })?.allowed).toBe(false);
+    expect(interpretPrePass({ species: 'none', isRealPhoto: 'maybe' })?.allowed).toBe(false);
+  });
+
+  it.each([
+    ['Dog', 'dog'],
+    [' CAT ', 'cat'],
+    ['kitten', 'cat'],
+    ['puppy', 'dog'],
+    ['other pet', 'other_pet'],
+    ['Other', 'other_pet'],
+  ])('reads %p as %p', (raw, species) => {
+    const verdict = interpretPrePass(answer({ species: raw }));
+    expect(verdict?.allowed).toBe(true);
+    expect(verdict?.species).toBe(species);
+  });
+
+  it('accepts "true" / "false" written as strings', () => {
+    expect(interpretPrePass(answer({ isRealPhoto: 'false' }))?.allowed).toBe(false);
+    expect(interpretPrePass(answer({ isRealPhoto: 'true', inappropriate: 'false' }))?.allowed).toBe(true);
   });
 });

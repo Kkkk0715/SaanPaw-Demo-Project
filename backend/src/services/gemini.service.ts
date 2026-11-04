@@ -49,7 +49,10 @@ async function generateJson(
 
     const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    return text ? (JSON.parse(text) as Record<string, unknown>) : null;
+    if (!text) return null;
+    // Occasionally the JSON comes wrapped in a ```json fence despite the JSON response type.
+    const json = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    return JSON.parse(json) as Record<string, unknown>;
   } catch (err) {
     logger.error('gemini: request failed', err);
     return null;
@@ -115,20 +118,30 @@ export async function assessAnimalPhoto(photoUrl: string): Promise<PhotoScreenRe
 }
 
 /**
- * Upload gate: kept short because the person is waiting on the upload, and well under the
- * 30 s Vercel function limit even when a report attaches several photos in parallel.
+ * Upload gate. Two tries of 12 s with a short pause between stay under the 30 s Vercel function
+ * limit. The retry matters: the free tier rate-limits bursts (a report with several photos, plus
+ * the matching calls that follow), and a single failed call used to let a photo in unscreened.
  */
 const PREPASS_TIMEOUT_MS = 12_000;
+const PREPASS_ATTEMPTS = 2;
+const PREPASS_RETRY_PAUSE_MS = 1_500;
 
 /**
  * Pre-pass for a photo that has not been saved yet (the upload route passes the raw bytes).
- * Returns null when Gemini is unconfigured, unreachable, or answers in an unexpected shape -
+ * Returns null when Gemini is unconfigured, or still unreachable / unreadable after a retry -
  * the caller decides what "could not screen" means. Never throws.
  */
 export async function prePassAnimalPhoto(buffer: Buffer, mimeType: string): Promise<PrePassVerdict | null> {
   if (!configured) return null;
-  const parsed = await generateJson(PREPASS_PROMPT, [{ mimeType, buffer }], PREPASS_TIMEOUT_MS);
-  return interpretPrePass(parsed);
+  for (let attempt = 1; attempt <= PREPASS_ATTEMPTS; attempt++) {
+    const verdict = interpretPrePass(await generateJson(PREPASS_PROMPT, [{ mimeType, buffer }], PREPASS_TIMEOUT_MS));
+    if (verdict) return verdict;
+    if (attempt < PREPASS_ATTEMPTS) {
+      logger.warn(`upload pre-pass: no usable answer from Gemini (attempt ${attempt}), retrying`);
+      await new Promise((resolve) => setTimeout(resolve, PREPASS_RETRY_PAUSE_MS));
+    }
+  }
+  return null;
 }
 
 export const geminiConfigured = configured;

@@ -47,8 +47,8 @@ router.post(
         if (env.gemini.prePassStrict) {
           throw new ApiError(503, 'Photo screening is unavailable right now, so the photo could not be accepted. Try again in a moment.');
         }
-        // Gemini timed out, hit a rate limit or answered oddly: let the photo through rather than
-        // block someone reporting a lost pet. The report-level flag screen still runs afterwards.
+        // PHOTO_PREPASS_STRICT=0: Gemini could not answer even after a retry, and the deployment has
+        // chosen to let the photo through. The report-level flag screen still runs afterwards.
         logger.warn('upload pre-pass: Gemini could not screen the photo, accepting it unscreened');
       }
       species = verdict?.allowed ? verdict.species : undefined;

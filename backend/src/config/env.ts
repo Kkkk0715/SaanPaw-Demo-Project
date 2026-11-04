@@ -85,9 +85,10 @@ export const env = {
     // dated model name that eventually gets retired (as gemini-2.0-flash was).
     model: optional('GEMINI_MODEL', 'gemini-flash-lite-latest'),
     /**
-     * Upload pre-pass when Gemini is configured but cannot answer (timeout, rate limit, outage):
-     * off (default) accepts the photo unscreened; on refuses it until Gemini is reachable again.
+     * Upload pre-pass when Gemini is configured but still cannot answer after a retry (rate limit,
+     * outage): on (default) refuses the photo until Gemini is reachable again, so nothing gets in
+     * unscreened; PHOTO_PREPASS_STRICT=0 accepts it and leaves it to the report-level flag screen.
      */
-    prePassStrict: optional('PHOTO_PREPASS_STRICT', '0') === '1',
+    prePassStrict: optional('PHOTO_PREPASS_STRICT', '1') !== '0',
   },
 };
