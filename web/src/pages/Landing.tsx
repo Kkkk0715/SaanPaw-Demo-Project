@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 /**
@@ -8,11 +8,11 @@ import { Link } from 'react-router-dom';
 
 /**
  * Photos behind the hero, shipped with the console itself: web/public/landing/01.jpg to 12.jpg.
- * Kept in the project rather than loaded from a photo website, so the montage never depends on
- * someone else's server being up. A missing or broken file shows a green tile instead.
+ * Kept in the project rather than loaded from a photo website, so the slideshow never depends on
+ * someone else's server being up. A missing or broken file is skipped; with none, the hero is green.
  * BASE_URL keeps the paths right when the console is served from a subfolder (GitHub Pages).
  */
-const MONTAGE = Array.from(
+const SLIDES = Array.from(
   { length: 12 },
   (_, i) => `${import.meta.env.BASE_URL}landing/${String(i + 1).padStart(2, '0')}.jpg`,
 );
@@ -83,12 +83,78 @@ const FEATURES = [
   { title: 'Photo-based identity', body: 'No collars, tags or microchips needed - a clear photo is enough to start a match.' },
 ];
 
-function MontageTile({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false);
+/** How long each photo stays up before crossfading to the next. */
+const SLIDE_MS = 5000;
+
+/** Full-bleed crossfading slideshow behind the hero text, with dots to jump to a photo. */
+function HeroSlideshow() {
+  const [active, setActive] = useState(0);
+  const [failed, setFailed] = useState<ReadonlySet<number>>(new Set());
+  const [paused, setPaused] = useState(false);
+
+  // Advance to the next photo that loaded; restarting the timer whenever `active` changes means a
+  // dot click gets a full SLIDE_MS before the slideshow moves on.
+  useEffect(() => {
+    if (paused || failed.size >= SLIDES.length - 1) return;
+    const timer = window.setTimeout(() => {
+      setActive((current) => {
+        for (let step = 1; step <= SLIDES.length; step++) {
+          const next = (current + step) % SLIDES.length;
+          if (!failed.has(next)) return next;
+        }
+        return current;
+      });
+    }, SLIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [active, failed, paused]);
+
+  const markFailed = (index: number) => {
+    setFailed((prev) => new Set(prev).add(index));
+    if (index === active) setActive((index + 1) % SLIDES.length);
+  };
+
   return (
-    <div className="montage-tile">
-      {failed ? null : <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />}
-    </div>
+    <>
+      <div className="slideshow" aria-hidden>
+        {SLIDES.map((src, i) =>
+          failed.has(i) ? null : (
+            <img
+              key={src}
+              src={src}
+              alt=""
+              className={i === active ? 'slide active' : 'slide'}
+              // The first two load straight away; the rest wait until the browser is idle.
+              loading={i < 2 ? 'eager' : 'lazy'}
+              onError={() => markFailed(i)}
+            />
+          ),
+        )}
+      </div>
+      {failed.size < SLIDES.length - 1 ? (
+        <div className="slide-controls">
+          <button
+            type="button"
+            className="slide-pause"
+            onClick={() => setPaused((p) => !p)}
+            aria-label={paused ? 'Play slideshow' : 'Pause slideshow'}
+          >
+            {paused ? '▶' : '❚❚'}
+          </button>
+          {SLIDES.map((src, i) =>
+            failed.has(i) ? null : (
+              <button
+                key={src}
+                type="button"
+                className={i === active ? 'slide-dot active' : 'slide-dot'}
+                onClick={() => setActive(i)}
+                aria-label={`Show photo ${i + 1}`}
+                aria-current={i === active}
+              />
+            ),
+          )}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -106,11 +172,7 @@ export function LandingPage() {
       </nav>
 
       <header className="landing-hero">
-        <div className="montage" aria-hidden>
-          {MONTAGE.map((src) => (
-            <MontageTile key={src} src={src} />
-          ))}
-        </div>
+        <HeroSlideshow />
         <div className="landing-hero-content">
           <div className="eyebrow">San Jose Del Monte, Bulacan</div>
           <h1>Bringing lost pets home and getting strays to safety.</h1>

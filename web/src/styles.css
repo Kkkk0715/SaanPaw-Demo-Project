@@ -1142,37 +1142,86 @@ tbody tr[data-selected='true'] {
   padding: clamp(48px, 9vw, 104px) clamp(16px, 5vw, 56px) clamp(56px, 10vw, 112px);
 }
 
-/* Animal photo montage behind the hero text. */
-.montage {
+/* Crossfading animal photo slideshow behind the hero text. */
+.slideshow {
   position: absolute;
   inset: 0;
   z-index: -2;
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  grid-auto-rows: 1fr;
-  gap: 3px;
-}
-
-.montage-tile {
-  position: relative;
   overflow: hidden;
-  min-height: 0;
   background: var(--primary-dark);
 }
 
-/* Fallback shades, so a tile whose photo can't load still reads as part of the mosaic. */
-.montage-tile:nth-child(3n) {
-  background: var(--primary);
-}
-.montage-tile:nth-child(4n + 1) {
-  background: var(--primary-darker);
-}
-
-.montage-tile img {
+.slide {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
+  opacity: 0;
+  transform: scale(1);
+  transition: opacity 1.2s ease, transform 6.5s ease-out;
+}
+
+/* The showing photo fades in and drifts slightly closer while it is up. */
+.slide.active {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.slide-controls {
+  position: absolute;
+  right: clamp(16px, 5vw, 56px);
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.slide-dot {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.slide-dot.active {
+  width: 24px;
+  background: #fff;
+}
+
+.slide-pause {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.slide-dot:focus-visible,
+.slide-pause:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide,
+  .slide.active {
+    transform: none;
+    transition: opacity 0.4s linear;
+  }
 }
 
 /* Green wash over the photos: strong on the left where the text sits, lighter on the right. */
@@ -1183,10 +1232,10 @@ tbody tr[data-selected='true'] {
   z-index: -1;
   background: linear-gradient(
     100deg,
-    rgba(11, 61, 34, 0.94) 0%,
-    rgba(11, 61, 34, 0.86) 40%,
-    rgba(18, 107, 51, 0.62) 72%,
-    rgba(21, 132, 58, 0.5) 100%
+    rgba(11, 61, 34, 0.92) 0%,
+    rgba(11, 61, 34, 0.8) 40%,
+    rgba(18, 107, 51, 0.45) 72%,
+    rgba(21, 132, 58, 0.3) 100%
   );
 }
 
@@ -1195,18 +1244,14 @@ tbody tr[data-selected='true'] {
   max-width: 760px;
 }
 
-@media (max-width: 1040px) {
-  .montage {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
 @media (max-width: 600px) {
-  .montage {
-    grid-template-columns: repeat(3, 1fr);
-  }
   .landing-hero::after {
-    background: rgba(11, 61, 34, 0.86);
+    background: rgba(11, 61, 34, 0.76);
+  }
+  .slide-controls {
+    left: 16px;
+    right: 16px;
+    justify-content: center;
   }
 }
 
