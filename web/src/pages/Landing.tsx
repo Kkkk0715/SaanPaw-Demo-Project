@@ -141,19 +141,15 @@ function HeroSlideshow() {
 export function LandingPage() {
   return (
     <div className="landing">
-      <nav className="landing-nav">
-        <div className="brand">
-          <span aria-hidden>🐾</span>
-          <div>
-            SaanPaw
-            <small>Developer Console</small>
-          </div>
-        </div>
-      </nav>
-
       <header className="landing-hero">
         <HeroSlideshow />
         <div className="landing-hero-content">
+          <div className="landing-wordmark">
+            <span className="landing-wordmark-name">
+              <span aria-hidden>🐾</span> SaanPaw
+            </span>
+            <span className="landing-wordmark-tag">Developer Console</span>
+          </div>
           <div className="eyebrow">San Jose Del Monte, Bulacan</div>
           <h1>Bringing lost pets home and getting strays to safety.</h1>
           <p>
