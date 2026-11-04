@@ -110,7 +110,7 @@ export function MapViewScreen() {
           <Text style={styles.legendText}>Found</Text>
         </Row>
         <Row gap={0.5}>
-          <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />
+          <View style={[styles.dot, { backgroundColor: theme.colors.primaryDarker }]} />
           <Text style={styles.legendText}>Shelter</Text>
         </Row>
         <Row gap={0.5}>

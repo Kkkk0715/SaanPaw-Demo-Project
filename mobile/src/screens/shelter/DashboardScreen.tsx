@@ -127,7 +127,7 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
             categories={perDay.map((d) => d.label)}
             series={[
               { label: 'Lost', color: theme.colors.danger, values: perDay.map((d) => d.lost) },
-              { label: 'Found', color: theme.colors.accent, values: perDay.map((d) => d.found) },
+              { label: 'Found', color: theme.colors.found, values: perDay.map((d) => d.found) },
             ]}
           />
           <BreakdownBars rows={glance} />

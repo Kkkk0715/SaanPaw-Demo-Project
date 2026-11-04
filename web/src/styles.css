@@ -269,8 +269,9 @@ a {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 1320px;
+  /* Uses the whole width beside the sidebar - no cap, so wide monitors don't get an empty band on the right. */
   width: 100%;
+  min-width: 0;
 }
 
 /* ---------------------------------------------------------------- pieces */
@@ -1133,9 +1134,80 @@ tbody tr[data-selected='true'] {
 }
 
 .landing-hero {
-  background: linear-gradient(150deg, var(--primary-darker) 0%, var(--primary-dark) 55%, var(--primary) 100%);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--primary-darker);
   color: #fff;
-  padding: clamp(40px, 8vw, 88px) clamp(16px, 5vw, 56px) clamp(48px, 9vw, 96px);
+  padding: clamp(48px, 9vw, 104px) clamp(16px, 5vw, 56px) clamp(56px, 10vw, 112px);
+}
+
+/* Animal photo montage behind the hero text. */
+.montage {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 3px;
+}
+
+.montage-tile {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--primary-dark);
+}
+
+/* Fallback shades, so a tile whose photo can't load still reads as part of the mosaic. */
+.montage-tile:nth-child(3n) {
+  background: var(--primary);
+}
+.montage-tile:nth-child(4n + 1) {
+  background: var(--primary-darker);
+}
+
+.montage-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Green wash over the photos: strong on the left where the text sits, lighter on the right. */
+.landing-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    rgba(11, 61, 34, 0.94) 0%,
+    rgba(11, 61, 34, 0.86) 40%,
+    rgba(18, 107, 51, 0.62) 72%,
+    rgba(21, 132, 58, 0.5) 100%
+  );
+}
+
+.landing-hero-content {
+  position: relative;
+  max-width: 760px;
+}
+
+@media (max-width: 1040px) {
+  .montage {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .montage {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .landing-hero::after {
+    background: rgba(11, 61, 34, 0.86);
+  }
 }
 
 .landing-hero .eyebrow {
@@ -1233,14 +1305,79 @@ tbody tr[data-selected='true'] {
 
 .landing-footer {
   margin-top: auto;
-  padding: 20px clamp(16px, 5vw, 56px);
+  padding: 22px clamp(16px, 5vw, 56px);
   border-top: 1px solid var(--border);
   font-size: 12px;
   color: var(--muted);
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- about the system */
+
+.landing-about {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.landing-subhead {
+  font-size: 15px;
+  margin-top: 8px;
+}
+
+.landing-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.landing-step {
   display: flex;
   gap: 12px;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--primary-faint);
+  border: 1px solid var(--primary-soft);
+}
+
+.step-num {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.landing-step h4,
+.landing-feature h4 {
+  font-size: 14px;
+  margin: 2px 0 4px;
+}
+
+.landing-step p,
+.landing-feature p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.landing-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px 20px;
+}
+
+.landing-feature {
+  padding-left: 12px;
+  border-left: 3px solid var(--primary-vivid);
 }
 
 .login-back {
@@ -1254,4 +1391,154 @@ tbody tr[data-selected='true'] {
 
 .login-back:hover {
   color: var(--primary);
+}
+
+/* ---------------------------------------------------------------- skeleton loading */
+
+.skeleton {
+  background: linear-gradient(90deg, #e9e3d6 0%, #f4efe4 40%, #e9e3d6 80%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.3s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+.skeleton.on-dark {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.2) 40%, rgba(255, 255, 255, 0.1) 80%);
+  background-size: 200% 100%;
+}
+
+.skeleton.round {
+  border-radius: 50%;
+}
+
+.skeleton.pill {
+  border-radius: var(--radius-pill);
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------------------------------------------------------------- phones */
+
+@media (max-width: 860px) {
+  /* The sidebar becomes a slim top bar: brand, then one scrollable row of sections.
+     minmax(0, 1fr): a plain 1fr column grows to fit that row's full width and pushes the
+     whole page wider than the phone; this keeps it at screen width so the row scrolls instead. */
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    padding: 12px;
+    gap: 10px;
+    min-width: 0;
+  }
+  .sidebar-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 4px;
+    margin: 0 -12px;
+    padding: 0 12px 2px;
+    scrollbar-width: none;
+  }
+  .sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-item {
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 8px 12px;
+  }
+  .nav-item.active {
+    box-shadow: inset 0 -3px 0 var(--primary-vivid);
+  }
+  .sidebar-footer {
+    padding-top: 10px;
+  }
+  .topbar {
+    position: static;
+    padding-block: 14px;
+  }
+  .content {
+    padding-top: 16px;
+  }
+}
+
+@media (max-width: 860px) {
+  /* A wide table keeps readable columns and scrolls sideways inside its own card, instead of
+     squeezing every cell to one word per line. */
+  .card > table {
+    min-width: 920px;
+  }
+}
+
+@media (max-width: 600px) {
+  .content {
+    padding-inline: 12px;
+    gap: 14px;
+  }
+  .topbar {
+    padding-inline: 12px;
+  }
+  .topbar h1 {
+    font-size: 17px;
+  }
+  .card-head {
+    flex-wrap: wrap;
+    padding: 13px 14px;
+  }
+  .card-head > div[style] {
+    margin-left: 0 !important;
+  }
+  .card-pad {
+    padding: 14px;
+  }
+  .table-search {
+    width: 100%;
+  }
+  .kv {
+    grid-template-columns: 1fr !important;
+    row-gap: 2px;
+  }
+  .kv dd {
+    margin-bottom: 8px;
+  }
+  .breakdown-row {
+    grid-template-columns: 96px 1fr 30px;
+  }
+  .tabs {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .modal-backdrop {
+    padding: 12px;
+  }
+  .landing-nav {
+    padding: 14px 16px;
+  }
 }

@@ -37,7 +37,7 @@ export function RecoveryTracker({
         </View>
       </View>
       <View style={styles.place}>
-        <Ionicons name="location" size={15} color={report.kind === 'lost' ? theme.colors.danger : theme.colors.accent} />
+        <Ionicons name="location" size={15} color={report.kind === 'lost' ? theme.colors.danger : theme.colors.found} />
         <Text style={styles.placeText}>{reportPlace(report)}</Text>
       </View>
       <MapCanvas

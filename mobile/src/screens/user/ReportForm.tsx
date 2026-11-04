@@ -295,7 +295,7 @@ export function ReportForm({
   return (
     <Screen>
       <Banner
-        tone={kind === 'lost' ? 'danger' : 'warning'}
+        tone={kind === 'lost' ? 'danger' : 'success'}
         icon={kind === 'lost' ? 'alert-circle' : 'paw'}
         title={kind === 'lost' ? 'Report a lost pet' : 'Report a found animal'}
         message={
@@ -507,7 +507,7 @@ export function ReportForm({
 
       <Button
         label={kind === 'lost' ? 'Submit lost pet report' : 'Submit found animal report'}
-        variant={kind === 'lost' ? 'danger' : 'accent'}
+        variant={kind === 'lost' ? 'danger' : 'found'}
         icon="send"
         loading={submitting}
         onPress={submit}

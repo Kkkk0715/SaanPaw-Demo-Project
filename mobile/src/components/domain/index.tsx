@@ -233,7 +233,7 @@ export function NotificationRow({
 }) {
   const meta = {
     lost_nearby: { icon: 'alert-circle' as const, color: theme.colors.danger, soft: theme.colors.dangerSoft },
-    found_nearby: { icon: 'paw' as const, color: theme.colors.accent, soft: theme.colors.accentSoft },
+    found_nearby: { icon: 'paw' as const, color: theme.colors.found, soft: theme.colors.foundSoft },
     match_found: { icon: 'sparkles' as const, color: theme.colors.primary, soft: theme.colors.primarySoft },
     case_update: { icon: 'refresh-circle' as const, color: theme.colors.info, soft: theme.colors.infoSoft },
     message: { icon: 'chatbubble-ellipses' as const, color: theme.colors.info, soft: theme.colors.infoSoft },

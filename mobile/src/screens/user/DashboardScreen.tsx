@@ -19,14 +19,14 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
 
   const actions = [
     { label: 'Report a\nlost pet', icon: 'alert-circle' as const, bg: theme.colors.danger, route: 'ReportLostPet' },
-    { label: 'Report a\nfound animal', icon: 'paw' as const, bg: theme.colors.accent, route: 'ReportFoundAnimal' },
+    { label: 'Report a\nfound animal', icon: 'paw' as const, bg: theme.colors.found, route: 'ReportFoundAnimal' },
     { label: 'Match a\nphoto', icon: 'sparkles' as const, bg: theme.colors.primary, route: 'ImageRecognition' },
     { label: 'Browse\nshelters', icon: 'home' as const, bg: theme.colors.info, route: 'ShelterView' },
   ];
 
   const glance = [
     { label: 'Lost (24h)', value: stats.lostToday, color: theme.colors.danger },
-    { label: 'Found (24h)', value: stats.foundToday, color: theme.colors.accent },
+    { label: 'Found (24h)', value: stats.foundToday, color: theme.colors.found },
     { label: 'Open reports', value: stats.activeReports, color: theme.colors.info },
     { label: 'Reunited (30d)', value: stats.reunitedThisMonth, color: theme.colors.primary },
   ];
@@ -64,7 +64,7 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
             categories={perDay.map((d) => d.label)}
             series={[
               { label: 'Lost', color: theme.colors.danger, values: perDay.map((d) => d.lost) },
-              { label: 'Found', color: theme.colors.accent, values: perDay.map((d) => d.found) },
+              { label: 'Found', color: theme.colors.found, values: perDay.map((d) => d.found) },
             ]}
           />
           <BreakdownBars rows={glance} />

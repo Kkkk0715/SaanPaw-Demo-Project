@@ -177,7 +177,7 @@ export function Button({
 }: {
   label: string;
   onPress?: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent' | 'found';
   icon?: IconName;
   disabled?: boolean;
   loading?: boolean;
@@ -215,6 +215,8 @@ export function Button({
 const buttonVariants = {
   primary: { bg: theme.colors.primary, fg: theme.colors.onPrimary, border: theme.colors.primary },
   accent: { bg: theme.colors.accent, fg: theme.colors.onPrimary, border: theme.colors.accent },
+  /** "Found animal" actions, in the same green as found reports everywhere else. */
+  found: { bg: theme.colors.found, fg: theme.colors.onPrimary, border: theme.colors.found },
   danger: { bg: theme.colors.danger, fg: theme.colors.onPrimary, border: theme.colors.danger },
   secondary: { bg: theme.colors.surface, fg: theme.colors.primaryDark, border: theme.colors.borderStrong },
   ghost: { bg: 'transparent', fg: theme.colors.textSoft, border: 'transparent' },

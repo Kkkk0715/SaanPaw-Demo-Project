@@ -104,7 +104,7 @@ export function SearchReportsScreen() {
         options={[
           { label: 'All', value: 'all' },
           { label: 'Lost', value: 'lost', color: theme.colors.danger },
-          { label: 'Found', value: 'found', color: theme.colors.accent },
+          { label: 'Found', value: 'found', color: theme.colors.found },
         ]}
         value={kind}
         onChange={(v) => setKind(v as KindFilter)}

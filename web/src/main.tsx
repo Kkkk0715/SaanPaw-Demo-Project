@@ -5,6 +5,7 @@ import { AppStoreProvider, useApp, type ApiSession } from '@saanpaw/shared';
 import { AuthProvider, useAuth } from '@/auth';
 import { API_BASE_URL } from '@/lib/api';
 import { Shell } from '@/components/Shell';
+import { ConsoleSkeleton } from '@/components/Skeleton';
 import { Banner, Button, Card } from '@/components/ui';
 import { LoginPage } from '@/pages/Login';
 import { LandingPage } from '@/pages/Landing';
@@ -40,9 +41,7 @@ function Console() {
     );
   }
 
-  if (sync.status === 'loading') {
-    return <div style={{ padding: 48, textAlign: 'center', color: 'var(--muted)' }}>Loading console data...</div>;
-  }
+  if (sync.status === 'loading') return <ConsoleSkeleton />;
 
   if (sync.status === 'error') {
     return (

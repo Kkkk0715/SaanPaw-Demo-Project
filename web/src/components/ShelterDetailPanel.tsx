@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { approvalMeta, formatDistance, maskPrivate, useApp, type ProofDocument, type Shelter } from '@saanpaw/shared';
 import { Badge, Banner, Button, Modal, useConfirm } from './ui';
+import { Bone } from './Skeleton';
 
 /**
  * Full detail for one shelter plus every account-level action on it: the
@@ -179,9 +180,21 @@ function ProofDocuments({ shelter }: { shelter: Shelter }) {
       <div style={{ fontWeight: 700, fontSize: 13 }}>Proof of credentials</div>
       {error ? <div style={{ color: 'var(--danger)', fontSize: 12.5 }}>{error}</div> : null}
       {docs === null && !error ? (
-        <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>
-          {sync.status === 'ready' ? 'Loading documents…' : 'Documents load once the console is connected.'}
-        </div>
+        sync.status === 'ready' ? (
+          <div className="proof-list" aria-label="Loading documents">
+            {[0, 1].map((i) => (
+              <div key={i} className="proof-item">
+                <Bone w={30} h={30} style={{ borderRadius: 7 }} />
+                <div className="skeleton-stack" style={{ flex: 1 }}>
+                  <Bone w="60%" h={11} />
+                  <Bone w="25%" h={9} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>Documents load once the console is connected.</div>
+        )
       ) : null}
       {docs && !docs.length ? (
         <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>

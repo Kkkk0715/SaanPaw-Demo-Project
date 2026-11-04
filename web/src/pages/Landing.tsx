@@ -1,9 +1,32 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 /**
- * Public landing page for the Developer Console - what SaanPaw is and who uses which part,
- * shown before sign-in. The console itself stays behind the login.
+ * Public landing page for the Developer Console - what SaanPaw is and how it works, shown before
+ * sign-in. The console itself stays behind the login; the hero's one button is the way in.
  */
+
+/**
+ * Photos behind the hero. Same photo service the demo data uses, with a fixed `lock` per tile so
+ * every visit shows the same montage. A tile whose photo can't load falls back to a green shade,
+ * so the hero still looks finished offline. Swap these for your own photos (e.g. files in
+ * web/public/landing/) whenever you like - any square-ish image works.
+ */
+const MONTAGE = [
+  'dog?lock=11',
+  'cat?lock=12',
+  'puppy?lock=13',
+  'kitten?lock=14',
+  'dog?lock=15',
+  'rabbit?lock=16',
+  'cat?lock=17',
+  'dog?lock=18',
+  'kitten?lock=19',
+  'puppy?lock=20',
+  'cat?lock=21',
+  'dog?lock=22',
+].map((q) => `https://loremflickr.com/480/480/${q}`);
+
 const MODULES = [
   {
     icon: '🐾',
@@ -37,6 +60,48 @@ const MODULES = [
   },
 ];
 
+/** The journey of one report, start to finish. */
+const STEPS = [
+  {
+    n: '1',
+    title: 'Report',
+    body: 'A pet owner reports a missing pet, or a resident reports a stray they found. The phone tags where it happened and the reporter adds photos and details.',
+  },
+  {
+    n: '2',
+    title: 'Match',
+    body: 'Image recognition compares the photos against found reports and animals already in shelter care, and suggests the most likely matches with the reasons behind each score.',
+  },
+  {
+    n: '3',
+    title: 'Alert',
+    body: 'Smart alerts reach residents inside their chosen radius and every verified shelter whose operating area covers the spot.',
+  },
+  {
+    n: '4',
+    title: 'Recover',
+    body: 'A shelter takes the case, tracks the location on the map, and updates its status until the animal is reunited, adopted or the case is closed.',
+  },
+];
+
+const FEATURES = [
+  { title: 'Image recognition', body: 'Photo-to-photo comparison finds the animal even when the description is vague.' },
+  { title: 'Smart alerts', body: 'Notifications go only to the people and shelters close enough to help.' },
+  { title: 'Geolocation', body: 'Every report is pinned to a street address inside San Jose Del Monte.' },
+  { title: 'Shelter integration', body: 'Verified local shelters receive, respond to and track reports in one place.' },
+  { title: 'AI moderation', body: 'False, duplicate and inappropriate reports are flagged for review before they mislead anyone.' },
+  { title: 'Photo-based identity', body: 'No collars, tags or microchips needed - a clear photo is enough to start a match.' },
+];
+
+function MontageTile({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="montage-tile">
+      {failed ? null : <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />}
+    </div>
+  );
+}
+
 export function LandingPage() {
   return (
     <div className="landing">
@@ -48,23 +113,27 @@ export function LandingPage() {
             <small>Developer Console</small>
           </div>
         </div>
-        <Link className="btn btn-on-dark" to="/login">
-          Sign in
-        </Link>
       </nav>
 
       <header className="landing-hero">
-        <div className="eyebrow">San Jose Del Monte, Bulacan</div>
-        <h1>Bringing lost pets home and getting strays to safety.</h1>
-        <p>
-          SaanPaw connects pet owners, residents and local animal shelters through image recognition,
-          smart alerts and a shared map of every lost and found report in the city. This console is
-          where the system is administered.
-        </p>
-        <div className="row row-wrap">
-          <Link className="btn btn-on-dark" to="/login">
-            Sign in to the console
-          </Link>
+        <div className="montage" aria-hidden>
+          {MONTAGE.map((src) => (
+            <MontageTile key={src} src={src} />
+          ))}
+        </div>
+        <div className="landing-hero-content">
+          <div className="eyebrow">San Jose Del Monte, Bulacan</div>
+          <h1>Bringing lost pets home and getting strays to safety.</h1>
+          <p>
+            SaanPaw connects pet owners, residents and local animal shelters through image recognition,
+            smart alerts and a shared map of every lost and found report in the city. This console is
+            where the system is administered.
+          </p>
+          <div className="row row-wrap">
+            <Link className="btn btn-on-dark" to="/login">
+              Sign in to the console
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -92,22 +161,44 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="landing-section" style={{ paddingTop: 0 }}>
-        <div className="landing-card">
-          <h3>Scope of the system</h3>
-          <ul>
-            <li>Operates only within San Jose Del Monte, Bulacan &mdash; every report is geo-fenced to the city.</li>
-            <li>Identification is photo-based &mdash; no GPS collars, RFID tags or microchips.</li>
-            <li>No integration with national government animal databases.</li>
-          </ul>
+      <section className="landing-section landing-about">
+        <h2>About SaanPaw</h2>
+        <p className="lead">
+          Every year, pets go missing and strays wander the streets of San Jose Del Monte while the people
+          who could help - owners, neighbours, shelters - never hear about each other. SaanPaw is a
+          mobile-based animal identification system that brings them together: one place to report an
+          animal, find a likely match by photo, alert the people nearby, and follow the recovery until the
+          animal is safe.
+        </p>
+
+        <h3 className="landing-subhead">How a report travels</h3>
+        <ol className="landing-steps">
+          {STEPS.map((s) => (
+            <li key={s.n} className="landing-step">
+              <span className="step-num" aria-hidden>
+                {s.n}
+              </span>
+              <div>
+                <h4>{s.title}</h4>
+                <p>{s.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <h3 className="landing-subhead">What powers it</h3>
+        <div className="landing-features">
+          {FEATURES.map((f) => (
+            <div key={f.title} className="landing-feature">
+              <h4>{f.title}</h4>
+              <p>{f.body}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       <footer className="landing-footer">
-        <span>SaanPaw &middot; Capstone project, BS Information Technology, STI San Jose Del Monte</span>
-        <Link to="/login" style={{ color: 'var(--primary)', fontWeight: 600 }}>
-          Developer sign in &rarr;
-        </Link>
+        SaanPaw &middot; Capstone project, BS Information Technology, STI San Jose Del Monte
       </footer>
     </div>
   );

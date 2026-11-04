@@ -6,14 +6,15 @@ import type { LatLng } from '@saanpaw/shared';
 export interface MapMarker {
   id: string;
   coordinate: LatLng;
-  /** Pin colour: lost = red, found = amber, shelter = green. */
+  /** Pin colour: lost = red, found = emerald green, shelter = dark forest green, me = blue. */
   kind: 'lost' | 'found' | 'shelter' | 'me';
   label?: string;
 }
 
 export const MARKER_COLOR: Record<MapMarker['kind'], string> = {
   lost: theme.colors.danger,
-  found: theme.colors.accent,
-  shelter: theme.colors.primary,
+  found: theme.colors.found,
+  // Darker than the found-report green, so a shelter and a found animal never look alike on the map.
+  shelter: theme.colors.primaryDarker,
   me: theme.colors.info,
 };

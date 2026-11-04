@@ -33,6 +33,11 @@ export const palette = {
   red600: '#B3372A',
   red100: '#F9DCD7',
 
+  // "Found animal" reports: a fresh emerald, kept apart from the brand green used for buttons,
+  // "Recovered" and shelters so a found pin still reads as its own thing.
+  emerald700: '#047857',
+  emerald100: '#D1F5E6',
+
   blue600: '#2563EB',
   blue100: '#DEE8FE',
 
@@ -48,7 +53,11 @@ export const colors = {
   primarySoft: palette.green100,
   primaryFaint: palette.green50,
 
-  /** "Found animal" reports and AI match highlights. */
+  /** "Found animal" reports. */
+  found: palette.emerald700,
+  foundSoft: palette.emerald100,
+
+  /** Warnings, pending states and AI match highlights. */
   accent: palette.amber600,
   accentSoft: palette.amber100,
 
@@ -79,7 +88,7 @@ export const radius = { sm: 8, md: 12, lg: 16, xl: 24, pill: 999 } as const;
 /** Colour + label lookup for the two report kinds, used on every surface. */
 export const reportKindStyle = {
   lost: { label: 'Lost', color: colors.danger, soft: colors.dangerSoft },
-  found: { label: 'Found', color: colors.accent, soft: colors.accentSoft },
+  found: { label: 'Found', color: colors.found, soft: colors.foundSoft },
 } as const;
 
 /** Scope: "under rescue / reunited / adopted / inconclusive". */

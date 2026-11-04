@@ -79,7 +79,7 @@ export function RescuedAnimalsScreen({ navigation }: NativeStackScreenProps<any>
         options={[
           { label: `All (${count('all')})`, value: 'all' },
           { label: `Pets (${count('pets')})`, value: 'pets', color: theme.colors.danger },
-          { label: `Strays (${count('strays')})`, value: 'strays', color: theme.colors.accent },
+          { label: `Strays (${count('strays')})`, value: 'strays', color: theme.colors.found },
         ]}
         value={group}
         onChange={(v) => setGroup(v as Group)}
