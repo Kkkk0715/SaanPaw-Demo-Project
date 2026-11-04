@@ -147,11 +147,21 @@ export const developerService = {
     }));
   },
 
-  /** The file itself - only ever served to a signed-in Developer. */
+  /**
+   * The file itself - only ever served to a signed-in Developer. Deliberately not `.lean()`: a lean
+   * read returns the bytes as a raw BSON Binary rather than a Buffer, which `res.end` rejects
+   * (that was the "Could not open the document (500)" in the console). A full document gives a Buffer,
+   * the same way stored photos are read in storage.service.ts.
+   */
   async getProofDocument(id: string) {
-    const doc = await ShelterProofDocument.findById(id).lean();
+    if (!mongoose.isValidObjectId(id)) throw ApiError.notFound('Document not found');
+    const doc = await ShelterProofDocument.findById(id);
     if (!doc || !doc.shelterId) throw ApiError.notFound('Document not found');
-    return doc;
+    return {
+      filename: doc.filename,
+      contentType: doc.contentType,
+      data: Buffer.from(doc.data as unknown as Uint8Array),
+    };
   },
 
   // ----- System Management -----

@@ -169,6 +169,7 @@ function ProofDocuments({ shelter }: { shelter: Shelter }) {
   const open = async (doc: ProofDocument) => {
     try {
       const blob = await openProofDocument(doc.id);
+      setError(null);
       setViewing({ doc, url: URL.createObjectURL(blob) });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not open the document.');

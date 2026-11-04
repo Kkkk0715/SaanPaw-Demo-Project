@@ -29,7 +29,8 @@ export const developerController = {
     res.setHeader('Content-Type', doc.contentType);
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.filename ?? 'document')}"`);
-    res.end(doc.data as unknown as Buffer);
+    res.setHeader('Content-Length', String(doc.data.length));
+    res.end(doc.data);
   },
 
   systemConfig: async (_req: Request, res: Response) =>
