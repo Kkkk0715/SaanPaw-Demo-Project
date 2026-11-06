@@ -16,6 +16,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { API_BASE_URL } from '@/services/api';
 import { theme } from '@/constants/theme';
+import { useImmersiveMode } from '@/services/immersive';
 
 /** Feeds the signed-in role's token to the data store; signed out, the store keeps its seed data. */
 function StoreProvider({ children }: { children: ReactNode }) {
@@ -31,6 +32,7 @@ function StoreProvider({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
+  useImmersiveMode();
   const [fontsReady] = useFonts({
     Fredoka_600SemiBold,
     Fredoka_700Bold,
@@ -61,7 +63,8 @@ export default function App() {
           </NavigationContainer>
         </StoreProvider>
       </AuthProvider>
-      <StatusBar style="dark" />
+      {/* Hidden while the app is open; swiping down from the top shows it briefly. */}
+      <StatusBar style="dark" hidden />
     </SafeAreaProvider>
   );
 }
