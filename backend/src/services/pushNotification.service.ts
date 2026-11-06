@@ -38,7 +38,17 @@ export async function sendPushNotifications(payloads: PushPayload[]): Promise<vo
     const { Expo } = await loadExpo();
     const messages: ExpoPushMessage[] = payloads
       .filter((p): p is PushPayload & { token: string } => Boolean(p.token) && Expo.isExpoPushToken(p.token))
-      .map((p) => ({ to: p.token, title: p.title, body: p.body, data: p.data, sound: 'default' }));
+      // 'alerts' is the high-importance Android channel the app creates, so the alert pops up on
+      // screen; high priority wakes a phone that is idle instead of holding the alert back.
+      .map((p) => ({
+        to: p.token,
+        title: p.title,
+        body: p.body,
+        data: p.data,
+        sound: 'default' as const,
+        channelId: 'alerts',
+        priority: 'high' as const,
+      }));
 
     if (!messages.length) return;
 

@@ -32,6 +32,7 @@ import { MapCanvas } from '@/components/map/MapCanvas';
 import { confirmAsync } from '@/services/confirm';
 import { shrinkPhoto } from '@/services/photo';
 import { useAuth } from '@/context/AuthContext';
+import { PushStatusCard } from '@/components/domain/PushStatusCard';
 
 /**
  * Shelter Admin Module - Shelter details and contact info.
@@ -200,6 +201,9 @@ export function ShelterProfileScreen() {
       </Card>
 
       <Button label="Save profile" icon="save-outline" onPress={save} />
+
+      <SectionHeader title="Push notifications" />
+      <PushStatusCard />
 
       <SectionHeader title="Change password" />
       <Card>

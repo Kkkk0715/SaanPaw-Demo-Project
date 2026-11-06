@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useApp } from '@saanpaw/shared';
 import { useAuth } from '@/auth';
+import { useConfirm } from '@/components/ui';
 
 /**
  * Sidebar and page header. Admin work means jumping between sections, so
@@ -41,7 +42,15 @@ const PAGE_META: Record<string, { title: string; sub: string }> = {
 
 export function Shell({ children }: { children: ReactNode }) {
   const { shelters, flags } = useApp();
-  const { signOut } = useAuth();
+  const { signOut, email } = useAuth();
+  const { ask, dialog } = useConfirm();
+
+  const confirmSignOut = () =>
+    ask(<>Are you sure you want to sign out of the console?</>, signOut, {
+      title: 'Sign out?',
+      confirmLabel: 'Yes, sign out',
+      tone: 'primary',
+    });
   const { pathname } = useLocation();
 
   const counts = {
@@ -85,13 +94,14 @@ export function Shell({ children }: { children: ReactNode }) {
 
         <div className="sidebar-footer">
           <div className="sidebar-avatar" aria-hidden>
-            SD
+            {(email?.[0] ?? 'D').toUpperCase()}
           </div>
-          <div className="sidebar-user">
-            <div style={{ fontSize: 12.5, fontWeight: 600 }}>System Developer</div>
-            <div className="sidebar-sub">dev@saanpaw.ph</div>
+          {/* The account's name is the email it signs in with - developer accounts have no other name. */}
+          <div className="sidebar-user" title={email ?? undefined}>
+            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{email ?? 'Developer'}</div>
+            <div className="sidebar-sub">Developer</div>
           </div>
-          <button className="sidebar-signout" onClick={signOut}>
+          <button className="sidebar-signout" onClick={confirmSignOut}>
             Sign out
           </button>
         </div>
@@ -106,6 +116,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </header>
         <div className="content">{children}</div>
       </div>
+      {dialog}
     </div>
   );
 }

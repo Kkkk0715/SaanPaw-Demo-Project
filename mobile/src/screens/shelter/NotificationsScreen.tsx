@@ -12,6 +12,7 @@ import {
   SectionHeader,
 } from '@/components/ui';
 import { NotificationRow } from '@/components/domain';
+import { notificationTarget } from '@/navigation/notificationTarget';
 
 /** Shelter Admin Module - Alerts for reports inside the operating radius. */
 export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProps<any>) {
@@ -52,8 +53,8 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
               item={n}
               onPress={() => {
                 markNotificationRead(n.id);
-                if (n.type === 'message') navigation.navigate('Messages');
-                else if (n.relatedReportId) navigation.navigate('AnimalReports');
+                const target = notificationTarget('shelter_admin', n.type, n.relatedReportId);
+                if (target.screen !== 'ShelterNotifications') navigation.navigate(target.screen, target.params);
               }}
             />
           ))

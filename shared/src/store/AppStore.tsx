@@ -18,6 +18,7 @@ import {
   uploadImage,
   type ApiSession,
   type PinAddress,
+  type RoadRoute,
   type Snapshot,
   type WithNotices,
 } from '../api';
@@ -237,6 +238,8 @@ interface AppState {
   deleteShelterAnimal: (animalId: string) => void;
   /** Street address for a map pin. Null offline or when nothing is found. */
   lookupAddress: (location: LatLng) => Promise<PinAddress | null>;
+  /** Road route between two pins, or null (no route, offline, or demo mode): draw a straight line then. */
+  lookupRoute: (from: LatLng, to: LatLng) => Promise<RoadRoute | null>;
   /** Developer-only: the proof-of-credentials files a shelter submitted. */
   listShelterProofs: (shelterId: string) => Promise<ProofDocument[]>;
   /** Developer-only: one proof file, fetched with the signed-in session. */
@@ -848,6 +851,17 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     }
   }, []);
 
+  const lookupRoute = useCallback<AppState['lookupRoute']>(async (from, to) => {
+    const session = sessionRef.current;
+    if (!session) return null;
+    try {
+      const result = await apiActions.roadRoute(session, from, to);
+      return result.path ? (result as RoadRoute) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const listShelterProofs = useCallback<AppState['listShelterProofs']>(async (shelterId) => {
     const session = sessionRef.current;
     if (!session) return [];
@@ -1154,6 +1168,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       addShelterAnimal,
       deleteShelterAnimal,
       lookupAddress,
+      lookupRoute,
       listShelterProofs,
       openProofDocument,
       toggleAnimalPublic,
@@ -1178,7 +1193,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       myReports, nearbyReports, shelterAreaReports, matchesForReport, notificationsFor,
       messagesIn, caseForReport, runImageMatch, scanPhotoMatch, createReport, setReportStatus, deleteReport,
       setShelterApproval, openCase, setCaseStatus, setShelterAnimalStatus, addShelterAnimal,
-      deleteShelterAnimal, lookupAddress, listShelterProofs, openProofDocument,
+      deleteShelterAnimal, lookupAddress, lookupRoute, listShelterProofs, openProofDocument,
       toggleAnimalPublic, updateShelterProfile, updateUserProfile, sendMessage,
       startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,
       deleteUserAccount, deleteShelterAccount, changeShelterPassword, updateSystemConfig,

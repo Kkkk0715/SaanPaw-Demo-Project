@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme, reportKindStyle } from '@/constants/theme';
-import { distanceMeters, formatDistance, reportPlace, useApp } from '@saanpaw/shared';
+import { distanceMeters, formatDistance, isWithinSJDM, reportPlace, useApp, type LatLng } from '@saanpaw/shared';
 import { Badge, Caption, Card, Choice, Row, SectionHeader } from '@/components/ui';
 import { MapCanvas, type MapMarker } from '@/components/map/MapCanvas';
 import { ReportCard, describeAnimal } from '@/components/domain';
+import { locationService } from '@/services/locationService';
 
 type Filter = 'all' | 'lost' | 'found' | 'shelters';
 
@@ -13,21 +14,51 @@ type Filter = 'all' | 'lost' | 'found' | 'shelters';
  * User Module - Map View.
  * Reports plotted across the city. The translucent circle is the alert radius.
  */
-export function MapViewScreen() {
+export function MapViewScreen({ route }: { route?: { params?: { focusReportId?: string } } }) {
   const { reports, shelters, currentUser } = useApp();
   const [filter, setFilter] = useState<Filter>('all');
   const [selected, setSelected] = useState<string | null>(null);
   const [radiusOnly, setRadiusOnly] = useState<'radius' | 'city'>('city');
+  /** Where the phone actually is, once known. Until then (or with location off) the registered spot. */
+  const [here, setHere] = useState<LatLng | null>(null);
+
+  // Show the user where they are as soon as the map opens, without pressing the recenter button:
+  // the phone's last known position straight away, then a fresh fix when it arrives. Positions
+  // outside San Jose Del Monte are ignored, since nothing outside the city is on this map.
+  useEffect(() => {
+    let cancelled = false;
+    const take = (p: LatLng | null) => {
+      if (!cancelled && p && isWithinSJDM(p.latitude, p.longitude)) setHere(p);
+    };
+    void locationService.getRecent().then(take).catch(() => {});
+    void locationService.getCurrent().then(take).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const me = here ?? currentUser.location;
+
+  // "Show on the map" from a report's page: select that pin and centre the map on it.
+  const focusReportId = route?.params?.focusReportId;
+  useEffect(() => {
+    if (!focusReportId) return;
+    setFilter('all');
+    setRadiusOnly('city');
+    setSelected(focusReportId);
+  }, [focusReportId]);
+  const focusReport = focusReportId && selected === focusReportId ? reports.find((r) => r.id === focusReportId) : undefined;
 
   const visibleReports = useMemo(
     () =>
       reports
         .filter((r) => r.status !== 'closed')
         .filter((r) => (filter === 'lost' || filter === 'found' ? r.kind === filter : filter !== 'shelters'))
-        .map((r) => ({ ...r, distance: distanceMeters(currentUser.location, r.location) }))
-        .filter((r) => (radiusOnly === 'radius' ? r.distance <= currentUser.alertRadiusMeters : true))
+        .map((r) => ({ ...r, distance: distanceMeters(me, r.location) }))
+        // The alert radius is drawn around the registered spot, the same place alerts are sent for.
+        .filter((r) => (radiusOnly === 'radius' ? distanceMeters(currentUser.location, r.location) <= currentUser.alertRadiusMeters : true))
         .sort((a, b) => a.distance - b.distance),
-    [reports, filter, radiusOnly, currentUser],
+    [reports, filter, radiusOnly, currentUser, me],
   );
 
   const approvedShelters = shelters.filter((s) => s.approvalStatus === 'approved');
@@ -56,9 +87,9 @@ export function MapViewScreen() {
     return [
       ...reportPins,
       ...shelterPins,
-      { id: 'me', coordinate: currentUser.location, kind: 'me', label: 'You' },
+      { id: 'me', coordinate: me, kind: 'me', label: here ? 'You are here' : 'You (registered location)' },
     ];
-  }, [visibleReports, approvedShelters, filter, currentUser.location]);
+  }, [visibleReports, approvedShelters, filter, me, here]);
 
   const selectedReport = visibleReports.find((r) => r.id === selected);
   const selectedShelter = approvedShelters.find((s) => s.id === selected);
@@ -91,8 +122,8 @@ export function MapViewScreen() {
 
       <MapCanvas
         height={330}
-        initialCenter={currentUser.location}
-        initialZoom={12}
+        initialCenter={focusReport?.location ?? me}
+        initialZoom={focusReport ? 16 : here ? 15 : 12}
         markers={markers}
         selectedMarkerId={selected}
         onMarkerPress={setSelected}
@@ -130,7 +161,7 @@ export function MapViewScreen() {
             <Row gap={0.75}>
               <Badge label={`${selectedShelter.currentOccupancy}/${selectedShelter.capacity} animals`} />
               <Badge
-                label={`${formatDistance(distanceMeters(currentUser.location, selectedShelter.location))} away`}
+                label={`${formatDistance(distanceMeters(me, selectedShelter.location))} away`}
                 color={theme.colors.info}
                 soft={theme.colors.infoSoft}
               />
@@ -157,7 +188,7 @@ export function MapViewScreen() {
               <Card key={s.id} onPress={() => setSelected(s.id)}>
                 <Text style={styles.selTitle}>{s.name}</Text>
                 <Caption>
-                  {s.barangay} · {formatDistance(distanceMeters(currentUser.location, s.location))} away ·
+                  {s.barangay} · {formatDistance(distanceMeters(me, s.location))} away ·
                   operating radius {formatDistance(s.operatingRadiusMeters)}
                 </Caption>
               </Card>

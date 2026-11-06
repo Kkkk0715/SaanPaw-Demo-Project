@@ -13,50 +13,92 @@ import { interpretPrePass, PREPASS_PROMPT, type PrePassVerdict } from './photoPr
  * its own request. `matching.service.ts` accounts for that by pre-filtering candidates with the
  * cheap attribute heuristic first, so only a handful of genuinely plausible pairs ever reach here.
  */
-const configured = Boolean(env.gemini.apiKey);
+const keys = env.gemini.apiKeys;
+const configured = keys.length > 0;
 
-/** Calls Gemini with a prompt and 0+ inline images, parsing the JSON response it's asked to return. */
+/** No Gemini call may hold a request open longer than this, unless the caller asks for less. */
+const DEFAULT_TIMEOUT_MS = 10_000;
+/** How long a key that hit its rate limit (429) or quota (403) is skipped before it is tried again. */
+const KEY_REST_MS = 60_000;
+
+const restingUntil = new Map<number, number>();
+let nextKey = 0;
+
+/**
+ * Keys to try for one call, round-robin so the load spreads evenly, leaving out any key still
+ * resting after a rate limit. Empty when every key is resting: the call then gives up at once
+ * instead of waiting, which is what kept report submissions hanging until Vercel killed them.
+ */
+function keysToTry(): number[] {
+  const now = Date.now();
+  const start = nextKey++ % keys.length;
+  const order = keys.map((_, i) => (start + i) % keys.length);
+  return order.filter((i) => (restingUntil.get(i) ?? 0) <= now);
+}
+
+/**
+ * Calls Gemini with a prompt and 0+ inline images, parsing the JSON response it's asked to return.
+ * Never throws and never runs past `timeoutMs`: on a rate limit it moves straight to the next key;
+ * on a timeout, network error or server error it returns null rather than retrying with the time
+ * the person is waiting on. Keys are sent in a header and logged by number, never in a URL or log.
+ */
 async function generateJson(
   prompt: string,
   images: { mimeType: string; buffer: Buffer }[],
-  timeoutMs?: number,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${env.gemini.model}:generateContent?key=${env.gemini.apiKey}`,
-      {
-        method: 'POST',
-        signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt },
-                ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.buffer.toString('base64') } })),
-              ],
-            },
-          ],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
-        }),
-      },
-    );
-
-    if (!res.ok) {
-      logger.error(`gemini: request failed (${res.status})`);
-      return null;
-    }
-
-    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return null;
-    // Occasionally the JSON comes wrapped in a ```json fence despite the JSON response type.
-    const json = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    return JSON.parse(json) as Record<string, unknown>;
-  } catch (err) {
-    logger.error('gemini: request failed', err);
+  const deadline = Date.now() + timeoutMs;
+  const candidates = keysToTry();
+  if (!candidates.length) {
+    logger.warn('gemini: every key is resting after a rate limit, skipping this call');
     return null;
   }
+
+  const body = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.buffer.toString('base64') } })),
+        ],
+      },
+    ],
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
+  });
+
+  for (const index of candidates) {
+    const remaining = deadline - Date.now();
+    if (remaining < 500) break;
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${env.gemini.model}:generateContent`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(remaining),
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[index] },
+        body,
+      });
+
+      if (res.status === 429 || res.status === 403) {
+        restingUntil.set(index, Date.now() + KEY_REST_MS);
+        logger.warn(`gemini: key #${index + 1} hit its limit (${res.status}), resting it and trying the next key`);
+        continue;
+      }
+      if (!res.ok) {
+        logger.error(`gemini: request failed (${res.status})`);
+        return null;
+      }
+
+      const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) return null;
+      // Occasionally the JSON comes wrapped in a ```json fence despite the JSON response type.
+      const json = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      return JSON.parse(json) as Record<string, unknown>;
+    } catch (err) {
+      logger.error('gemini: request failed', err);
+      return null;
+    }
+  }
+  return null;
 }
 
 const COMPARE_PROMPT = `You are comparing two photos to help reunite a lost pet with its owner.
@@ -64,6 +106,9 @@ Photo A: a lost pet. Photo B: a candidate - a found stray, or an animal in a she
 Judge only visual similarity: fur color and pattern, breed-typical features, distinctive markings, and build or size. Ignore background, lighting, pose, and image quality differences.
 Respond with strict JSON only, no other text, matching this shape exactly:
 {"score": <integer 0-100, how likely these two photos show the same individual animal>, "reasoning": "<one short sentence citing the most important similarity or difference>"}`;
+
+/** Several comparisons run side by side after a report is saved; each gets a short budget. */
+const COMPARE_TIMEOUT_MS = 8_000;
 
 export interface PhotoCompareResult {
   score: number; // 0-1
@@ -77,7 +122,7 @@ export async function compareAnimalPhotos(photoUrlA: string, photoUrlB: string):
   const [a, b] = await Promise.all([readStoredPhoto(photoUrlA), readStoredPhoto(photoUrlB)]);
   if (!a || !b) return null;
 
-  const parsed = await generateJson(COMPARE_PROMPT, [a, b]);
+  const parsed = await generateJson(COMPARE_PROMPT, [a, b], COMPARE_TIMEOUT_MS);
   const score = Number(parsed?.score);
   if (!Number.isFinite(score)) return null;
 

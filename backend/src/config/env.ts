@@ -80,7 +80,14 @@ export const env = {
    * in report flagging both fall back to their non-AI behaviour (see gemini.service.ts).
    */
   gemini: {
-    apiKey: optional('GEMINI_API_KEY', ''),
+    /**
+     * One key, or several separated by commas (GEMINI_API_KEYS, or a comma list in GEMINI_API_KEY).
+     * gemini.service.ts rotates through them and rests a key for a minute when it hits its limit.
+     * Google counts limits per Cloud project, so only keys from different projects add capacity.
+     */
+    apiKeys: [...new Set([...list(process.env.GEMINI_API_KEYS), ...list(process.env.GEMINI_API_KEY)])],
+    /** The first key - kept so existing "is Gemini configured?" checks keep working. */
+    apiKey: [...list(process.env.GEMINI_API_KEYS), ...list(process.env.GEMINI_API_KEY)][0] ?? '',
     // An alias Google keeps pointed at their current recommended flash-lite model, rather than a
     // dated model name that eventually gets retired (as gemini-2.0-flash was).
     model: optional('GEMINI_MODEL', 'gemini-flash-lite-latest'),

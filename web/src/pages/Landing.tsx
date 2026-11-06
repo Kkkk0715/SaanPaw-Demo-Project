@@ -154,7 +154,7 @@ export function LandingPage() {
           </p>
           <div className="row row-wrap">
             <Link className="btn btn-on-dark" to="/login">
-              Sign in to the console
+              Sign in
             </Link>
           </div>
         </div>

@@ -9,11 +9,14 @@ import { AnimalStatusScreen } from '@/screens/shelter/AnimalStatusScreen';
 import { MessagesScreen } from '@/screens/shelter/MessagesScreen';
 import { ShelterProfileScreen } from '@/screens/shelter/ShelterProfileScreen';
 import { ShelterNotificationsScreen } from '@/screens/shelter/NotificationsScreen';
+import { ReportDetailScreen } from '@/screens/common/ReportDetailScreen';
 import { headerStyle } from './navTheme';
+import { useNotificationTaps } from './useNotificationTaps';
 
 const Stack = createNativeStackNavigator();
 
 export function ShelterNavigator() {
+  useNotificationTaps('shelter_admin', 'Shelter');
   return (
     <Stack.Navigator
       screenOptions={{ ...headerStyle, headerTitleStyle: { ...theme.type.h2, color: theme.colors.text } }}
@@ -28,6 +31,7 @@ export function ShelterNavigator() {
       <Stack.Screen name="Messages" component={MessagesScreen} options={{ title: 'Message Box' }} />
       <Stack.Screen name="ShelterNotifications" component={ShelterNotificationsScreen} options={{ title: 'Notifications' }} />
       <Stack.Screen name="ShelterProfile" component={ShelterProfileScreen} options={{ title: 'Shelter Profile' }} />
+      <Stack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: 'Report details' }} />
     </Stack.Navigator>
   );
 }

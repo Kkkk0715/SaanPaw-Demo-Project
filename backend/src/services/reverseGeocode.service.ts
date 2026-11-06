@@ -19,6 +19,12 @@ export interface ReverseGeocodeResult {
   houseNumber?: string;
   /** Neighbourhood / subdivision / barangay as OpenStreetMap names it. */
   area?: string;
+  /**
+   * Every place name OSM gave for the pin, most specific first (subdivision, then barangay...).
+   * The apps match these against the city's barangay list, so the report is tagged with the
+   * barangay the pin is actually in rather than the nearest of a few hand-placed centres.
+   */
+  places?: string[];
 }
 
 interface NominatimAddress {
@@ -47,7 +53,10 @@ export function formatNominatimAddress(a: NominatimAddress | undefined, fallback
     (p, i, all): p is string => Boolean(p) && all.indexOf(p) === i,
   );
   if (!parts.length) return fallback ? { address: fallback } : null;
-  return { address: parts.join(', '), street, houseNumber: a.house_number, area };
+  const places = [a.neighbourhood, a.residential, a.quarter, a.suburb, a.village, a.hamlet].filter(
+    (p, i, all): p is string => Boolean(p) && all.indexOf(p) === i,
+  );
+  return { address: parts.join(', '), street, houseNumber: a.house_number, area, ...(places.length ? { places } : {}) };
 }
 
 const cache = new Map<string, ReverseGeocodeResult | null>();

@@ -21,7 +21,7 @@ import {
 import { CaseStatusPill, ShelterCard, timeAgo } from '@/components/domain';
 
 /** User Module - Browse shelters, see the animals they hold, and message them. */
-export function ShelterViewScreen() {
+export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelters' | 'animals' | 'messages' } } }) {
   const {
     shelters,
     shelterAnimals,
@@ -33,7 +33,8 @@ export function ShelterViewScreen() {
     markConversationRead,
   } = useApp();
 
-  const [tab, setTab] = useState<'shelters' | 'animals' | 'messages'>('shelters');
+  // A message notification opens straight onto the messages tab.
+  const [tab, setTab] = useState<'shelters' | 'animals' | 'messages'>(route?.params?.tab ?? 'shelters');
   const [composeFor, setComposeFor] = useState<Shelter | null>(null);
   const [draft, setDraft] = useState('');
   const [replies, setReplies] = useState<Record<string, string>>({});

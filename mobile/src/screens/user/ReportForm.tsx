@@ -4,8 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { theme, reportKindStyle } from '@/constants/theme';
 import {
-  SJDM_BARANGAY_NAMES,
+  SJDM_ALL_BARANGAY_NAMES,
   SJDM_BARANGAYS,
+  barangayFromPlaces,
   formatDistance,
   isWithinSJDM,
   nearestBarangay,
@@ -56,6 +57,8 @@ export function ReportForm({
   const [description, setDescription] = useState('');
   const [barangay, setBarangay] = useState<string | null>(currentUser.barangay);
   const [pin, setPin] = useState<LatLng>(currentUser.location);
+  /** Bumped when the device location is tagged, so the map flies there by itself. */
+  const [mapFocus, setMapFocus] = useState<{ center: LatLng; key: number } | null>(null);
   /** Street-level address of the pin: filled in from the map, then editable. */
   const [address, setAddress] = useState('');
   const [landmark, setLandmark] = useState('');
@@ -102,6 +105,7 @@ export function ReportForm({
       }
       setPin(position);
       setBarangay(nearestBarangay(position).name);
+      setMapFocus({ center: position, key: Date.now() });
       setGeo({ state: 'tagged' });
     } catch {
       setGeo({
@@ -128,6 +132,11 @@ export function ReportForm({
     const timer = setTimeout(async () => {
       const result = await lookupAddress(pin);
       if (seq !== lookupSeq.current) return; // the pin moved again meanwhile
+      // The barangay the pin is really in, from the map's own address data. The nearest-centre
+      // guess set when the pin moved only knows a handful of barangays, so it often named the
+      // reporter's own barangay or a neighbouring one instead.
+      const pinBarangay = barangayFromPlaces([...(result?.places ?? []), result?.area]);
+      if (pinBarangay) setBarangay(pinBarangay);
       if (result?.address) {
         setAddress(result.address);
         setAddressLookup('found');
@@ -436,11 +445,14 @@ export function ReportForm({
         <Select
           label="Barangay"
           value={barangay}
-          options={SJDM_BARANGAY_NAMES}
+          options={SJDM_ALL_BARANGAY_NAMES}
           onChange={(b) => {
             setBarangay(b);
             const found = SJDM_BARANGAYS.find((x) => x.name === b);
-            if (found) setPin(found.center);
+            if (found) {
+              setPin(found.center);
+              setMapFocus({ center: found.center, key: Date.now() });
+            }
           }}
           hint={errors.barangay}
         />
@@ -451,6 +463,7 @@ export function ReportForm({
           initialZoom={14}
           markers={[{ id: 'pin', coordinate: pin, kind, label: barangay ?? 'Selected location' }]}
           selectedMarkerId="pin"
+          focus={mapFocus}
           onPickLocation={(point) => {
             setPin(point);
             // Keep the barangay in step with the pin.

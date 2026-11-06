@@ -6,6 +6,7 @@ import { developerController } from './developer.controller';
 const router = Router();
 router.use(authenticate, authorize('developer'));
 
+router.get('/me', asyncHandler(developerController.me));
 router.get('/dashboard', asyncHandler(developerController.dashboard));
 router.get('/overview', asyncHandler(developerController.overview));
 router.patch('/users/:id/ban', asyncHandler(developerController.banUser));

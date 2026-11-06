@@ -336,6 +336,16 @@ export interface PinAddress {
   street?: string;
   houseNumber?: string;
   area?: string;
+  /** Every place name OpenStreetMap gave for the pin, most specific first. */
+  places?: string[];
+}
+
+/** The road route between two pins, as the server's router found it. */
+export interface RoadRoute {
+  /** [latitude, longitude] pairs along the roads. */
+  path: [number, number][];
+  distanceMeters: number;
+  durationSeconds: number;
 }
 
 /**
@@ -442,6 +452,13 @@ export const apiActions = {
 
   deleteShelterAnimal: (s: ApiSession, id: string) =>
     call<{ id: string }>(s, `/shelter/animals/${id}`, { method: 'DELETE' }),
+
+  /** Road route between two pins (OSRM, looked up by the server). `path` is null when none was found. */
+  roadRoute: (s: ApiSession, from: LatLng, to: LatLng) =>
+    call<RoadRoute | { path: null }>(
+      s,
+      `/geo/route?fromLat=${from.latitude}&fromLng=${from.longitude}&toLat=${to.latitude}&toLng=${to.longitude}`,
+    ),
 
   /** Street address for a map pin (OpenStreetMap, looked up by the server). */
   reverseGeocode: (s: ApiSession, location: LatLng) =>

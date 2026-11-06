@@ -4,6 +4,7 @@ import { formatDistance, useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
 import { Banner, Button, Card, Caption, EmptyState, Screen, SectionHeader } from '@/components/ui';
 import { NotificationRow } from '@/components/domain';
+import { notificationTarget } from '@/navigation/notificationTarget';
 
 /**
  * User Module - Smart Notifications.
@@ -48,11 +49,10 @@ export function UserNotificationsScreen({ navigation }: BottomTabScreenProps<any
               item={n}
               onPress={() => {
                 markNotificationRead(n.id);
-                if (n.type === 'match_found' && n.relatedReportId) {
-                  navigation.navigate('ImageRecognition', { reportId: n.relatedReportId });
-                } else if (n.relatedReportId) {
-                  navigation.navigate('Map');
-                }
+                // The report's own page (or matches / My Reports / messages), not just the map.
+                const target = notificationTarget('user', n.type, n.relatedReportId);
+                if (target.screen === 'HomeTabs') return; // already on Alerts
+                navigation.navigate(target.screen, target.params);
               }}
             />
           ))

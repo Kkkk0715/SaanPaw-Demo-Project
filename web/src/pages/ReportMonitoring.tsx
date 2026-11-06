@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
   colors,
   describeAnimal,
@@ -28,6 +28,7 @@ import {
   usePagination,
 } from '@/components/ui';
 import { ReportDetailModal } from '@/components/ReportDetailModal';
+import { FlagDetailModal } from '@/components/FlagDetailModal';
 
 /** Upheld flags at which the server deletes the account and emails the person why. */
 const BAN_THRESHOLD = 3;
@@ -41,6 +42,28 @@ export function ReportMonitoringPage() {
   const [tab, setTab] = useState<'flagged' | 'all' | 'accounts'>('flagged');
   const [acting, setActing] = useState<ModerationFlag | null>(null);
   const [selectedReport, setSelectedReport] = useState<AnimalReport | null>(null);
+  const [viewingFlag, setViewingFlag] = useState<ModerationFlag | null>(null);
+  const moderateRef = useRef<HTMLDivElement>(null);
+
+  // "Take action" from the detail popup: bring the moderation card (below the table) into view.
+  useEffect(() => {
+    if (acting) moderateRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [acting]);
+
+  /** Rows open the flag detail on click, or on Enter / Space for keyboard users. */
+  const openRow = (f: ModerationFlag) => ({
+    onClick: () => setViewingFlag(f),
+    onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
+      if (e.target !== e.currentTarget) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setViewingFlag(f);
+      }
+    },
+    tabIndex: 0,
+    className: 'clickable-row',
+    title: 'View report details',
+  });
   const { ask, dialog } = useConfirm();
 
   const pending = flags.filter((f) => f.resolution === 'pending');
@@ -147,7 +170,7 @@ export function ReportMonitoringPage() {
                     const isShelterFlag = f.reportType === 'shelter_animal';
                     const note = item ? (item as AnimalReport).description ?? (item as ShelterAnimal).notes : undefined;
                     return (
-                      <tr key={f.id}>
+                      <tr key={f.id} {...openRow(f)}>
                         <td>
                           <Thumb src={item?.imageUrls[0]} alt="Flagged item" />
                         </td>
@@ -180,7 +203,8 @@ export function ReportMonitoringPage() {
                         </td>
                         <td>{f.reporterName}</td>
                         <td style={{ color: 'var(--muted)' }}>{timeAgo(f.flaggedAt)}</td>
-                        <td>
+                        {/* Its own click, not the row's "view details". */}
+                        <td onClick={(e) => e.stopPropagation()}>
                           <Button variant="danger" small onClick={() => setActing(f)}>
                             Take action
                           </Button>
@@ -199,6 +223,7 @@ export function ReportMonitoringPage() {
           </Card>
 
           {acting ? (
+            <div ref={moderateRef}>
             <Card>
               <CardHead
                 title="Moderate report"
@@ -230,6 +255,7 @@ export function ReportMonitoringPage() {
                 </div>
               </div>
             </Card>
+            </div>
           ) : null}
 
           {resolved.length ? (
@@ -238,6 +264,8 @@ export function ReportMonitoringPage() {
               <table>
                 <thead>
                   <tr>
+                    <th style={{ width: 62 }}>Photo</th>
+                    <th>Report</th>
                     <th>Reason</th>
                     <th>Outcome</th>
                     <th>Reporter</th>
@@ -246,8 +274,18 @@ export function ReportMonitoringPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {resolvedPage.items.map((f) => (
-                    <tr key={f.id}>
+                  {resolvedPage.items.map((f) => {
+                    const item = flaggedItem(f);
+                    return (
+                    <tr key={f.id} {...openRow(f)}>
+                      <td>
+                        <Thumb src={item?.imageUrls[0]} alt="Flagged item" />
+                      </td>
+                      <td>
+                        <div className="cell-title">
+                          {item ? describeAnimal(item) : f.reportType === 'shelter_animal' ? 'Removed posting' : 'Removed report'}
+                        </div>
+                      </td>
                       <td>{flagReasonLabel[f.reason]}</td>
                       <td>
                         <Badge
@@ -260,7 +298,8 @@ export function ReportMonitoringPage() {
                       <td style={{ color: 'var(--muted)', maxWidth: 420 }}>{f.detail}</td>
                       <td style={{ color: 'var(--muted)' }}>{timeAgo(f.flaggedAt)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
               <Pagination {...resolvedPage} />
@@ -404,6 +443,17 @@ export function ReportMonitoringPage() {
         </Card>
       ) : null}
 
+      {viewingFlag ? (
+        <FlagDetailModal
+          flag={viewingFlag}
+          item={flaggedItem(viewingFlag)}
+          onClose={() => setViewingFlag(null)}
+          onTakeAction={() => {
+            setActing(viewingFlag);
+            setViewingFlag(null);
+          }}
+        />
+      ) : null}
       {selectedReport ? (
         <ReportDetailModal report={selectedReport} onClose={() => setSelectedReport(null)} />
       ) : null}

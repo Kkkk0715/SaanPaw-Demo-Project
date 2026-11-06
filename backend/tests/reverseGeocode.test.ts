@@ -4,7 +4,19 @@ describe('formatNominatimAddress', () => {
   it('puts the most specific parts first', () => {
     expect(
       formatNominatimAddress({ house_number: '12', road: 'Quirino Highway', suburb: 'Muzon', city: 'San Jose del Monte' }),
-    ).toEqual({ address: '12 Quirino Highway, Muzon, San Jose del Monte', street: 'Quirino Highway', houseNumber: '12', area: 'Muzon' });
+    ).toEqual({
+      address: '12 Quirino Highway, Muzon, San Jose del Monte',
+      street: 'Quirino Highway',
+      houseNumber: '12',
+      area: 'Muzon',
+      places: ['Muzon'],
+    });
+  });
+
+  it('lists every place name, most specific first, for barangay matching', () => {
+    expect(
+      formatNominatimAddress({ residential: 'Francisco Homes', quarter: 'Francisco Homes-Narra', suburb: 'Kaypian' })?.places,
+    ).toEqual(['Francisco Homes', 'Francisco Homes-Narra', 'Kaypian']);
   });
 
   it('skips missing parts and repeated names', () => {

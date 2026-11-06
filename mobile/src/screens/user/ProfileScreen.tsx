@@ -23,6 +23,7 @@ import {
 import { confirmAsync } from '@/services/confirm';
 import { shrinkPhoto } from '@/services/photo';
 import { useAuth } from '@/context/AuthContext';
+import { PushStatusCard } from '@/components/domain/PushStatusCard';
 
 /** User Module - Account details, alert radius, and sign out. */
 export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
@@ -161,6 +162,9 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
             Currently {formatDistance(currentUser.alertRadiusMeters)}. Changes apply straight away.
           </Caption>
         </Card>
+
+        <SectionHeader title="Push notifications" />
+        <PushStatusCard />
 
         <SectionHeader title="Shortcuts" />
         <ListRow

@@ -125,8 +125,12 @@ export const userService = {
     });
     
     const [lng, lat] = report.lastSeenLocation.coordinates as number[];
-    const duplicates = await findDuplicatePhotos(report.imageUrls, String(report._id));
-    const screen = await moderationService.screenReport({
+
+    // The report is saved. Screening, nearby alerts and matching are independent of each other, so
+    // they run side by side: one after another, their Gemini calls added up past Vercel's time
+    // limit (FUNCTION_INVOCATION_TIMEOUT) and the app showed an error for a report that had saved.
+    const duplicatesTask = findDuplicatePhotos(report.imageUrls, String(report._id));
+    const screenTask = duplicatesTask.then((duplicates) => moderationService.screenReport({
       reportType: 'lost',
       reportId: String(report._id),
       reporterId: String(reporterId),
@@ -138,9 +142,9 @@ export const userService = {
       barangay: report.barangay,
       description: data.description,
       duplicatePhotos: duplicates.length,
-    });
-    
-    await smartAlertService.dispatchReportAlert({
+    }));
+
+    const alertTask = smartAlertService.dispatchReportAlert({
       reportType: 'lost',
       reportId: String(report._id),
       reporterId: String(reporterId),
@@ -152,31 +156,34 @@ export const userService = {
     // Real candidates ranked now (attribute pre-filter + Gemini photo comparison for the top few),
     // so matches are already there the first time the owner opens this report. Never blocks
     // report creation: a matching hiccup just means no suggestions yet, not a failed submission.
-    try {
-      const ranked = await findMatches({
-        animalType: report.animalType,
-        color: data.color,
-        breed: data.breed,
-        size: data.size,
-        location: data.location,
-        imageUrl: report.imageUrls[0],
-      });
-      if (ranked.length) {
-        await MatchSuggestion.insertMany(
-          ranked.map((m) => ({
-            lostReportId: report._id,
-            candidateId: m.candidateId,
-            candidateSource: m.candidateSource,
-            score: m.score,
-            reasons: m.reasons,
-          })),
-          { ordered: false },
-        );
+    const matchTask = (async () => {
+      try {
+        const ranked = await findMatches({
+          animalType: report.animalType,
+          color: data.color,
+          breed: data.breed,
+          size: data.size,
+          location: data.location,
+          imageUrl: report.imageUrls[0],
+        });
+        if (ranked.length) {
+          await MatchSuggestion.insertMany(
+            ranked.map((m) => ({
+              lostReportId: report._id,
+              candidateId: m.candidateId,
+              candidateSource: m.candidateSource,
+              score: m.score,
+              reasons: m.reasons,
+            })),
+            { ordered: false },
+          );
+        }
+      } catch (err) {
+        logger.error('matching: failed to rank candidates for new lost report', err);
       }
-    } catch (err) {
-      logger.error('matching: failed to rank candidates for new lost report', err);
-    }
+    })();
 
+    const [duplicates, screen] = await Promise.all([duplicatesTask, screenTask, alertTask, matchTask]);
     return { ...serializeLostReport(report), notices: submissionNotices(duplicates.length, screen.flagged) };
   },
 
@@ -227,8 +234,10 @@ export const userService = {
     });
     
     const [lng, lat] = report.foundLocation.coordinates as number[];
-    const duplicates = await findDuplicatePhotos(report.imageUrls, String(report._id));
-    const screen = await moderationService.screenReport({
+
+    // Same as a lost report: screening, alerts and matching run side by side after the save.
+    const duplicatesTask = findDuplicatePhotos(report.imageUrls, String(report._id));
+    const screenTask = duplicatesTask.then((duplicates) => moderationService.screenReport({
       reportType: 'found',
       reportId: String(report._id),
       reporterId: String(reporterId),
@@ -240,9 +249,9 @@ export const userService = {
       barangay: report.barangay,
       description: data.description,
       duplicatePhotos: duplicates.length,
-    });
-    
-    await smartAlertService.dispatchReportAlert({
+    }));
+
+    const alertTask = smartAlertService.dispatchReportAlert({
       reportType: 'found',
       reportId: String(report._id),
       reporterId: String(reporterId),
@@ -254,31 +263,34 @@ export const userService = {
     // The reverse of the lost-report flow above: a freshly found animal is checked against
     // existing lost reports too, so an owner who already filed sees this the next time they
     // open their report instead of only matching reports filed after this one.
-    try {
-      const ranked = await findMatchingLostReports({
-        animalType: report.animalType,
-        color: data.color,
-        breed: data.breed,
-        size: data.size,
-        location: data.location,
-        imageUrl: report.imageUrls[0],
-      });
-      if (ranked.length) {
-        await MatchSuggestion.insertMany(
-          ranked.map((m) => ({
-            lostReportId: m.lostReportId,
-            candidateId: report._id,
-            candidateSource: 'found_report',
-            score: m.score,
-            reasons: m.reasons,
-          })),
-          { ordered: false },
-        );
+    const matchTask = (async () => {
+      try {
+        const ranked = await findMatchingLostReports({
+          animalType: report.animalType,
+          color: data.color,
+          breed: data.breed,
+          size: data.size,
+          location: data.location,
+          imageUrl: report.imageUrls[0],
+        });
+        if (ranked.length) {
+          await MatchSuggestion.insertMany(
+            ranked.map((m) => ({
+              lostReportId: m.lostReportId,
+              candidateId: report._id,
+              candidateSource: 'found_report',
+              score: m.score,
+              reasons: m.reasons,
+            })),
+            { ordered: false },
+          );
+        }
+      } catch (err) {
+        logger.error('matching: failed to rank lost reports for new found report', err);
       }
-    } catch (err) {
-      logger.error('matching: failed to rank lost reports for new found report', err);
-    }
+    })();
 
+    const [duplicates, screen] = await Promise.all([duplicatesTask, screenTask, alertTask, matchTask]);
     return { ...serializeFoundReport(report), notices: submissionNotices(duplicates.length, screen.flagged) };
   },
 

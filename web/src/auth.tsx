@@ -3,6 +3,7 @@ import { apiRequest } from './lib/api';
 
 const SESSION_KEY = 'saanpaw.console.session';
 const TOKEN_KEY = 'saanpaw.console.token';
+const EMAIL_KEY = 'saanpaw.console.email';
 
 /**
  * The static GitHub Pages build has no backend. With this set, sign-in checks the demo
@@ -20,6 +21,8 @@ interface AuthState {
   signedIn: boolean;
   /** Bearer token for the data store. Null when signed out, and in demo mode. */
   token: string | null;
+  /** The email the Developer signed in with, shown in the sidebar. Null until known. */
+  email: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => void;
 }
@@ -61,11 +64,52 @@ const readStoredSession = (): Session => {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session>(readStoredSession);
+  const [email, setEmail] = useState<string | null>(() => {
+    try {
+      return store.get(EMAIL_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  // A session signed in before the email was remembered: ask the server which account it is.
+  useEffect(() => {
+    if (email || !session) return;
+    if (DEMO_MODE) {
+      setEmail(DEMO_DEVELOPER.email);
+      return;
+    }
+    if (!session.token) return;
+    let cancelled = false;
+    apiRequest<{ email: string }>('/developer/me', { headers: { Authorization: `Bearer ${session.token}` } })
+      .then((me) => {
+        if (cancelled) return;
+        setEmail(me.email);
+        try {
+          store.set(EMAIL_KEY, me.email);
+        } catch {
+          /* shown for this visit only */
+        }
+      })
+      .catch(() => {
+        /* the sidebar falls back to a generic label */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [email, session]);
 
   // Another tab signed in or out: follow it, so every open tab shows the same state.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === null || e.key === SESSION_KEY || e.key === TOKEN_KEY) setSession(readStoredSession());
+      if (e.key === null || e.key === SESSION_KEY || e.key === TOKEN_KEY || e.key === EMAIL_KEY) {
+        setSession(readStoredSession());
+        try {
+          setEmail(store.get(EMAIL_KEY));
+        } catch {
+          setEmail(null);
+        }
+      }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -75,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       signedIn: session !== null,
       token: session?.token ?? null,
+      email: session ? email : null,
       signIn: async (email, password) => {
         let token: string | null = null;
         if (DEMO_MODE) {
@@ -89,27 +134,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           token = response.token;
         }
 
+        const signedInAs = email.trim().toLowerCase();
         try {
           store.set(SESSION_KEY, 'developer');
           if (token) store.set(TOKEN_KEY, token);
+          store.set(EMAIL_KEY, signedInAs);
         } catch {
           // session still valid in memory
         }
+        setEmail(signedInAs);
         setSession({ token });
       },
       signOut: () => {
         try {
           store.remove(SESSION_KEY);
           store.remove(TOKEN_KEY);
+          store.remove(EMAIL_KEY);
           sessionStorage.removeItem(SESSION_KEY);
           sessionStorage.removeItem(TOKEN_KEY);
         } catch {
           /* nothing to clear */
         }
+        setEmail(null);
         setSession(null);
       },
     }),
-    [session],
+    [session, email],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

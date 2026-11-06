@@ -15,14 +15,20 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
 
   const areaReports = shelterAreaReports();
   const mine = shelterAnimals.filter((a) => a.shelterId === currentShelter.id);
-  const openCases = cases.filter((c) => c.shelterId === currentShelter.id && c.status === 'under_rescue');
+  const myCases = cases.filter((c) => c.shelterId === currentShelter.id);
+  const openCases = myCases.filter((c) => c.status === 'under_rescue');
   const unreadAlerts = notificationsFor('shelter_admin').filter((n) => !n.isRead).length;
   const unreadMessages = conversations
     .filter((c) => c.shelterId === currentShelter.id)
     .reduce((sum, c) => sum + c.unreadForShelter, 0);
   const unhandled = areaReports.filter((r) => !r.caseId).length;
   const perDay = reportsPerDay(areaReports, 7);
-  const byStatus = countBy(mine, (a) => a.caseStatus);
+  // Shelter animals and cases opened from residents' reports share the same four statuses; both
+  // count, or a report case marked Reunited never shows up in the chart.
+  const byStatus = countBy(
+    [...mine.map((a) => a.caseStatus), ...myCases.map((c) => c.status)],
+    (status) => status,
+  );
   const statusRows = (Object.keys(caseStatusMeta) as (keyof typeof caseStatusMeta)[]).map((k) => ({
     label: caseStatusMeta[k].label,
     value: byStatus[k] ?? 0,
@@ -48,7 +54,7 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
     { label: 'Open in radius', value: areaReports.length, color: theme.colors.danger },
     { label: 'Not responded', value: unhandled, color: theme.colors.accent },
     { label: 'Cases recovering', value: openCases.length, color: theme.colors.info },
-    { label: 'Reunited', value: mine.filter((a) => a.caseStatus === 'reunited').length, color: theme.colors.primary },
+    { label: 'Reunited', value: byStatus.reunited ?? 0, color: theme.colors.primary },
   ];
 
   /** The four daily jobs get colour; everything else sits in the list below. */

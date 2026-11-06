@@ -9,6 +9,7 @@ import { FoundAnimalReport } from '../../models/FoundAnimalReport';
 import { ShelterAnimal } from '../../models/ShelterAnimal';
 import { ModerationFlag } from '../../models/ModerationFlag';
 import { ShelterProofDocument } from '../../models/ShelterProofDocument';
+import { DeveloperAccount } from '../../models/DeveloperAccount';
 import { moderationService } from '../../services/moderation.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import { sendEmail, shelterCredentialsEmail } from '../../services/email.service';
@@ -40,6 +41,13 @@ function deploymentInfo() {
 }
 
 export const developerService = {
+  /** The signed-in Developer's own account, so the console shows the email they signed in with. */
+  async me(developerId: string) {
+    const acct = await DeveloperAccount.findById(developerId).select('email').lean();
+    if (!acct) throw ApiError.notFound('Developer account not found');
+    return { email: acct.email };
+  },
+
   /** Dashboard: daily lost/found stats + pending queues. */
   async getDashboard() {
     const [stats, pendingShelters, openFlags] = await Promise.all([

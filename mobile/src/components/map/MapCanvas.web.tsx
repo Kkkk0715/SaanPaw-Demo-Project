@@ -87,6 +87,7 @@ export function MapCanvas({
   onPickLocation,
   selectedMarkerId,
   route,
+  focus,
 }: {
   markers?: MapMarker[];
   initialCenter?: LatLng;
@@ -98,7 +99,13 @@ export function MapCanvas({
   onPickLocation?: (c: LatLng) => void;
   selectedMarkerId?: string | null;
   /** Dashed line between two points, e.g. a shelter and the report it is recovering. */
-  route?: { from: LatLng; to: LatLng } | null;
+  route?: { from: LatLng; to: LatLng; path?: [number, number][] | null } | null;
+  /**
+   * Moves the camera to `center` whenever `key` changes - for a deliberate jump such as "Use my
+   * current location", which must show the spot even on a map the user pins on (those otherwise
+   * never move the camera by themselves, so a tap is never fought).
+   */
+  focus?: { center: LatLng; key: number } | null;
 }) {
   // react-native-web renders `View` as a <div> on the web build and forwards
   // `ref` to that real DOM node, which is what L.map needs to mount into.
@@ -256,6 +263,7 @@ export function MapCanvas({
   const fromLng = route?.from.longitude;
   const toLat = route?.to.latitude;
   const toLng = route?.to.longitude;
+  const routePath = route?.path && route.path.length > 1 ? route.path : null;
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -265,18 +273,25 @@ export function MapCanvas({
       routeKeyRef.current = null;
       return;
     }
-    const points: L.LatLngTuple[] = [
+    // Along the roads when the router found a path; otherwise a dashed straight line.
+    const points: L.LatLngTuple[] = routePath ?? [
       [fromLat, fromLng],
       [toLat, toLng],
     ];
-    if (routeLineRef.current) routeLineRef.current.setLatLngs(points);
-    else routeLineRef.current = L.polyline(points, { color: '#2563EB', weight: 3, opacity: 0.85, dashArray: '8 8' }).addTo(map);
+    const style: L.PolylineOptions = routePath
+      ? { color: '#047857', weight: 5, opacity: 0.9, dashArray: undefined, lineJoin: 'round' }
+      : { color: '#2563EB', weight: 3, opacity: 0.85, dashArray: '8 8' };
+    if (routeLineRef.current) {
+      routeLineRef.current.setLatLngs(points);
+      routeLineRef.current.setStyle(style);
+    } else routeLineRef.current = L.polyline(points, style).addTo(map);
     const key = points.join('|');
     if (key !== routeKeyRef.current) {
       routeKeyRef.current = key;
       map.fitBounds(points, { padding: [48, 48], maxZoom: 16 });
     }
-  }, [fromLat, fromLng, toLat, toLng, mapReady]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromLat, fromLng, toLat, toLng, routePath?.length, mapReady]);
 
   // `initialCenter` only sets where the camera starts on a map the user can pin on. Screens that
   // bind it to the same state as the pin - e.g. the report form - would otherwise fight the user:
@@ -300,6 +315,16 @@ export function MapCanvas({
     lastViewRef.current = { lat: initialCenter.latitude, lng: initialCenter.longitude, zoom: initialZoom };
     map.setView([initialCenter.latitude, initialCenter.longitude], initialZoom);
   }, [initialCenter.latitude, initialCenter.longitude, initialZoom, pickable, mapReady, hasRoute]);
+
+  // A deliberate jump (e.g. "Use my current location"), once per key, on any map.
+  const focusLat = focus?.center.latitude;
+  const focusLng = focus?.center.longitude;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || focusLat == null || focusLng == null) return;
+    map.flyTo([focusLat, focusLng], Math.max(map.getZoom(), 16));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.key, mapReady]);
 
   return (
     <View style={[styles.wrap, { height }]}>

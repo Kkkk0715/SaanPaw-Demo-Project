@@ -8,38 +8,12 @@ import {
 } from '@saanpaw/shared';
 import { Badge, Button, Modal, useConfirm } from './ui';
 
-/** Full detail for one report, opened by clicking a row in Recent reports / All reports. */
-export function ReportDetailModal({ report, onClose }: { report: AnimalReport; onClose: () => void }) {
-  const { deleteReport } = useApp();
-  const { ask, dialog } = useConfirm();
-
+/** Photo, badges and every field of one report - shared by this modal and the flag detail. */
+export function ReportDetails({ report }: { report: AnimalReport }) {
   const kind = reportKindStyle[report.kind];
   const status = reportStatusMeta[report.status];
-
-  const confirmDelete = () =>
-    ask(
-      <>
-        Are you sure you want to delete this report? Any match suggestions, linked case and moderation flag tied
-        to it are removed too. This cannot be undone.
-      </>,
-      () => {
-        deleteReport(report.id);
-        onClose();
-      },
-      { title: 'Are you sure you want to delete this?', confirmLabel: 'Yes, delete' },
-    );
-
   return (
-    <Modal
-      title={describeAnimal(report)}
-      sub={`${kind.label} report · ${report.barangay}`}
-      onClose={onClose}
-      actions={
-        <Button variant="danger" onClick={confirmDelete}>
-          Delete report
-        </Button>
-      }
-    >
+    <>
       {report.imageUrls[0] ? (
         <img
           src={report.imageUrls[0]}
@@ -127,6 +101,42 @@ export function ReportDetailModal({ report, onClose }: { report: AnimalReport; o
           {report.id.toUpperCase()}
         </dd>
       </dl>
+    </>
+  );
+}
+
+/** Full detail for one report, opened by clicking a row in Recent reports / All reports. */
+export function ReportDetailModal({ report, onClose }: { report: AnimalReport; onClose: () => void }) {
+  const { deleteReport } = useApp();
+  const { ask, dialog } = useConfirm();
+
+  const kind = reportKindStyle[report.kind];
+
+  const confirmDelete = () =>
+    ask(
+      <>
+        Are you sure you want to delete this report? Any match suggestions, linked case and moderation flag tied
+        to it are removed too. This cannot be undone.
+      </>,
+      () => {
+        deleteReport(report.id);
+        onClose();
+      },
+      { title: 'Are you sure you want to delete this?', confirmLabel: 'Yes, delete' },
+    );
+
+  return (
+    <Modal
+      title={describeAnimal(report)}
+      sub={`${kind.label} report · ${report.barangay}`}
+      onClose={onClose}
+      actions={
+        <Button variant="danger" onClick={confirmDelete}>
+          Delete report
+        </Button>
+      }
+    >
+      <ReportDetails report={report} />
 
       {dialog}
     </Modal>

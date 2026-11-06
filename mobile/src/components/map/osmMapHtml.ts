@@ -37,8 +37,8 @@ export interface MapInitialState {
   selectedMarkerId?: string | null;
   radiusMeters?: number;
   radiusCenter?: LatLng;
-  /** A dashed line between two points (shelter -> report), with the camera fitted to both. */
-  route?: { from: LatLng; to: LatLng } | null;
+  /** Shelter -> report: along the roads when `path` is given, else a dashed line; camera fits both. */
+  route?: { from: LatLng; to: LatLng; path?: [number, number][] | null } | null;
 }
 
 export function buildMapHtml(initial: MapInitialState): string {
@@ -228,12 +228,22 @@ export function buildMapHtml(initial: MapInitialState): string {
           routeKey = null;
           return;
         }
-        var points = [
-          [route.from.latitude, route.from.longitude],
-          [route.to.latitude, route.to.longitude],
-        ];
-        if (routeLine) routeLine.setLatLngs(points);
-        else routeLine = L.polyline(points, { color: '#2563EB', weight: 3, opacity: 0.85, dashArray: '8 8' }).addTo(map);
+        // Along the roads when the router found a path; otherwise a dashed straight line, which
+        // reads as "as the crow flies" rather than as directions.
+        var onRoads = route.path && route.path.length > 1;
+        var points = onRoads
+          ? route.path
+          : [
+              [route.from.latitude, route.from.longitude],
+              [route.to.latitude, route.to.longitude],
+            ];
+        var style = onRoads
+          ? { color: '#047857', weight: 5, opacity: 0.9, dashArray: null, lineJoin: 'round' }
+          : { color: '#2563EB', weight: 3, opacity: 0.85, dashArray: '8 8' };
+        if (routeLine) {
+          routeLine.setLatLngs(points);
+          routeLine.setStyle(style);
+        } else routeLine = L.polyline(points, style).addTo(map);
         // Fit the camera to both ends once per distinct route, not on every re-render.
         var key = points.join('|');
         if (key !== routeKey) {
@@ -256,10 +266,18 @@ export function buildMapHtml(initial: MapInitialState): string {
       // change moves it, so an unrelated re-render never snaps the map back under the user.
       var lastView = { lat: CONFIG.center.latitude, lng: CONFIG.center.longitude, zoom: CONFIG.zoom };
 
+      // A deliberate camera jump ("Use my current location"), applied once per key on any map.
+      var lastFocusKey = null;
+
       window.updateData = function (data) {
         applyMarkers(data.markers || [], data.selectedMarkerId, CONFIG.pickable);
         applyRadius(data.radiusMeters, data.radiusCenter);
         applyRoute(data.route || null);
+        if (data.focus && data.focus.key !== lastFocusKey) {
+          lastFocusKey = data.focus.key;
+          recenterTarget = data.focus.center;
+          map.flyTo([data.focus.center.latitude, data.focus.center.longitude], Math.max(map.getZoom(), 16));
+        }
         if (data.center && !data.route) {
           recenterTarget = data.center;
           var zoom = data.zoom != null ? data.zoom : lastView.zoom;

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '@/constants/theme';
-import { SJDM_BARANGAY_NAMES, distanceMeters, useApp } from '@saanpaw/shared';
+import { SJDM_ALL_BARANGAY_NAMES, distanceMeters, useApp } from '@saanpaw/shared';
 import type { AnimalType, ReportKind } from '@saanpaw/shared';
 import {
   Button,
@@ -125,7 +125,7 @@ export function SearchReportsScreen() {
         <Select
           label="Barangay"
           value={barangay}
-          options={['Any barangay', ...SJDM_BARANGAY_NAMES]}
+          options={['Any barangay', ...SJDM_ALL_BARANGAY_NAMES]}
           onChange={(v) => setBarangay(v === 'Any barangay' ? null : v)}
           placeholder="Any barangay"
         />

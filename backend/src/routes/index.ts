@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
+import { blockWritesDuringMaintenance } from '../middleware/maintenance';
 import authRoutes from '../modules/auth/auth.routes';
 import developerRoutes from '../modules/developer/developer.routes';
 import geoRoutes from '../modules/geo/geo.routes';
@@ -17,6 +18,8 @@ api.get('/health', (_req, res) => {
 api.use('/auth', authRoutes);
 api.use('/developer', developerRoutes);
 api.use('/geo', geoRoutes);
+// Maintenance mode: refuse writes from the mobile app, including from sessions signed in before it began.
+api.use(['/shelter', '/uploads', '/user'], blockWritesDuringMaintenance);
 api.use('/shelter', shelterRoutes);
 api.use('/uploads', uploadRoutes);
 api.use('/user', userRoutes);

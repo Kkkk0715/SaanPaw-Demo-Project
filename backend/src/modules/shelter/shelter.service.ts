@@ -123,6 +123,13 @@ export const shelterService = {
     capacity?: number;
     proofDocumentIds: string[];
   }) {
+    // One shelter account per email, the same rule as user sign-up. A rejected application does not
+    // hold the email, so a shelter can fix its details and apply again.
+    const email = input.email?.toLowerCase().trim();
+    if (email && (await Shelter.exists({ email, approvalStatus: { $in: ['pending', 'approved'] } }))) {
+      throw ApiError.conflict('Email already registered');
+    }
+
     // Only documents uploaded recently and not yet attached to another application can be claimed.
     const proofs = await ShelterProofDocument.find(
       {
@@ -175,13 +182,21 @@ export const shelterService = {
     const radius = shelter.operatingRadiusMeters;
 
     // Only reports inside this shelter's operating radius count as its active reports.
-    const [lostActive, foundActive, reunited, underRescue] = await Promise.all([
+    // A shelter's reunions and ongoing recoveries are both its own animals and the cases it opened
+    // from residents' reports - counting only the animals left Reunited at 0 for report cases.
+    const [lostActive, foundActive, reunitedAnimals, recoveringAnimals, reunitedCases, recoveringCases] = await Promise.all([
       LostPetReport.countDocuments({ ...open, ...geolocationService.withinFilter('lastSeenLocation', lng, lat, radius) }),
       FoundAnimalReport.countDocuments({ ...open, ...geolocationService.withinFilter('foundLocation', lng, lat, radius) }),
       ShelterAnimal.countDocuments({ shelterId, caseStatus: 'reunited' }),
       ShelterAnimal.countDocuments({ shelterId, caseStatus: 'under_rescue' }),
+      AnimalCase.countDocuments({ shelterId, status: 'reunited' }),
+      AnimalCase.countDocuments({ shelterId, status: 'under_rescue' }),
     ]);
-    return { activeReports: lostActive + foundActive, reunited, underRescue };
+    return {
+      activeReports: lostActive + foundActive,
+      reunited: reunitedAnimals + reunitedCases,
+      underRescue: recoveringAnimals + recoveringCases,
+    };
   },
 
   // ----- Shelter Animals Management -----

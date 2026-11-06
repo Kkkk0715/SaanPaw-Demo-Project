@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import { developerService } from './developer.service';
 
 export const developerController = {
+  me: async (req: Request, res: Response) => res.json(await developerService.me(req.auth!.id)),
+
   dashboard: async (_req: Request, res: Response) =>
     res.json(await developerService.getDashboard()),
 

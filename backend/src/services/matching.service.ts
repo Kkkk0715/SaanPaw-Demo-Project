@@ -42,6 +42,11 @@ export interface RankedMatch {
 
 /** How many candidates the cheap heuristic shortlists for an actual (Gemini) photo comparison. */
 const SHORTLIST_SIZE = 8;
+/**
+ * Of the shortlist, only the best few get a Gemini photo comparison; the rest keep their attribute
+ * score. Comparing all 8 at once was a burst of requests that ran into the free-tier rate limit.
+ */
+const GEMINI_COMPARE_LIMIT = 4;
 const MAX_RESULTS = 6;
 const MIN_SCORE = 0.2;
 
@@ -168,10 +173,12 @@ export async function findMatches(input: MatchInput): Promise<RankedMatch[]> {
     .slice(0, SHORTLIST_SIZE);
 
   const ranked = await Promise.all(
-    shortlisted.map(async ({ candidate, score, reasons }) => {
+    shortlisted.map(async ({ candidate, score, reasons }, i) => {
       const candidatePhoto = candidate.imageUrls[0];
       const visionResult =
-        input.imageUrl && candidatePhoto ? await compareAnimalPhotos(input.imageUrl, candidatePhoto) : null;
+        input.imageUrl && candidatePhoto && i < GEMINI_COMPARE_LIMIT
+          ? await compareAnimalPhotos(input.imageUrl, candidatePhoto)
+          : null;
 
       return {
         candidateId: candidate.id,
@@ -240,10 +247,12 @@ export async function findMatchingLostReports(input: MatchInput): Promise<Ranked
     .slice(0, SHORTLIST_SIZE);
 
   const ranked = await Promise.all(
-    shortlisted.map(async ({ candidate, score, reasons }) => {
+    shortlisted.map(async ({ candidate, score, reasons }, i) => {
       const candidatePhoto = candidate.imageUrls[0];
       const visionResult =
-        input.imageUrl && candidatePhoto ? await compareAnimalPhotos(input.imageUrl, candidatePhoto) : null;
+        input.imageUrl && candidatePhoto && i < GEMINI_COMPARE_LIMIT
+          ? await compareAnimalPhotos(input.imageUrl, candidatePhoto)
+          : null;
 
       return {
         lostReportId: candidate.id,

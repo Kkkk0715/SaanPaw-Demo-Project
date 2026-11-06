@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "761627311145",
+    "project_id": "saanpaw-de593",
+    "storage_bucket": "saanpaw-de593.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:761627311145:android:fd4bfa1d88cf28b10d3038",
+        "android_client_info": {
+          "package_name": "ph.sjdm.saanpaw"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMrwIv14dgkvq5gzXnMFSjtZmJIl_qXXw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

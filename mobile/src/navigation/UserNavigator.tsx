@@ -14,7 +14,9 @@ import { MapViewScreen } from '@/screens/user/MapViewScreen';
 import { UserNotificationsScreen } from '@/screens/user/NotificationsScreen';
 import { SearchReportsScreen } from '@/screens/user/SearchReportsScreen';
 import { UserProfileScreen } from '@/screens/user/ProfileScreen';
+import { ReportDetailScreen } from '@/screens/common/ReportDetailScreen';
 import { headerStyle } from './navTheme';
+import { useNotificationTaps } from './useNotificationTaps';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -76,6 +78,7 @@ function HomeTabs() {
 }
 
 export function UserNavigator() {
+  useNotificationTaps('user', 'User');
   return (
     <Stack.Navigator screenOptions={{ ...headerStyle, headerTitleStyle: { ...theme.type.h2, color: theme.colors.text } }}>
       <Stack.Screen name="HomeTabs" component={HomeTabs} options={{ headerShown: false }} />
@@ -84,6 +87,7 @@ export function UserNavigator() {
       <Stack.Screen name="LostPetStatus" component={LostPetStatusScreen} options={{ title: 'My Reports' }} />
       <Stack.Screen name="ShelterView" component={ShelterViewScreen} options={{ title: 'Shelters' }} />
       <Stack.Screen name="ImageRecognition" component={ImageRecognitionScreen} options={{ title: 'Image Match' }} />
+      <Stack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: 'Report details' }} />
     </Stack.Navigator>
   );
 }

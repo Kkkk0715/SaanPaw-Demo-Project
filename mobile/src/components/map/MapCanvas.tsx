@@ -38,8 +38,9 @@ export function MapCanvas({
   /** Lets the user tap the map or drag a marker to place a pin. */
   onPickLocation,
   selectedMarkerId,
-  /** Dashed line between two points, e.g. a shelter and the report it is recovering. */
+  /** Line between two points, e.g. a shelter and the report it is recovering. */
   route,
+  focus,
 }: {
   markers?: MapMarker[];
   initialCenter?: LatLng;
@@ -50,7 +51,13 @@ export function MapCanvas({
   onMarkerPress?: (id: string) => void;
   onPickLocation?: (c: LatLng) => void;
   selectedMarkerId?: string | null;
-  route?: { from: LatLng; to: LatLng } | null;
+  route?: { from: LatLng; to: LatLng; path?: [number, number][] | null } | null;
+  /**
+   * Moves the camera to `center` whenever `key` changes - for a deliberate jump such as "Use my
+   * current location", which must show the spot even on a map the user pins on (those otherwise
+   * never move the camera by themselves, so a tap is never fought).
+   */
+  focus?: { center: LatLng; key: number } | null;
 }) {
   const webviewRef = useRef<WebView>(null);
   const ready = useRef(false);
@@ -102,9 +109,10 @@ export function MapCanvas({
       // the spot the user just placed the pin, fighting the very interaction it exists for.
       center: initialCenter,
       zoom: initialZoom,
+      focus,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markers, selectedMarkerId, radiusMeters, radiusCenter?.latitude, radiusCenter?.longitude, initialCenter.latitude, initialCenter.longitude, initialZoom, route?.from.latitude, route?.from.longitude, route?.to.latitude, route?.to.longitude]);
+  }, [focus?.key, markers, selectedMarkerId, radiusMeters, radiusCenter?.latitude, radiusCenter?.longitude, initialCenter.latitude, initialCenter.longitude, initialZoom, route?.from.latitude, route?.from.longitude, route?.to.latitude, route?.to.longitude, route?.path?.length]);
 
   const handleMessage = (event: WebViewMessageEvent) => {
     let message: { type: string; id?: string; lat?: number; lng?: number; message?: string };
@@ -125,6 +133,7 @@ export function MapCanvas({
         route,
         center: initialCenter,
         zoom: initialZoom,
+        focus,
       });
     } else if (message.type === 'marker' && message.id) {
       onMarkerPressRef.current?.(message.id);
