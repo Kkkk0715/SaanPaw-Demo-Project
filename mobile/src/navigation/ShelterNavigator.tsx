@@ -28,14 +28,12 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   ShelterDashboard: 'home',
   AnimalReports: 'documents',
   ShelterAnimals: 'paw',
-  ShelterNotifications: 'notifications',
   ShelterProfile: 'person',
 };
 
 /** Bottom tabs for the Shelter Module, laid out the same way as the User Module's. */
 function ShelterTabs() {
-  const { notificationsFor, shelterAreaReports } = useApp();
-  const unreadAlerts = notificationsFor('shelter_admin').filter((n) => !n.isRead).length;
+  const { shelterAreaReports } = useApp();
   const unhandledReports = shelterAreaReports().filter((r) => !r.caseId).length;
   // Android's gesture/3-button nav bar draws over the tab bar under edge-to-edge unless the tab
   // bar's own height/padding absorbs that inset - a fixed height alone doesn't.
@@ -86,11 +84,6 @@ function ShelterTabs() {
         options={{ title: 'Shelter Animals', tabBarLabel: 'Animals' }}
       />
       <Tab.Screen
-        name="ShelterNotifications"
-        component={ShelterNotificationsScreen}
-        options={{ title: 'Notifications', tabBarLabel: 'Alerts', tabBarBadge: unreadAlerts || undefined }}
-      />
-      <Tab.Screen
         name="ShelterProfile"
         component={ShelterProfileScreen}
         options={{ title: 'Shelter Profile', tabBarLabel: 'Profile' }}
@@ -110,6 +103,8 @@ export function ShelterNavigator() {
       <Stack.Screen name="RescuedAnimals" component={RescuedAnimalsScreen} options={{ title: 'Rescued Pets & Strays' }} />
       <Stack.Screen name="AnimalStatus" component={AnimalStatusScreen} options={{ title: 'Animal Status' }} />
       <Stack.Screen name="Messages" component={MessagesScreen} options={{ title: 'Message Box' }} />
+      {/* Opened from the bell on the dashboard (it shows the unread count). */}
+      <Stack.Screen name="ShelterNotifications" component={ShelterNotificationsScreen} options={{ title: 'Notifications' }} />
       <Stack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: 'Report details' }} />
     </Stack.Navigator>
   );

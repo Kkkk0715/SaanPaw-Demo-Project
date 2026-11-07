@@ -142,10 +142,13 @@ export function ShelterAnimalCard({
   animal,
   onPress,
   right,
+  actions,
 }: {
   animal: ShelterAnimal;
   onPress?: () => void;
   right?: React.ReactNode;
+  /** Buttons shown in their own row under the card's details, so they never cover the text. */
+  actions?: React.ReactNode;
 }) {
   return (
     <Card onPress={onPress}>
@@ -156,7 +159,7 @@ export function ShelterAnimalCard({
           <Text style={styles.cardMeta} numberOfLines={1}>
             {[animal.breed, animal.color, animal.size].filter(Boolean).join(' · ')}
           </Text>
-          <Row gap={0.75}>
+          <Row gap={0.75} style={{ flexWrap: 'wrap' }}>
             {/* An animal record without an outcome yet is in the shelter's care, not out on a recovery. */}
             {animal.caseStatus === 'under_rescue' ? (
               <Badge label="In shelter care" color={theme.colors.found} soft={theme.colors.foundSoft} icon="shield-checkmark" />
@@ -176,6 +179,11 @@ export function ShelterAnimalCard({
         <Text style={styles.cardBody} numberOfLines={2}>
           {animal.notes}
         </Text>
+      ) : null}
+      {actions ? (
+        <Row gap={1} style={{ flexWrap: 'wrap' }}>
+          {actions}
+        </Row>
       ) : null}
     </Card>
   );

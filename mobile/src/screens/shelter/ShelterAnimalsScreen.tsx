@@ -157,8 +157,8 @@ export function ShelterAnimalsScreen() {
           <ShelterAnimalCard
             key={a.id}
             animal={a}
-            right={
-              <View style={{ gap: 6, alignItems: 'flex-end' }}>
+            actions={
+              <>
                 {nextAnimalStatuses(a.caseStatus).length ? (
                   <Button
                     label={a.id.startsWith('pending-') ? 'Saving…' : 'Update status'}
@@ -176,7 +176,7 @@ export function ShelterAnimalsScreen() {
                   onPress={() => toggleAnimalPublic(a.id)}
                 />
                 <Button label="Delete" variant="ghost" icon="trash-outline" full={false} onPress={() => void remove(a.id, a.name)} />
-              </View>
+              </>
             }
           />
         ))

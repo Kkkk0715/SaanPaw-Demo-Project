@@ -54,7 +54,7 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
               onPress={() => {
                 markNotificationRead(n.id);
                 const target = notificationTarget('shelter_admin', n.type, n.relatedReportId);
-                if (target.screen !== 'ShelterTabs') navigation.navigate(target.screen, target.params); // ShelterTabs = this list
+                if (target.screen !== 'ShelterNotifications') navigation.navigate(target.screen, target.params);
               }}
             />
           ))

@@ -13,7 +13,7 @@ export function notificationTarget(role: MobileRole, type: string | undefined, r
   if (role === 'shelter_admin') {
     if (type === 'message') return { screen: 'Messages' };
     if (reportId) return { screen: 'ReportDetail', params: { reportId } };
-    return { screen: 'ShelterTabs', params: { screen: 'ShelterNotifications' } };
+    return { screen: 'ShelterNotifications' };
   }
 
   // User

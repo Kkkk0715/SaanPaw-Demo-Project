@@ -57,7 +57,7 @@ export function RecoveredAnimalsScreen({ navigation }: NativeStackScreenProps<an
           <ShelterAnimalCard
             key={a.id}
             animal={a}
-            right={
+            actions={
               <Button
                 label={a.postedPublicly ? 'Unpublish' : 'Post'}
                 variant={a.postedPublicly ? 'ghost' : 'accent'}
