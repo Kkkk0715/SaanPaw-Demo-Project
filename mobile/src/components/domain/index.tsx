@@ -25,6 +25,7 @@ import type {
 /** Labels and colours live in shared; only the icon is specific to this app. */
 export const CASE_ICONS: Record<AnimalCaseStatus, keyof typeof Ionicons.glyphMap> = {
   under_rescue: 'medkit',
+  recovered: 'shield-checkmark',
   reunited: 'heart',
   adopted: 'home',
   inconclusive: 'help-circle',
@@ -156,7 +157,12 @@ export function ShelterAnimalCard({
             {[animal.breed, animal.color, animal.size].filter(Boolean).join(' · ')}
           </Text>
           <Row gap={0.75}>
-            <CaseStatusPill status={animal.caseStatus} />
+            {/* An animal record without an outcome yet is in the shelter's care, not out on a recovery. */}
+            {animal.caseStatus === 'under_rescue' ? (
+              <Badge label="In shelter care" color={theme.colors.found} soft={theme.colors.foundSoft} icon="shield-checkmark" />
+            ) : (
+              <CaseStatusPill status={animal.caseStatus} />
+            )}
             {animal.postedPublicly ? (
               <Badge label="Public" color={theme.colors.info} soft={theme.colors.infoSoft} icon="eye" />
             ) : (

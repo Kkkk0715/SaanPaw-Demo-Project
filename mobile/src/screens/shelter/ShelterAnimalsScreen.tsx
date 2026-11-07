@@ -19,18 +19,22 @@ import {
   Sheet,
   usePagination,
 } from '@/components/ui';
-import { confirmDelete } from '@/services/confirm';
+import { confirmAsync, confirmDelete } from '@/services/confirm';
 import { AnimalTypeAndBreed, ShelterAnimalCard } from '@/components/domain';
 import { shrinkPhoto } from '@/services/photo';
-import { useApp } from '@saanpaw/shared';
+import { caseStatusMeta, nextAnimalStatuses, useApp } from '@saanpaw/shared';
 import type { AnimalCaseStatus, AnimalType, ShelterAnimal } from '@saanpaw/shared';
 
 /** Shelter Admin Module - The animals in this shelter's care. */
 export function ShelterAnimalsScreen() {
-  const { shelterAnimals, currentShelter, addShelterAnimal, toggleAnimalPublic, deleteShelterAnimal } = useApp();
+  const { shelterAnimals, currentShelter, addShelterAnimal, toggleAnimalPublic, deleteShelterAnimal, setShelterAnimalStatus } =
+    useApp();
   const [notices, setNotices] = useState<string[]>([]);
 
-  const [filter, setFilter] = useState<AnimalCaseStatus | 'all'>('all');
+  const [filter, setFilter] = useState<'all' | 'reunited' | 'adopted'>('all');
+  /** The animal whose outcome is being set, and the outcome picked in the sheet. */
+  const [updating, setUpdating] = useState<ShelterAnimal | null>(null);
+  const [outcome, setOutcome] = useState<AnimalCaseStatus>('reunited');
   const [adding, setAdding] = useState(false);
 
   const [name, setName] = useState('');
@@ -48,6 +52,32 @@ export function ShelterAnimalsScreen() {
   const mine = shelterAnimals.filter((a) => a.shelterId === currentShelter.id);
   const shown = mine.filter((a) => (filter === 'all' ? true : a.caseStatus === filter));
   const page = usePagination(shown, undefined, filter);
+
+  const openUpdate = (a: ShelterAnimal) => {
+    const next = nextAnimalStatuses(a.caseStatus);
+    if (!next.length) return;
+    setOutcome(next[0]);
+    setUpdating(a);
+  };
+
+  const saveOutcome = async () => {
+    if (!updating) return;
+    const label = caseStatusMeta[outcome].label;
+    const fromReport = Boolean(updating.caseId);
+    const ok = await confirmAsync({
+      title: `Mark ${updating.name} as "${label}"?`,
+      message: `${
+        fromReport ? 'The person who reported this animal is notified. ' : ''
+      }This is final - the status can't be changed back afterwards.`,
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    });
+    if (!ok) return;
+    setShelterAnimalStatus(updating.id, outcome);
+    setUpdating(null);
+    // Show where it went, so it doesn't look like it vanished.
+    if (outcome === 'reunited' || outcome === 'adopted') setFilter(outcome);
+  };
 
   const remove = async (id: string, name: string) => {
     if (await confirmDelete(name, 'Its photos and any match suggestions pointing to it are removed too. This cannot be undone.')) {
@@ -108,13 +138,16 @@ export function ShelterAnimalsScreen() {
 
       <Segmented
         options={[
-          { label: 'All', value: 'all' },
-          { label: 'Under recovery', value: 'under_rescue', color: theme.colors.info },
-          { label: 'Reunited', value: 'reunited' },
-          { label: 'Adopted', value: 'adopted', color: theme.colors.accent },
+          { label: `All (${mine.length})`, value: 'all' },
+          { label: `Reunited (${mine.filter((a) => a.caseStatus === 'reunited').length})`, value: 'reunited' },
+          {
+            label: `Adopted (${mine.filter((a) => a.caseStatus === 'adopted').length})`,
+            value: 'adopted',
+            color: theme.colors.accent,
+          },
         ]}
         value={filter}
-        onChange={(v) => setFilter(v as AnimalCaseStatus | 'all')}
+        onChange={(v) => setFilter(v as 'all' | 'reunited' | 'adopted')}
       />
 
       <SectionHeader title={`${shown.length} ${shown.length === 1 ? 'animal' : 'animals'}`} />
@@ -126,6 +159,15 @@ export function ShelterAnimalsScreen() {
             animal={a}
             right={
               <View style={{ gap: 6, alignItems: 'flex-end' }}>
+                {nextAnimalStatuses(a.caseStatus).length ? (
+                  <Button
+                    label={a.id.startsWith('pending-') ? 'Saving…' : 'Update status'}
+                    icon="create-outline"
+                    full={false}
+                    disabled={a.id.startsWith('pending-')}
+                    onPress={() => openUpdate(a)}
+                  />
+                ) : null}
                 <Button
                   label={a.postedPublicly ? 'Unpublish' : 'Publish'}
                   variant={a.postedPublicly ? 'ghost' : 'secondary'}
@@ -150,6 +192,23 @@ export function ShelterAnimalsScreen() {
         </Card>
       )}
       <Pager {...page} />
+
+      <Sheet open={Boolean(updating)} onClose={() => setUpdating(null)} title="Update status">
+        {updating ? (
+          <View style={{ gap: theme.spacing(1.5) }}>
+            <Caption>
+              {updating.name} is in your care. Pick what happened to it - it then moves to that tab.
+            </Caption>
+            <Choice
+              label="Outcome"
+              options={nextAnimalStatuses(updating.caseStatus).map((value) => ({ label: caseStatusMeta[value].label, value }))}
+              value={outcome}
+              onChange={(v) => setOutcome(v as AnimalCaseStatus)}
+            />
+            <Button label="Save status" icon="checkmark-circle-outline" onPress={() => void saveOutcome()} />
+          </View>
+        ) : null}
+      </Sheet>
 
       <Sheet open={adding} onClose={() => setAdding(false)} title="Add animal to shelter database">
         <View style={{ gap: theme.spacing(1.5) }}>

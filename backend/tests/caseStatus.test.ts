@@ -2,13 +2,14 @@ import { CASE_STATUS_LABELS, CASE_STATUS_TRANSITIONS, canChangeCaseStatus } from
 
 describe('case status transitions', () => {
   it('moves from under recovery to any one outcome', () => {
+    expect(canChangeCaseStatus('under_rescue', 'recovered')).toBe(true);
     expect(canChangeCaseStatus('under_rescue', 'reunited')).toBe(true);
     expect(canChangeCaseStatus('under_rescue', 'adopted')).toBe(true);
     expect(canChangeCaseStatus('under_rescue', 'inconclusive')).toBe(true);
   });
 
   it('never loops back or moves between outcomes', () => {
-    for (const closed of ['reunited', 'adopted', 'inconclusive'] as const) {
+    for (const closed of ['recovered', 'reunited', 'adopted', 'inconclusive'] as const) {
       expect(CASE_STATUS_TRANSITIONS[closed]).toEqual([]);
       expect(canChangeCaseStatus(closed, 'under_rescue')).toBe(false);
     }

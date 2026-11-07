@@ -1,5 +1,5 @@
 import { Schema, model, InferSchemaType } from 'mongoose';
-import { ANIMAL_TYPES } from '../config/constants';
+import { ANIMAL_TYPES, SHELTER_ANIMAL_STATUSES } from '../config/constants';
 
 const shelterAnimalSchema = new Schema(
   {
@@ -17,12 +17,19 @@ const shelterAnimalSchema = new Schema(
     intakeDate: { type: Date, default: Date.now },
     caseStatus: {
       type: String,
-      enum: ['under_rescue', 'reunited', 'adopted', 'inconclusive'],
+      enum: SHELTER_ANIMAL_STATUSES,
       default: 'under_rescue',
     },
     postedPublicly: { type: Boolean, default: false },
     notes: { type: String, trim: true },
     isHiddenByModeration: { type: Boolean, default: false },
+    /**
+     * Set when this record came from a case on a resident's report (the shelter marked it
+     * Recovered, Reunited or Adopted). Its status changes are copied back to that case and report.
+     */
+    caseId: { type: Schema.Types.ObjectId, ref: 'AnimalCase' },
+    sourceReportId: { type: Schema.Types.ObjectId },
+    sourceReportKind: { type: String, enum: ['lost', 'found'] },
     moderationFlagId: { type: Schema.Types.ObjectId, ref: 'ModerationFlag' },
   },
   { timestamps: true },

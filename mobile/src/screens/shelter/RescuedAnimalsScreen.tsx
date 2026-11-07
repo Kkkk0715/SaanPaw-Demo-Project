@@ -51,7 +51,8 @@ export function RescuedAnimalsScreen({ navigation }: NativeStackScreenProps<any>
         animal: a,
       }));
     const fromCases: Entry[] = cases
-      .filter((c) => c.shelterId === currentShelter.id)
+      // A case that became a Shelter Animals record is listed once, as that animal.
+      .filter((c) => c.shelterId === currentShelter.id && !c.shelterAnimalId)
       .flatMap((c) => {
         const report = reportById(c.reportId);
         if (!report) return [];

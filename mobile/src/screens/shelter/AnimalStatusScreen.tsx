@@ -21,12 +21,23 @@ import {
 } from '@/components/ui';
 import { CASE_ICONS, CaseStatusPill, ShelterAnimalCard, describeAnimal, timeAgo } from '@/components/domain';
 import { RecoveryTracker } from '@/components/domain/RecoveryTracker';
-import { caseStatusMeta, isCaseClosed, nextCaseStatuses, reportPlace, useApp } from '@saanpaw/shared';
+import { caseStatusMeta, isCaseClosed, nextAnimalStatuses, nextCaseStatuses, reportPlace, useApp } from '@saanpaw/shared';
 import type { AnimalCase, AnimalCaseStatus, AnimalReport } from '@saanpaw/shared';
 import { confirmAsync } from '@/services/confirm';
 
 const statusOptions = (from: AnimalCaseStatus) =>
   nextCaseStatuses(from).map((value) => ({ label: caseStatusMeta[value].label, value }));
+const animalStatusOptions = (from: AnimalCaseStatus) =>
+  nextAnimalStatuses(from).map((value) => ({ label: caseStatusMeta[value].label, value }));
+
+/** What each outcome does, shown before it is confirmed. */
+const OUTCOME_EFFECT: Partial<Record<AnimalCaseStatus, string>> = {
+  recovered:
+    'The animal moves to Shelter Animals as in your care, and the report leaves Animal Reports. Set Reunited or Adopted there later.',
+  reunited: 'The report leaves Animal Reports and the animal is listed under Reunited in Shelter Animals.',
+  adopted: 'The report leaves Animal Reports and the animal is listed under Adopted in Shelter Animals.',
+  inconclusive: 'The report leaves Animal Reports and stops showing in report lists.',
+};
 
 /**
  * Shelter Admin Module - Case status: under recovery, then one outcome (reunited, adopted or
@@ -63,9 +74,7 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
     const label = caseStatusMeta[status].label;
     const ok = await confirmAsync({
       title: `Set this case to "${label}"?`,
-      message: `This closes the case and notifies the reporter. A closed case can't be changed back afterwards.${
-        status === 'adopted' || status === 'inconclusive' ? ' The report will also stop showing in report lists.' : ''
-      }`,
+      message: `${OUTCOME_EFFECT[status] ?? ''} The reporter is notified, and the case can't be changed back afterwards.`.trim(),
       confirmLabel: 'Yes',
       cancelLabel: 'No',
     });
@@ -91,7 +100,7 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
         tone="info"
         icon="pulse"
         title="Case status management"
-        message="A case moves from Under recovery to one outcome. Updating it notifies the person who filed the report; 'Reunited' closes their report, and 'Adopted' or 'Inconclusive' stop it showing in report lists."
+        message="A case moves from Under recovery to one outcome, and the reporter is notified. 'Recovered' means the animal is now in your care: it moves to Shelter Animals, where you set Reunited or Adopted later. Every outcome takes the report off Animal Reports."
       />
 
       <SectionHeader title={`Recovery cases (${myCases.length})`} />
@@ -174,9 +183,12 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
                 {a.name}
               </Text>
               <Choice
-                options={statusOptions(a.caseStatus)}
+                options={animalStatusOptions(a.caseStatus)}
                 value={null}
-                onChange={(v) => void setAnimalStatus(a.id, a.name, v as AnimalCaseStatus)}
+                onChange={(v) => {
+                  if (a.id.startsWith('pending-')) return; // still saving
+                  void setAnimalStatus(a.id, a.name, v as AnimalCaseStatus);
+                }}
               />
             </View>
           ))}

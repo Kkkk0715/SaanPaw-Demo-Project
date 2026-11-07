@@ -16,7 +16,7 @@ export type ReportKind = 'lost' | 'found';
 export type ReportStatus = 'active' | 'matched' | 'recovered' | 'closed';
 
 /** Scope: "Animal Status Management (under rescue / reunited / adopted / inconclusive)". */
-export type AnimalCaseStatus = 'under_rescue' | 'reunited' | 'adopted' | 'inconclusive';
+export type AnimalCaseStatus = 'under_rescue' | 'recovered' | 'reunited' | 'adopted' | 'inconclusive';
 
 /** Scope: Developer "Shelter Approval Management". */
 export type ShelterApprovalStatus = 'pending' | 'approved' | 'rejected';
@@ -110,6 +110,9 @@ export interface ShelterAnimal extends AnimalDescriptor {
   /** True once the shelter posts it publicly under "Recovered Animals Posting". */
   postedPublicly: boolean;
   notes?: string;
+  /** Set when this animal came from a case on a resident's report; status changes follow back to it. */
+  caseId?: string;
+  sourceReportId?: string;
 }
 
 export interface AnimalCase {
@@ -117,6 +120,8 @@ export interface AnimalCase {
   reportId: string;
   shelterId: string;
   status: AnimalCaseStatus;
+  /** The Shelter Animals record this case became (Recovered, Reunited or Adopted). */
+  shelterAnimalId?: string;
   openedAt: string;
   updatedAt: string;
   timeline: { at: string; status: AnimalCaseStatus; note: string; by: string }[];

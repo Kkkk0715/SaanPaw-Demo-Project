@@ -20,6 +20,21 @@ export const locationService = {
     return pos ? { latitude: pos.coords.latitude, longitude: pos.coords.longitude } : null;
   },
 
+  /**
+   * Follows the phone's position while the caller is listening: calls `onMove` with each new fix
+   * (roughly every 25 m moved). Returns a function that stops watching. Resolves to a no-op when
+   * permission is refused, so the caller simply keeps its fallback position.
+   */
+  async watch(onMove: (p: { latitude: number; longitude: number }) => void): Promise<() => void> {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return () => {};
+    const sub = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.High, distanceInterval: 25, timeInterval: 5_000 },
+      (pos) => onMove({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+    );
+    return () => sub.remove();
+  },
+
   /** Limitation 1: reject anything outside San Jose Del Monte. */
   assertWithinServiceArea(latitude: number, longitude: number): void {
     if (!isWithinSJDM(latitude, longitude)) {

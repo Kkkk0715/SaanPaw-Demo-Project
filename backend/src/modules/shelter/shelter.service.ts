@@ -28,14 +28,76 @@ import {
 import {
   CASE_STATUS_LABELS,
   CLOSING_CASE_STATUSES,
+  SHELTERED_CASE_STATUSES,
   canChangeCaseStatus,
   type ANIMAL_CASE_STATUSES,
+  type SHELTER_ANIMAL_STATUSES,
 } from '../../config/constants';
 
 /** How long an uploaded proof document waits to be attached to an application before it is ignored. */
 const PROOF_CLAIM_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 type CaseStatus = (typeof ANIMAL_CASE_STATUSES)[number];
+type AnimalStatus = (typeof SHELTER_ANIMAL_STATUSES)[number];
+
+/** A recovered case becomes an animal in care; reunited and adopted carry straight over. */
+const animalStatusForCase = (status: CaseStatus): AnimalStatus => (status === 'recovered' ? 'under_rescue' : (status as AnimalStatus));
+
+type CaseDoc = InstanceType<typeof AnimalCase>;
+type ReportDoc = InstanceType<typeof LostPetReport> | InstanceType<typeof FoundAnimalReport>;
+
+/**
+ * Copies the animal on a resident's report into the shelter's own Shelter Animals records, once
+ * the shelter has it (Recovered) or the case ends as Reunited or Adopted - so it leaves Animal
+ * Reports and shows under the matching Shelter Animals tab, where its status can still be updated.
+ */
+async function shelterAnimalFromCase(caseDoc: CaseDoc, report: ReportDoc, status: AnimalStatus) {
+  const kind: 'lost' | 'found' = caseDoc.lostReportId ? 'lost' : 'found';
+  const r = report as unknown as Record<string, unknown> & { _id: unknown; imageUrls?: string[] };
+  const fallbackName = [r.color, r.breed || r.animalType].filter(Boolean).join(' ');
+  const animal = await ShelterAnimal.create({
+    shelterId: caseDoc.shelterId,
+    name: (r.name as string | undefined) || fallbackName || 'Unnamed animal',
+    animalType: r.animalType,
+    breed: r.breed,
+    color: r.color,
+    sex: r.sex,
+    size: r.size,
+    distinctMarks: r.distinctMarks,
+    description: r.description,
+    imageUrls: r.imageUrls ?? [],
+    intakeType: 'recovered',
+    intakeDate: new Date(),
+    caseStatus: status,
+    postedPublicly: false,
+    notes: caseDoc.notes || (r.description as string | undefined),
+    caseId: caseDoc._id,
+    sourceReportId: r._id,
+    sourceReportKind: kind,
+  });
+  caseDoc.shelterAnimalId = animal._id;
+  await caseDoc.save();
+  return animal;
+}
+
+/** The report a case was opened from, either kind. */
+async function reportForCase(caseDoc: { lostReportId?: unknown; foundReportId?: unknown }): Promise<ReportDoc | null> {
+  if (caseDoc.lostReportId) return LostPetReport.findById(caseDoc.lostReportId);
+  if (caseDoc.foundReportId) return FoundAnimalReport.findById(caseDoc.foundReportId);
+  return null;
+}
+
+/** What an outcome does to the report behind a case. Recovered keeps a lost report open for its owner. */
+async function applyOutcomeToReport(report: ReportDoc, kind: 'lost' | 'found', status: CaseStatus) {
+  let next: string | null = null;
+  if (status === 'reunited') next = kind === 'lost' ? 'recovered' : 'closed';
+  else if (CLOSING_CASE_STATUSES.includes(status)) next = 'closed';
+  else if (status === 'recovered' && kind === 'found') next = 'closed'; // the stray is in the shelter now
+  if (next && report.status !== next) {
+    report.status = next as never;
+    await report.save();
+  }
+}
 
 /**
  * Reverse of the lost-report matching flow in user.service.ts: a freshly intake/recovered shelter
@@ -189,7 +251,8 @@ export const shelterService = {
       FoundAnimalReport.countDocuments({ ...open, ...geolocationService.withinFilter('foundLocation', lng, lat, radius) }),
       ShelterAnimal.countDocuments({ shelterId, caseStatus: 'reunited' }),
       ShelterAnimal.countDocuments({ shelterId, caseStatus: 'under_rescue' }),
-      AnimalCase.countDocuments({ shelterId, status: 'reunited' }),
+      // Report cases now have a Shelter Animals record (counted above); only older ones without one count here.
+      AnimalCase.countDocuments({ shelterId, status: 'reunited', shelterAnimalId: null }),
       AnimalCase.countDocuments({ shelterId, status: 'under_rescue' }),
     ]);
     return {
@@ -201,6 +264,14 @@ export const shelterService = {
 
   // ----- Shelter Animals Management -----
   async listShelterAnimals(shelterId: string) {
+    // Cases that ended as recovered / reunited / adopted before Shelter Animals took them in
+    // (or whose copy failed) get their record now, so every such animal is listed exactly once.
+    const unlisted = await AnimalCase.find({ shelterId, status: { $in: SHELTERED_CASE_STATUSES }, shelterAnimalId: null });
+    for (const caseDoc of unlisted) {
+      const report = await reportForCase(caseDoc);
+      if (report) await shelterAnimalFromCase(caseDoc, report, animalStatusForCase(caseDoc.status as CaseStatus));
+    }
+
     const animals = await ShelterAnimal.find({ shelterId, isHiddenByModeration: false }).sort({ intakeDate: -1 }).lean();
     return animals.map(serializeShelterAnimal);
   },
@@ -347,35 +418,37 @@ export const shelterService = {
 
     // A case can be opened from either report kind (openCase above); keep both in sync the same
     // way instead of only ever handling the lost-report side.
-    const report = doc.lostReportId
-      ? await LostPetReport.findById(doc.lostReportId)
-      : doc.foundReportId
-        ? await FoundAnimalReport.findById(doc.foundReportId)
-        : null;
+    const report = await reportForCase(doc);
+    const kind: 'lost' | 'found' = doc.lostReportId ? 'lost' : 'found';
 
     if (report) {
-      if (params.status === 'reunited') {
-        report.status = doc.lostReportId ? 'recovered' : 'closed';
-        await report.save();
-      } else if (CLOSING_CASE_STATUSES.includes(params.status)) {
-        // Adopted or inconclusive: the report stops showing on the map, in search and in alerts.
-        report.status = 'closed';
-        await report.save();
+      await applyOutcomeToReport(report, kind, params.status);
+
+      // Recovered, reunited or adopted: the animal now belongs on Shelter Animals, under the
+      // matching tab, and leaves Animal Reports (its case is no longer open).
+      if (SHELTERED_CASE_STATUSES.includes(params.status) && !doc.shelterAnimalId) {
+        const animal = await shelterAnimalFromCase(doc, report, animalStatusForCase(params.status));
+        // A stray now in the shelter's care may be someone's lost pet.
+        if (params.status === 'recovered' && kind === 'found') await matchAnimalAgainstLostReports(animal as never);
       }
+
       await notify({
         audienceType: 'user',
         audienceId: report.reporterId,
         type: 'status_update',
         refId: report._id,
-        title: 'Case status updated',
-        body: `${shelter?.name ?? 'The shelter'} set the case to "${CASE_STATUS_LABELS[params.status]}". ${params.notes ?? ''}`.trim(),
+        title: params.status === 'recovered' ? 'The animal was recovered' : 'Case status updated',
+        body: (params.status === 'recovered'
+          ? `${shelter?.name ?? 'The shelter'} has recovered the animal and is caring for it at the shelter. ${params.notes ?? ''}`
+          : `${shelter?.name ?? 'The shelter'} set the case to "${CASE_STATUS_LABELS[params.status]}". ${params.notes ?? ''}`
+        ).trim(),
       });
     }
     return serializeCase(doc.toObject(), shelter?.name);
   },
 
-  async updateAnimal(shelterId: string, id: string, patch: { caseStatus?: CaseStatus; postedPublicly?: boolean }) {
-    const current = await ShelterAnimal.findOne({ _id: id, shelterId }, 'caseStatus').lean();
+  async updateAnimal(shelterId: string, id: string, patch: { caseStatus?: AnimalStatus; postedPublicly?: boolean }) {
+    const current = await ShelterAnimal.findOne({ _id: id, shelterId }, 'caseStatus caseId sourceReportKind').lean();
     if (!current) throw ApiError.notFound('Animal not found');
     const update: Record<string, unknown> = {};
     if (patch.caseStatus !== undefined && patch.caseStatus !== current.caseStatus) {
@@ -391,6 +464,32 @@ export const shelterService = {
     if (patch.postedPublicly !== undefined && update.postedPublicly === undefined) update.postedPublicly = patch.postedPublicly;
     const animal = await ShelterAnimal.findOneAndUpdate({ _id: id, shelterId }, update, { new: true });
     if (!animal) throw ApiError.notFound('Animal not found');
+
+    // An animal that came from a resident's report: its outcome is the case's outcome too, so the
+    // case, the report and the person who filed it all follow.
+    if (update.caseStatus && current.caseId) {
+      const status = update.caseStatus as CaseStatus;
+      const caseDoc = await AnimalCase.findOne({ _id: current.caseId, shelterId });
+      if (caseDoc && caseDoc.status !== status) {
+        const shelter = await Shelter.findById(shelterId, 'name').lean();
+        const note = `${CASE_STATUS_LABELS[status]} - updated from Shelter Animals.`;
+        caseDoc.status = status;
+        caseDoc.history.push({ status, note, changedBy: shelterId as never, changedAt: new Date() });
+        await caseDoc.save();
+        const report = await reportForCase(caseDoc);
+        if (report) {
+          await applyOutcomeToReport(report, caseDoc.lostReportId ? 'lost' : 'found', status);
+          await notify({
+            audienceType: 'user',
+            audienceId: report.reporterId,
+            type: 'status_update',
+            refId: report._id,
+            title: 'Case status updated',
+            body: `${shelter?.name ?? 'The shelter'} set the case to "${CASE_STATUS_LABELS[status]}".`,
+          });
+        }
+      }
+    }
     return serializeShelterAnimal(animal);
   },
 

@@ -172,6 +172,8 @@ export function serializeShelterAnimal(doc: any) {
     caseStatus: doc.caseStatus,
     postedPublicly: doc.postedPublicly,
     notes: doc.notes,
+    caseId: doc.caseId ? String(doc.caseId) : undefined,
+    sourceReportId: doc.sourceReportId ? String(doc.sourceReportId) : undefined,
   };
 }
 
@@ -221,6 +223,7 @@ export function serializeCase(doc: any, shelterName = 'Shelter') {
     reportId: String(doc.lostReportId ?? doc.foundReportId ?? ''),
     shelterId: String(doc.shelterId),
     status: doc.status,
+    shelterAnimalId: doc.shelterAnimalId ? String(doc.shelterAnimalId) : undefined,
     openedAt: doc.createdAt?.toISOString?.(),
     updatedAt: doc.updatedAt?.toISOString?.(),
     timeline: (doc.history ?? []).map((h: any) => ({

@@ -59,9 +59,14 @@ export const lettersOnly = (text: string) => text.replace(/[^\p{L} .'-]+/gu, '')
 
 // ----------------------------------------------------------------- case status
 
-/** A case only moves forward: under recovery -> one outcome. Matches the server's rule. */
+/**
+ * A case only moves forward: under recovery -> one outcome. Matches the server's rule.
+ * "Recovered" means the shelter now has the animal: the case closes and the animal carries on in
+ * Shelter Animals, where reunited / adopted / inconclusive is set later.
+ */
 export const CASE_STATUS_NEXT: Record<AnimalCaseStatus, AnimalCaseStatus[]> = {
-  under_rescue: ['reunited', 'adopted', 'inconclusive'],
+  under_rescue: ['recovered', 'reunited', 'adopted', 'inconclusive'],
+  recovered: [],
   reunited: [],
   adopted: [],
   inconclusive: [],
@@ -70,6 +75,14 @@ export const CASE_STATUS_NEXT: Record<AnimalCaseStatus, AnimalCaseStatus[]> = {
 export const nextCaseStatuses = (status: AnimalCaseStatus) => CASE_STATUS_NEXT[status];
 
 export const isCaseClosed = (status: AnimalCaseStatus) => CASE_STATUS_NEXT[status].length === 0;
+
+/** Outcomes a shelter animal can move to - the case outcomes minus "recovered", which it already is. */
+export const nextAnimalStatuses = (status: AnimalCaseStatus): AnimalCaseStatus[] =>
+  CASE_STATUS_NEXT[status].filter((s) => s !== 'recovered');
+
+/** Case outcomes that put the animal on Shelter Animals (inconclusive means the shelter never had it). */
+export const isShelteredCaseStatus = (status: AnimalCaseStatus) =>
+  status === 'recovered' || status === 'reunited' || status === 'adopted';
 
 /** After these outcomes the report behind the case stops showing in report lists. */
 export const isReportHidingStatus = (status: AnimalCaseStatus) => status === 'adopted' || status === 'inconclusive';

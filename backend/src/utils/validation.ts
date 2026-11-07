@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ANIMAL_CASE_STATUSES, ANIMAL_TYPES } from '../config/constants';
+import { ANIMAL_CASE_STATUSES, ANIMAL_TYPES, SHELTER_ANIMAL_STATUSES } from '../config/constants';
 
 /**
  * Request bodies are parsed with these schemas, which both reject bad input with a 400 and drop
@@ -156,6 +156,8 @@ export const resetPasswordSchema = z.object({
 });
 
 const caseStatus = z.enum(ANIMAL_CASE_STATUSES);
+/** A shelter animal has no "recovered" status - it is already in the shelter's care. */
+const animalStatus = z.enum(SHELTER_ANIMAL_STATUSES);
 
 export const shelterAnimalSchema = z.object({
   name: optionalText(100),
@@ -169,13 +171,13 @@ export const shelterAnimalSchema = z.object({
   imageUrls,
   intakeType: z.enum(['surrendered', 'recovered', 'rescued']).optional(),
   intakeDate: z.coerce.date().optional(),
-  caseStatus: caseStatus.optional(),
+  caseStatus: animalStatus.optional(),
   postedPublicly: z.boolean().optional(),
   notes: optionalText(1000),
 });
 
 export const shelterAnimalPatchSchema = z.object({
-  caseStatus: caseStatus.optional(),
+  caseStatus: animalStatus.optional(),
   postedPublicly: z.boolean().optional(),
 });
 

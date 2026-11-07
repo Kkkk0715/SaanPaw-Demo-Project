@@ -23,17 +23,19 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
     .reduce((sum, c) => sum + c.unreadForShelter, 0);
   const unhandled = areaReports.filter((r) => !r.caseId).length;
   const perDay = reportsPerDay(areaReports, 7);
-  // Shelter animals and cases opened from residents' reports share the same four statuses; both
-  // count, or a report case marked Reunited never shows up in the chart.
+  // Shelter animals plus report cases. A case that became a Shelter Animals record (recovered,
+  // reunited, adopted) is counted once, as that animal - not twice.
   const byStatus = countBy(
-    [...mine.map((a) => a.caseStatus), ...myCases.map((c) => c.status)],
+    [...mine.map((a) => a.caseStatus), ...myCases.filter((c) => !c.shelterAnimalId).map((c) => c.status)],
     (status) => status,
   );
-  const statusRows = (Object.keys(caseStatusMeta) as (keyof typeof caseStatusMeta)[]).map((k) => ({
-    label: caseStatusMeta[k].label,
-    value: byStatus[k] ?? 0,
-    color: caseStatusMeta[k].color,
-  }));
+  const statusRows = (Object.keys(caseStatusMeta) as (keyof typeof caseStatusMeta)[])
+    .filter((k) => k !== 'recovered') // a recovered case is counted as its animal, under recovery / in care
+    .map((k) => ({
+      label: caseStatusMeta[k].label,
+      value: byStatus[k] ?? 0,
+      color: caseStatusMeta[k].color,
+    }));
 
   const occupancyPct = Math.min(
     100,

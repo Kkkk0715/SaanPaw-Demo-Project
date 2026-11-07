@@ -9,7 +9,13 @@ import {
   type ReactNode,
 } from 'react';
 import { SJDM_BARANGAYS, distanceMeters } from '../sjdm';
-import { CASE_STATUS_NEXT, humanizeStatus, isReportHidingStatus } from '../describe';
+import {
+  CASE_STATUS_NEXT,
+  humanizeStatus,
+  isReportHidingStatus,
+  isShelteredCaseStatus,
+  nextAnimalStatuses,
+} from '../describe';
 import {
   apiActions,
   isLocalImageUri,
@@ -144,6 +150,18 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const withinLast24h = (iso: string) => Date.now() - +new Date(iso) <= DAY_MS;
 
 const uid = (prefix: string) => `${prefix}${Math.random().toString(36).slice(2, 9)}`;
+
+/**
+ * What a case outcome does to its report, matching the server: reunited closes it (a lost pet as
+ * "recovered"), adopted / inconclusive close it, and recovered closes a found report (the stray is
+ * in the shelter now) but keeps a lost report open for its owner. Null = no change.
+ */
+function reportStatusAfter(kind: ReportKind, status: AnimalCaseStatus): ReportStatus | null {
+  if (status === 'reunited') return kind === 'lost' ? 'recovered' : 'closed';
+  if (status === 'adopted' || status === 'inconclusive') return 'closed';
+  if (status === 'recovered' && kind === 'found') return 'closed';
+  return null;
+}
 
 export interface NewReportInput {
   kind: ReportKind;
@@ -300,6 +318,15 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
    * applied - otherwise a deleted item could briefly reappear until the next reload.
    */
   const mutations = useRef(0);
+  // Latest lists for callbacks that run right after another change, before a re-render.
+  const casesRef = useRef(cases);
+  casesRef.current = cases;
+  const animalsRef = useRef(shelterAnimals);
+  animalsRef.current = shelterAnimals;
+  const reportsRef = useRef(reports);
+  reportsRef.current = reports;
+  /** Cases opened on this device that the server is still creating: temporary id -> real id. */
+  const pendingCases = useRef(new Map<string, Promise<string>>());
 
   const currentUser =
     users.find((u) => u.id === (live ? (session!.role === 'user' ? selfId : '') : CURRENT_USER_ID)) ??
@@ -436,7 +463,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       foundToday: reports.filter((r) => r.kind === 'found' && withinLast24h(r.reportedAt)).length,
       activeReports: open.length,
       reunitedThisMonth:
-        cases.filter((c) => c.status === 'reunited').length +
+        cases.filter((c) => c.status === 'reunited' && !c.shelterAnimalId).length +
         shelterAnimals.filter((a) => a.caseStatus === 'reunited').length,
       underRescue: shelterAnimals.filter((a) => a.caseStatus === 'under_rescue').length,
       sheltersOnline: shelters.filter((s) => s.approvalStatus === 'approved').length,
@@ -467,14 +494,25 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     [reports, currentUser],
   );
 
+  /**
+   * Reports still needing this shelter: open ones in its radius whose case (if it has one) is still
+   * under recovery. Once the shelter marks a case Recovered, Reunited, Adopted or Inconclusive the
+   * report leaves this list - the animal carries on in Shelter Animals instead.
+   */
   const shelterAreaReports = useCallback(
-    () =>
-      reports
-        .filter((r) => r.status !== 'closed')
+    () => {
+      const finished = new Set(
+        cases
+          .filter((c) => c.shelterId === currentShelter.id && c.status !== 'under_rescue')
+          .map((c) => c.reportId),
+      );
+      return reports
+        .filter((r) => (r.status === 'active' || r.status === 'matched') && !finished.has(r.id))
         .map((r) => ({ ...r, distance: distanceMeters(currentShelter.location, r.location) }))
         .filter((r) => r.distance <= currentShelter.operatingRadiusMeters)
-        .sort((a, b) => a.distance - b.distance),
-    [reports, currentShelter],
+        .sort((a, b) => a.distance - b.distance);
+    },
+    [reports, cases, currentShelter],
   );
 
   const matchesForReport = useCallback(
@@ -734,20 +772,10 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const openCase = useCallback<AppState['openCase']>(
     (reportId, note) => {
       const session = sessionRef.current;
-      if (session) {
-        // The server assigns the case id, and later status edits need it, so wait for it.
-        send(
-          apiActions.openCase(session, reportId, note).then((created) => {
-            setCases((prev) => [created, ...prev]);
-            setReports((prev) =>
-              prev.map((r) => (r.id === reportId ? { ...r, caseId: created.id, status: 'matched' } : r)),
-            );
-          }),
-        );
-        return;
-      }
-      const id = uid('c');
+      const id = session ? `pending-${uid('c')}` : uid('c');
       const at = new Date().toISOString();
+      // Shown straight away, so the case can be tracked or updated without waiting on the server.
+      // Live, it carries a temporary id until the server's case comes back (see pendingCases).
       setCases((prev) => [
         {
           id,
@@ -763,6 +791,27 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       setReports((prev) =>
         prev.map((r) => (r.id === reportId ? { ...r, caseId: id, status: 'matched' } : r)),
       );
+
+      if (session) {
+        const task = apiActions.openCase(session, reportId, note).then((created) => {
+          // Keep anything done to the case while it was saving (a status set straight away);
+          // the queued request carries that change to the server.
+          setCases((prev) =>
+            prev.map((c) =>
+              c.id === id
+                ? { ...created, status: c.status, timeline: c.status === created.status ? created.timeline : c.timeline, shelterAnimalId: c.shelterAnimalId }
+                : c,
+            ),
+          );
+          setReports((prev) => prev.map((r) => (r.caseId === id ? { ...r, caseId: created.id } : r)));
+          setShelterAnimals((prev) => prev.map((a) => (a.caseId === id ? { ...a, caseId: created.id } : a)));
+          return created.id;
+        });
+        pendingCases.current.set(id, task);
+        void task.finally(() => pendingCases.current.delete(id)).catch(() => {});
+        send(task);
+        return;
+      }
       pushNotification({
         audience: 'user',
         type: 'case_update',
@@ -777,47 +826,85 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const setCaseStatus = useCallback<AppState['setCaseStatus']>(
     (caseId, status, note) => {
       const session = sessionRef.current;
-      const current = cases.find((c) => c.id === caseId);
+      // Read through refs, not the render's copy: a case opened a moment ago is already here.
+      const current = casesRef.current.find((c) => c.id === caseId);
       // One-way only, same rule as the server: a closed case can't be reopened or cycled.
       if (!current || !CASE_STATUS_NEXT[current.status].includes(status)) return;
-      if (session) send(apiActions.setCaseStatus(session, caseId, status, note));
-      const at = new Date().toISOString();
-      let reportId: string | undefined;
-      setCases((prev) =>
-        prev.map((c) => {
-          if (c.id !== caseId) return c;
-          reportId = c.reportId;
-          return {
-            ...c,
-            status,
-            updatedAt: at,
-            timeline: [...c.timeline, { at, status, note, by: currentShelter.name }],
-          };
-        }),
-      );
-      if (status === 'reunited' && reportId) {
-        setReports((prev) =>
-          prev.map((r) => (r.id === reportId ? { ...r, status: r.kind === 'lost' ? 'recovered' : 'closed' } : r)),
+      if (session) {
+        // A case still saving: send the change once the server has given it its real id, instead
+        // of dropping it (which is how a status update could fail to register).
+        const realId = pendingCases.current.get(caseId);
+        send(
+          realId
+            ? realId.then((id) => apiActions.setCaseStatus(session, id, status, note))
+            : apiActions.setCaseStatus(session, caseId, status, note),
         );
-      } else if (isReportHidingStatus(status) && reportId) {
-        setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status: 'closed' } : r)));
+      }
+      const at = new Date().toISOString();
+      const report = reportsRef.current.find((r) => r.id === current.reportId);
+
+      // Recovered / reunited / adopted: the animal goes onto Shelter Animals now, under the matching
+      // tab, the same as the server does - not only after the next reload.
+      let animalId = current.shelterAnimalId;
+      if (isShelteredCaseStatus(status) && !animalId && report) {
+        animalId = session ? `pending-${uid('sa')}` : uid('sa');
+        const newAnimal: ShelterAnimal = {
+          id: animalId,
+          shelterId: current.shelterId,
+          name: report.name || [report.color, report.breed || report.animalType].filter(Boolean).join(' ') || 'Unnamed animal',
+          animalType: report.animalType,
+          breed: report.breed,
+          color: report.color,
+          sex: report.sex,
+          size: report.size,
+          distinctMarks: report.distinctMarks,
+          imageUrls: report.imageUrls,
+          intakeType: 'recovered',
+          intakeDate: at,
+          caseStatus: status === 'recovered' ? 'under_rescue' : status,
+          postedPublicly: false,
+          notes: note || report.description,
+          caseId,
+          sourceReportId: report.id,
+        };
+        setShelterAnimals((prev) => [newAnimal, ...prev]);
+      }
+
+      setCases((prev) =>
+        prev.map((c) =>
+          c.id === caseId
+            ? {
+                ...c,
+                status,
+                shelterAnimalId: animalId,
+                updatedAt: at,
+                timeline: [...c.timeline, { at, status, note, by: currentShelter.name }],
+              }
+            : c,
+        ),
+      );
+      if (report) {
+        const next = reportStatusAfter(report.kind, status);
+        if (next) setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, status: next } : r)));
       }
       pushNotification({
         audience: 'user',
         type: 'case_update',
         title: 'Case status updated',
         body: `${currentShelter.name} set the case to "${humanizeStatus(status)}". ${note}`,
-        relatedReportId: reportId,
+        relatedReportId: current.reportId,
       });
     },
-    [cases, currentShelter, pushNotification, send],
+    [currentShelter, pushNotification, send],
   );
 
   const setShelterAnimalStatus = useCallback<AppState['setShelterAnimalStatus']>(
     (animalId, status) => {
       const session = sessionRef.current;
-      const current = shelterAnimals.find((a) => a.id === animalId);
-      if (!current || !CASE_STATUS_NEXT[current.caseStatus].includes(status)) return;
+      const current = animalsRef.current.find((a) => a.id === animalId);
+      if (!current || !nextAnimalStatuses(current.caseStatus).includes(status)) return;
+      // Still saving (it was created a moment ago from a case): the screen asks to wait for it.
+      if (session && animalId.startsWith('pending-')) return;
       setShelterAnimals((prev) =>
         prev.map((a) =>
           a.id === animalId
@@ -825,9 +912,24 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
             : a,
         ),
       );
+      // Came from a resident's report: its case and report follow, as on the server.
+      if (current.caseId) {
+        const at = new Date().toISOString();
+        const linked = casesRef.current.find((c) => c.id === current.caseId);
+        setCases((prev) =>
+          prev.map((c) =>
+            c.id === current.caseId
+              ? { ...c, status, updatedAt: at, timeline: [...c.timeline, { at, status, note: `${humanizeStatus(status)} - updated from Shelter Animals.`, by: currentShelter.name }] }
+              : c,
+          ),
+        );
+        const report = linked ? reportsRef.current.find((r) => r.id === linked.reportId) : undefined;
+        const next = report ? reportStatusAfter(report.kind, status) : null;
+        if (report && next) setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, status: next } : r)));
+      }
       if (session) send(apiActions.updateShelterAnimal(session, animalId, { caseStatus: status }));
     },
-    [shelterAnimals, send],
+    [currentShelter.name, send],
   );
 
   const deleteShelterAnimal = useCallback<AppState['deleteShelterAnimal']>(

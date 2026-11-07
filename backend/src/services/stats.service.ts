@@ -38,7 +38,8 @@ export const statsService = {
           lostReportId: null, // matches a missing field too
           updatedAt: { $gte: monthAgo },
         }),
-        ShelterAnimal.countDocuments({ caseStatus: 'reunited', updatedAt: { $gte: monthAgo } }),
+        // Animals the shelter took in itself. Ones copied from a report case are already counted above.
+        ShelterAnimal.countDocuments({ caseStatus: 'reunited', sourceReportId: null, updatedAt: { $gte: monthAgo } }),
         ShelterAnimal.countDocuments({ caseStatus: 'under_rescue' }),
         Shelter.countDocuments({ approvalStatus: 'approved' }),
       ]);
