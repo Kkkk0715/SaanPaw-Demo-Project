@@ -213,6 +213,9 @@ export function MapCanvas({
       if (m.label && selectedMarkerId === m.id) {
         if (!marker.getPopup()) {
           marker.bindPopup(escapeHtml(m.label), { closeButton: false, closeOnClick: false, autoClose: false, autoPan: false });
+        } else {
+          // Rewrite the text every time: a moved pin must say its new barangay, not its first label.
+          marker.setPopupContent(escapeHtml(m.label));
         }
         marker.openPopup();
       } else if (marker.getPopup()) {

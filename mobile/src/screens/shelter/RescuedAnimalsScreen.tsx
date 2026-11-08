@@ -21,7 +21,7 @@ import { distanceMeters, useApp } from '@saanpaw/shared';
 import type { AnimalCase, AnimalReport, ShelterAnimal } from '@saanpaw/shared';
 
 type Group = 'all' | 'pets' | 'strays';
-type Status = 'recovering' | 'all';
+type Status = 'recovering' | 'closed';
 
 type Entry =
   | { kind: 'animal'; id: string; group: 'pets' | 'strays'; at: string; animal: ShelterAnimal }
@@ -62,7 +62,8 @@ export function RescuedAnimalsScreen({ navigation }: NativeStackScreenProps<any>
   }, [shelterAnimals, cases, currentShelter.id, reportById]);
 
   const isRecovering = (e: Entry) => (e.kind === 'animal' ? e.animal.caseStatus : e.case.status) === 'under_rescue';
-  const inStatus = entries.filter((e) => (status === 'recovering' ? isRecovering(e) : true));
+  // Still recovering, or closed (reunited, adopted, inconclusive) - one or the other.
+  const inStatus = entries.filter((e) => (status === 'recovering' ? isRecovering(e) : !isRecovering(e)));
   const shown = inStatus.filter((e) => (group === 'all' ? true : e.group === group));
   const page = usePagination(shown, undefined, `${group}-${status}`);
   const count = (g: Group) => inStatus.filter((e) => (g === 'all' ? true : e.group === g)).length;
@@ -88,7 +89,7 @@ export function RescuedAnimalsScreen({ navigation }: NativeStackScreenProps<any>
       <Segmented
         options={[
           { label: 'Still recovering', value: 'recovering', color: theme.colors.info },
-          { label: 'Include closed', value: 'all' },
+          { label: 'Closed', value: 'closed' },
         ]}
         value={status}
         onChange={(v) => setStatus(v as Status)}

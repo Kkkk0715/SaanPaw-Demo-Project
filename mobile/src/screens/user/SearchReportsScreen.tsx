@@ -19,6 +19,7 @@ import {
   usePagination,
 } from '@/components/ui';
 import { ReportCard } from '@/components/domain';
+import { useNavigation } from '@react-navigation/native';
 
 type KindFilter = ReportKind | 'all';
 type Sort = 'recent' | 'nearest';
@@ -38,6 +39,7 @@ const DATE_WINDOWS: Record<Exclude<DateFilter, 'any'>, number> = {
  * you are actually looking for.
  */
 export function SearchReportsScreen() {
+  const navigation = useNavigation<any>();
   const { reports, currentUser } = useApp();
 
   const [query, setQuery] = useState('');
@@ -168,15 +170,15 @@ export function SearchReportsScreen() {
             key={r.id}
             report={r}
             distance={r.distance}
+            // The full report: photos, every detail, where and when, who to contact, the map.
+            onPress={() => navigation.navigate('ReportDetail', { reportId: r.id })}
             footer={
-              r.kind === 'found' ? (
-                <View style={styles.footerRow}>
-                  <Text style={styles.contactHint}>
-                    Reported by {r.reporterName}
-                    {r.reporterPhone ? ` · ${r.reporterPhone}` : ''}
-                  </Text>
-                </View>
-              ) : undefined
+              <View style={styles.footerRow}>
+                <Text style={styles.contactHint} numberOfLines={1}>
+                  {r.kind === 'found' ? `Reported by ${r.reporterName}` : 'Tap to see the full report'}
+                </Text>
+                <Text style={styles.viewDetails}>View details ›</Text>
+              </View>
             }
           />
         ))
@@ -201,6 +203,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
     paddingTop: theme.spacing(1),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing(1),
   },
-  contactHint: { fontSize: 12, color: theme.colors.muted },
+  contactHint: { fontSize: 12, color: theme.colors.muted, flex: 1 },
+  viewDetails: { ...theme.type.label, color: theme.colors.primary },
 });

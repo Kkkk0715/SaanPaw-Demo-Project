@@ -6,7 +6,6 @@ import { theme, reportKindStyle } from '@/constants/theme';
 import {
   SJDM_ALL_BARANGAY_NAMES,
   SJDM_BARANGAYS,
-  barangayFromPlaces,
   formatDistance,
   isWithinSJDM,
   nearestBarangay,
@@ -55,8 +54,8 @@ export function ReportForm({
   const [size, setSize] = useState<AnimalReport['size']>('medium');
   const [marks, setMarks] = useState('');
   const [description, setDescription] = useState('');
-  // The barangay of where the pin starts (refined from the map's address data on load), not simply
-  // the reporter's own barangay - the label should always describe the pin.
+  // The barangay of where the pin starts, not simply the reporter's own barangay - the label
+  // should always describe the pin.
   const [barangay, setBarangay] = useState<string | null>(() => nearestBarangay(currentUser.location).name);
   const [pin, setPin] = useState<LatLng>(currentUser.location);
   /** Bumped when the device location is tagged, so the map flies there by itself. */
@@ -134,11 +133,10 @@ export function ReportForm({
     const timer = setTimeout(async () => {
       const result = await lookupAddress(pin);
       if (seq !== lookupSeq.current) return; // the pin moved again meanwhile
-      // The barangay the pin is really in, from the map's own address data. The nearest-centre
-      // guess set when the pin moved only knows a handful of barangays, so it often named the
-      // reporter's own barangay or a neighbouring one instead.
-      const pinBarangay = barangayFromPlaces([...(result?.places ?? []), result?.area]);
-      if (pinBarangay) setBarangay(pinBarangay);
+      // The barangay itself is not taken from this address: San Jose Del Monte has no barangay
+      // boundaries in OpenStreetMap, so its address names a nearby place that can be the wrong
+      // barangay ("Fatima I" for a pin in Fatima V). The nearest barangay centre - set the moment
+      // the pin moves - matches the map's own labels, so that stays.
       if (result?.address) {
         setAddress(result.address);
         setAddressLookup('found');
@@ -468,8 +466,7 @@ export function ReportForm({
           focus={mapFocus}
           onPickLocation={(point) => {
             setPin(point);
-            // The label follows the pin straight away (nearest barangay), then the map's own
-            // address data for the spot refines it a moment later (see the lookup above).
+            // The label follows the pin: the barangay whose centre is nearest the spot.
             setBarangay(nearestBarangay(point).name);
           }}
         />

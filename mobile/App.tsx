@@ -1,4 +1,3 @@
-import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
@@ -16,6 +15,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { API_BASE_URL } from '@/services/api';
 import { theme } from '@/constants/theme';
+import { LoadingLogo } from '@/components/ui/LoadingLogo';
 import { useImmersiveMode } from '@/services/immersive';
 
 /** Feeds the signed-in role's token to the data store; signed out, the store keeps its seed data. */
@@ -45,9 +45,7 @@ export default function App() {
   // Text would flash in the system font and reflow once the real fonts land.
   if (!fontsReady) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.colors.background, justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
+      <LoadingLogo withName={false} />
     );
   }
 

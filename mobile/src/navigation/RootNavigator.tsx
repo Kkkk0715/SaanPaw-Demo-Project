@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, Alert, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
+import { LoadingLogo } from '@/components/ui/LoadingLogo';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useApp } from '@saanpaw/shared';
 import { useAuth } from '@/context/AuthContext';
@@ -25,9 +26,7 @@ export function RootNavigator() {
 
   if (loading || (role && sync.status === 'loading')) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
+      <LoadingLogo message={role ? 'Loading your reports and alerts…' : undefined} />
     );
   }
 

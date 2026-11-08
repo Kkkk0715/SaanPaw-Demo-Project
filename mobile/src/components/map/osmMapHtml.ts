@@ -171,6 +171,10 @@ export function buildMapHtml(initial: MapInitialState): string {
           if (m.label && selectedId === m.id) {
             if (!existing.getPopup()) {
               existing.bindPopup(escapeHtml(m.label), { closeButton: false, closeOnClick: false, autoClose: false, autoPan: false });
+            } else {
+              // Rewrite the text every time: a pin moved to another barangay must say the new one,
+              // not keep the label it was first given (the reporter's own barangay).
+              existing.setPopupContent(escapeHtml(m.label));
             }
             existing.openPopup();
           } else if (existing.getPopup()) {
