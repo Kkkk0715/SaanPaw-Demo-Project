@@ -28,8 +28,8 @@ export function ShelterDetailPanel({
 
   useEffect(() => setShowPermit(false), [shelter.id]);
 
-  const decide = (status: 'approved' | 'rejected') => {
-    setShelterApproval(shelter.id, status);
+  const decide = (status: 'approved' | 'rejected', reason?: string) => {
+    setShelterApproval(shelter.id, status, reason);
     onAfterAction?.();
   };
 
@@ -43,10 +43,22 @@ export function ShelterDetailPanel({
         : pending
           ? <>Are you sure you want to reject the application from <strong>{shelter.name}</strong>?</>
           : <>Are you sure you want to revoke access for <strong>{shelter.name}</strong>? It will no longer be able to sign in or receive alerts.</>;
-    ask(message, () => decide(status), {
+    ask(message, (reason) => decide(status, reason), {
       title: status === 'approved' ? 'Approve this shelter?' : pending ? 'Reject this application?' : 'Revoke access?',
       confirmLabel: 'Yes',
       tone: status === 'approved' ? 'primary' : 'danger',
+      // Rejecting or revoking emails the shelter, so it says why.
+      reason:
+        status === 'rejected'
+          ? {
+              label: pending ? 'Reason for rejecting' : 'Reason for revoking access',
+              placeholder: pending
+                ? 'e.g. The permit number could not be confirmed with the city veterinary office.'
+                : 'e.g. Repeated reports of animals not being cared for.',
+              hint: 'Sent to them by email, word for word.',
+              required: true,
+            }
+          : undefined,
     });
   };
 
@@ -56,11 +68,20 @@ export function ShelterDetailPanel({
         Are you sure you want to delete <strong>{shelter.name}</strong>? Its animals, cases, conversations,
         notifications and proof documents are deleted too. This cannot be undone.
       </>,
-      () => {
-        deleteShelterAccount(shelter.id);
+      (reason) => {
+        deleteShelterAccount(shelter.id, reason);
         onAfterAction?.();
       },
-      { title: 'Are you sure you want to delete this?', confirmLabel: 'Yes, delete' },
+      {
+        title: 'Are you sure you want to delete this?',
+        confirmLabel: 'Yes, delete',
+        reason: {
+          label: 'Reason for deleting',
+          placeholder: 'e.g. The shelter has closed, or its credentials could not be verified.',
+          hint: 'Sent to them by email, word for word.',
+          required: true,
+        },
+      },
     );
 
   return (

@@ -16,7 +16,13 @@ import { Message } from '../../models/Message';
 import { Conversation } from '../../models/Conversation';
 import { moderationService } from '../../services/moderation.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
-import { sendEmail, shelterCredentialsEmail } from '../../services/email.service';
+import {
+  accountActionEmail,
+  retryQueuedEmails,
+  sendEmail,
+  shelterCredentialsEmail,
+  type EmailResult,
+} from '../../services/email.service';
 import { statsService } from '../../services/stats.service';
 import { getSystemConfig, updateSystemConfig, type SystemConfigValue } from '../../services/systemConfig.service';
 import { ApiError } from '../../utils/ApiError';
@@ -96,6 +102,9 @@ export const developerService = {
 
   /** Everything the console renders, in the shapes the shared types describe. */
   async overview() {
+    // Emails that failed earlier (Gmail hiccup) are retried whenever the console loads - bounded,
+    // so a still-unreachable mail server never holds the console up for long.
+    await Promise.race([retryQueuedEmails(3), new Promise((resolve) => setTimeout(resolve, 4000))]);
     const [stats, shelters, users, lost, found, shelterAnimals, flags, systemConfig, collections] = await Promise.all([
       statsService.platformStats(),
       Shelter.find().sort({ registeredAt: -1 }).lean(),
@@ -153,10 +162,23 @@ export const developerService = {
     if (!shelter) throw ApiError.notFound('Shelter not found');
 
     if (params.decision === 'reject') {
+      // Rejecting a pending application, or revoking an approved shelter's access.
+      const wasApproved = shelter.approvalStatus === 'approved';
       shelter.approvalStatus = 'rejected';
       shelter.rejectionReason = params.reason;
       await shelter.save();
-      return { shelter: serializeShelter(shelter, { includePrivate: true }) };
+      const to = shelter.adminEmail || shelter.email;
+      const email: EmailResult = to
+        ? await sendEmail(
+            accountActionEmail({
+              action: wasApproved ? 'shelter_revoked' : 'shelter_rejected',
+              name: shelter.name,
+              email: to,
+              reason: params.reason,
+            }),
+          )
+        : { sent: false, queued: false };
+      return { shelter: serializeShelter(shelter, { includePrivate: true }), email };
     }
 
     const adminEmail = (params.adminEmail ?? shelter.email)?.toLowerCase().trim();
@@ -297,29 +319,46 @@ export const developerService = {
     };
   },
 
-  /** Manual ban: locks the account and hides everything the user reported. */
-  async banUser(userId: string) {
+  /** Manual ban: locks the account, hides everything the user reported, and emails them why. */
+  async banUser(userId: string, reason?: string) {
     const user = await User.findByIdAndUpdate(userId, { isBanned: true }, { new: true });
     if (!user) throw ApiError.notFound('User not found');
     await Promise.all([
       LostPetReport.updateMany({ reporterId: userId }, { isHiddenByModeration: true }),
       FoundAnimalReport.updateMany({ reporterId: userId }, { isHiddenByModeration: true }),
     ]);
-    return serializeUser(user);
+    const emailResult = await sendEmail(
+      accountActionEmail({ action: 'user_banned', name: combineName(user), email: user.email, reason }),
+    );
+    // Not "email": the user record already has an email field (their address).
+    return { ...serializeUser(user), emailResult };
   },
 
   // ----- Account & Report Deletion -----
   // A true delete, unlike banning or flag resolution (both soft hides) - see cascadeDelete.service.ts.
-  async deleteShelter(shelterId: string) {
+  // The email goes out first, while the address is still on file: sendEmail retries and, failing
+  // that, keeps the message in the outbox to retry, so the deletion never leaves someone untold.
+  async deleteShelter(shelterId: string, reason?: string) {
+    const existing = await Shelter.findById(shelterId, 'name email adminEmail').lean();
+    if (!existing) throw ApiError.notFound('Shelter not found');
+    const to = existing.adminEmail || existing.email;
+    const email: EmailResult = to
+      ? await sendEmail(accountActionEmail({ action: 'shelter_deleted', name: existing.name, email: to, reason }))
+      : { sent: false, queued: false };
     const shelter = await deleteShelterCascade(shelterId);
     if (!shelter) throw ApiError.notFound('Shelter not found');
-    return { id: shelterId };
+    return { id: shelterId, email, emailedTo: to ?? null };
   },
 
-  async deleteUser(userId: string) {
+  async deleteUser(userId: string, reason?: string) {
+    const existing = await User.findById(userId, 'firstName middleName lastName email').lean();
+    if (!existing) throw ApiError.notFound('User not found');
+    const email = await sendEmail(
+      accountActionEmail({ action: 'user_deleted', name: combineName(existing), email: existing.email, reason }),
+    );
     const user = await deleteUserCascade(userId);
     if (!user) throw ApiError.notFound('User not found');
-    return { id: userId };
+    return { id: userId, email, emailedTo: existing.email };
   },
 
   async deleteReport(kind: 'lost' | 'found', reportId: string) {

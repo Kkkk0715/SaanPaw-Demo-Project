@@ -1,6 +1,12 @@
 import type { Request, Response } from 'express';
 import { developerService } from './developer.service';
 
+/** The administrator's reason for a ban or deletion (request body or ?reason=), trimmed and capped. */
+const reasonFrom = (req: Request): string | undefined => {
+  const raw = (req.body as { reason?: unknown } | undefined)?.reason ?? req.query.reason;
+  return typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 1000) : undefined;
+};
+
 export const developerController = {
   me: async (req: Request, res: Response) => res.json(await developerService.me(req.auth!.id)),
 
@@ -9,7 +15,8 @@ export const developerController = {
 
   overview: async (_req: Request, res: Response) => res.json(await developerService.overview()),
 
-  banUser: async (req: Request, res: Response) => res.json(await developerService.banUser(req.params.id)),
+  banUser: async (req: Request, res: Response) =>
+    res.json(await developerService.banUser(req.params.id, reasonFrom(req))),
 
   listPendingShelters: async (_req: Request, res: Response) =>
     res.json(await developerService.listPendingShelters()),
@@ -59,10 +66,10 @@ export const developerController = {
     ),
 
   deleteShelter: async (req: Request, res: Response) =>
-    res.json(await developerService.deleteShelter(req.params.id)),
+    res.json(await developerService.deleteShelter(req.params.id, reasonFrom(req))),
 
   deleteUser: async (req: Request, res: Response) =>
-    res.json(await developerService.deleteUser(req.params.id)),
+    res.json(await developerService.deleteUser(req.params.id, reasonFrom(req))),
 
   deleteReport: async (req: Request, res: Response) => {
     const kind = req.params.kind === 'found' ? 'found' : 'lost';

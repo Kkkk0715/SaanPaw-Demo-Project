@@ -116,9 +116,19 @@ export function ReportMonitoringPage() {
   };
 
   const confirmBan = (id: string, name: string) =>
-    ask(<>Are you sure you want to ban <strong>{name}</strong>? Their reports will be hidden and they can no longer sign in.</>, () => banUser(id), {
-      title: 'Ban this account?',
-    });
+    ask(
+      <>Are you sure you want to ban <strong>{name}</strong>? Their reports will be hidden and they can no longer sign in.</>,
+      (reason) => banUser(id, reason),
+      {
+        title: 'Ban this account?',
+        reason: {
+          label: 'Reason for banning',
+          placeholder: 'e.g. Repeatedly posted fake lost-pet reports.',
+          hint: 'Sent to them by email, word for word.',
+          required: true,
+        },
+      },
+    );
 
   const confirmDeleteUser = (id: string, name: string) =>
     ask(
@@ -126,8 +136,17 @@ export function ReportMonitoringPage() {
         Are you sure you want to delete <strong>{name}</strong>&apos;s account? Their reports, messages and notifications are
         deleted too. This cannot be undone.
       </>,
-      () => deleteUserAccount(id),
-      { title: 'Are you sure you want to delete this?', confirmLabel: 'Yes, delete' },
+      (reason) => deleteUserAccount(id, reason),
+      {
+        title: 'Are you sure you want to delete this?',
+        confirmLabel: 'Yes, delete',
+        reason: {
+          label: 'Reason for deleting',
+          placeholder: 'e.g. Posted inappropriate images after a warning.',
+          hint: 'Sent to them by email, word for word.',
+          required: true,
+        },
+      },
     );
 
   return (

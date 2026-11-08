@@ -260,6 +260,7 @@ export function ConfirmDialog({
   confirmLabel = 'Yes',
   cancelLabel = 'No',
   tone = 'danger',
+  reason,
   onConfirm,
   onCancel,
 }: {
@@ -268,9 +269,13 @@ export function ConfirmDialog({
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: 'danger' | 'primary';
-  onConfirm: () => void;
+  /** Asks for a reason before confirming - e.g. the one emailed to a banned or deleted account. */
+  reason?: ReasonField;
+  onConfirm: (reason?: string) => void;
   onCancel: () => void;
 }) {
+  const [reasonText, setReasonText] = useState('');
+  const missingReason = Boolean(reason?.required) && !reasonText.trim();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
@@ -293,12 +298,31 @@ export function ConfirmDialog({
             {title}
           </h2>
           <div style={{ color: 'var(--text-soft)', lineHeight: 1.55 }}>{message}</div>
+          {reason ? (
+            <div className="field" style={{ marginTop: 6 }}>
+              <label htmlFor="confirm-reason">{reason.label}</label>
+              <textarea
+                id="confirm-reason"
+                rows={3}
+                maxLength={1000}
+                autoFocus
+                value={reasonText}
+                placeholder={reason.placeholder}
+                onChange={(e) => setReasonText(e.target.value)}
+              />
+              {reason.hint ? <small style={{ color: 'var(--muted)' }}>{reason.hint}</small> : null}
+            </div>
+          ) : null}
         </div>
         <footer className="modal-foot">
           <Button variant="secondary" onClick={onCancel}>
             {cancelLabel}
           </Button>
-          <Button variant={tone === 'danger' ? 'danger' : 'primary'} onClick={onConfirm}>
+          <Button
+            variant={tone === 'danger' ? 'danger' : 'primary'}
+            disabled={missingReason}
+            onClick={() => onConfirm(reason ? reasonText.trim() || undefined : undefined)}
+          >
             {confirmLabel}
           </Button>
         </footer>
@@ -311,19 +335,28 @@ export function ConfirmDialog({
  * Holds one pending confirmation at a time: `ask(message, action)` opens the dialog and runs
  * `action` only on "Yes". Render `dialog` anywhere in the page.
  */
+export interface ReasonField {
+  label: string;
+  placeholder?: string;
+  hint?: string;
+  /** Confirm stays disabled until something is typed. */
+  required?: boolean;
+}
+
 export function useConfirm() {
   const [pending, setPending] = useState<{
     title?: string;
     message: ReactNode;
     confirmLabel?: string;
     tone?: 'danger' | 'primary';
-    action: () => void;
+    reason?: ReasonField;
+    action: (reason?: string) => void;
   } | null>(null);
 
   const ask = (
     message: ReactNode,
-    action: () => void,
-    options: { title?: string; confirmLabel?: string; tone?: 'danger' | 'primary' } = {},
+    action: (reason?: string) => void,
+    options: { title?: string; confirmLabel?: string; tone?: 'danger' | 'primary'; reason?: ReasonField } = {},
   ) => setPending({ message, action, ...options });
 
   const dialog = pending ? (
@@ -332,11 +365,12 @@ export function useConfirm() {
       message={pending.message}
       confirmLabel={pending.confirmLabel}
       tone={pending.tone}
+      reason={pending.reason}
       onCancel={() => setPending(null)}
-      onConfirm={() => {
+      onConfirm={(reason) => {
         const run = pending.action;
         setPending(null);
-        run();
+        run(reason);
       }}
     />
   ) : null;

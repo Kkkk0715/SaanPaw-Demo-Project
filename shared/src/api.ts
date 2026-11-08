@@ -220,6 +220,12 @@ export interface Snapshot {
   collectionCounts: CollectionCount[] | null;
 }
 
+/** Whether the email about an account action went out now, or is saved to be retried. */
+export interface EmailOutcome {
+  sent: boolean;
+  queued: boolean;
+}
+
 /** One row of System Management's "Database monitoring" panel. */
 export interface CollectionCount {
   name: string;
@@ -418,11 +424,20 @@ export const apiActions = {
       method: 'DELETE',
     }),
 
-  deleteShelterAccount: (s: ApiSession, id: string) =>
-    call<{ id: string }>(s, `/developer/shelters/${id}`, { method: 'DELETE' }),
+  // The reason travels in the query string: some networks drop the body of a DELETE request.
+  deleteShelterAccount: (s: ApiSession, id: string, reason?: string) =>
+    call<{ id: string; email?: EmailOutcome; emailedTo?: string | null }>(
+      s,
+      `/developer/shelters/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`,
+      { method: 'DELETE' },
+    ),
 
-  deleteUserAccount: (s: ApiSession, id: string) =>
-    call<{ id: string }>(s, `/developer/users/${id}`, { method: 'DELETE' }),
+  deleteUserAccount: (s: ApiSession, id: string, reason?: string) =>
+    call<{ id: string; email?: EmailOutcome; emailedTo?: string | null }>(
+      s,
+      `/developer/users/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`,
+      { method: 'DELETE' },
+    ),
 
   updateUserProfile: (s: ApiSession, patch: Partial<AppUser>) =>
     call<AppUser>(s, '/user/profile', { method: 'PATCH', body: patch }),
@@ -516,21 +531,28 @@ export const apiActions = {
   updateShelterProfile: (s: ApiSession, patch: Partial<Shelter>) =>
     call<Shelter>(s, '/shelter/profile', { method: 'PATCH', body: patch }),
 
-  reviewShelter: (s: ApiSession, id: string, decision: 'approve' | 'reject') =>
-    call<{ shelter: Shelter; adminEmail?: string; temporaryPassword?: string; emailSent?: boolean }>(
+  reviewShelter: (s: ApiSession, id: string, decision: 'approve' | 'reject', reason?: string) =>
+    call<{ shelter: Shelter; adminEmail?: string; temporaryPassword?: string; emailSent?: boolean; email?: EmailOutcome }>(
       s,
       `/developer/shelters/${id}/review`,
-      { method: 'PATCH', body: { decision } },
+      { method: 'PATCH', body: { decision, ...(reason ? { reason } : {}) } },
     ),
 
   resolveFlag: (s: ApiSession, id: string, action: 'dismiss' | 'remove_report') =>
-    call<{ flag: ModerationFlag; escalation?: { banned: boolean; deleted?: boolean; upheldFlags?: number } }>(
+    call<{
+      flag: ModerationFlag;
+      escalation?: { banned: boolean; deleted?: boolean; upheldFlags?: number; email?: EmailOutcome };
+    }>(
       s,
       `/developer/flags/${id}/resolve`,
       { method: 'PATCH', body: { action } },
     ),
 
-  banUser: (s: ApiSession, id: string) => call<AppUser>(s, `/developer/users/${id}/ban`, { method: 'PATCH' }),
+  banUser: (s: ApiSession, id: string, reason?: string) =>
+    call<AppUser & { emailResult?: EmailOutcome }>(s, `/developer/users/${id}/ban`, {
+      method: 'PATCH',
+      body: reason ? { reason } : {},
+    }),
 
   updateSystemConfig: (s: ApiSession, patch: Partial<SystemConfig>) =>
     call<{ config: SystemConfig }>(s, '/developer/system', { method: 'PATCH', body: patch }),

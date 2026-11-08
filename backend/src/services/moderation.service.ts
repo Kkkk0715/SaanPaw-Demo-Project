@@ -361,7 +361,9 @@ export const moderationService = {
    * threshold (3 by default) the account is deleted, after emailing the person why.
    * Otherwise the person is told how many upheld flags they have and what happens at the limit.
    */
-  async escalateReporter(reporterId: string): Promise<{ banned: boolean; deleted: boolean; upheldFlags: number }> {
+  async escalateReporter(
+    reporterId: string,
+  ): Promise<{ banned: boolean; deleted: boolean; upheldFlags: number; email?: { sent: boolean; queued: boolean } }> {
     const upheld = await ModerationFlag.find({ reporterId, status: 'actioned' }).sort({ createdAt: 1 }).lean();
     const limit = env.moderation.falseReportBanThreshold;
 
@@ -381,8 +383,9 @@ export const moderationService = {
     const user = await User.findById(reporterId).lean();
     if (!user) return { banned: false, deleted: false, upheldFlags: upheld.length };
 
-    // Email first: once the cascade runs, the address and the flag history are gone.
-    await sendEmail(
+    // Email first: once the cascade runs, the address and the flag history are gone. sendEmail
+    // retries, and failing that keeps the message in the outbox to retry later.
+    const email = await sendEmail(
       accountDeletedEmail({
         name: combineName(user),
         email: user.email,
@@ -392,6 +395,6 @@ export const moderationService = {
     );
     await deleteUserCascade(reporterId);
     logger.warn(`moderation: deleted user ${reporterId} after ${upheld.length} upheld flags`);
-    return { banned: true, deleted: true, upheldFlags: upheld.length };
+    return { banned: true, deleted: true, upheldFlags: upheld.length, email };
   },
 };

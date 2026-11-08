@@ -24,6 +24,7 @@ import {
   uploadImage,
   type ApiSession,
   type CollectionCount,
+  type EmailOutcome,
   type PinAddress,
   type RoadRoute,
   type Snapshot,
@@ -150,6 +151,18 @@ export interface IssuedLogin {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const withinLast24h = (iso: string) => Date.now() - +new Date(iso) <= DAY_MS;
 
+/**
+ * What to tell the Developer when the email about an account action did not go out straight away.
+ * Null when it was sent (nothing to say) or there was no email to send.
+ */
+function emailWarning(what: string, outcome: EmailOutcome | undefined, to?: string | null): string | null {
+  if (!outcome || outcome.sent) return null;
+  const who = to ? ` to ${to}` : '';
+  return outcome.queued
+    ? `${what}, but the email${who} could not be sent yet. SaanPaw saved it and keeps retrying automatically.`
+    : `${what}, but no email was sent${who}: email is not set up on the server (GMAIL_USER / GMAIL_APP_PASSWORD).`;
+}
+
 const uid = (prefix: string) => `${prefix}${Math.random().toString(36).slice(2, 9)}`;
 
 /**
@@ -249,7 +262,8 @@ interface AppState {
   createReport: (input: NewReportInput) => Promise<WithNotices<AnimalReport>>;
   setReportStatus: (reportId: string, status: ReportStatus) => void;
   deleteReport: (reportId: string) => void;
-  setShelterApproval: (shelterId: string, status: 'approved' | 'rejected') => void;
+  /** `reason` is emailed to the shelter when rejecting an application or revoking access. */
+  setShelterApproval: (shelterId: string, status: 'approved' | 'rejected', reason?: string) => void;
   openCase: (reportId: string, note: string) => void;
   setCaseStatus: (caseId: string, status: AnimalCaseStatus, note: string) => void;
   setShelterAnimalStatus: (animalId: string, status: AnimalCaseStatus) => void;
@@ -276,11 +290,12 @@ interface AppState {
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: (role: Role) => void;
   resolveFlag: (flagId: string, resolution: ModerationFlag['resolution']) => void;
-  banUser: (userId: string) => void;
+  /** `reason` is emailed to the person, along with what the action means for their account. */
+  banUser: (userId: string, reason?: string) => void;
   /** Developer-only: a true delete, unlike banning (which hides their reports but keeps the account). */
-  deleteUserAccount: (userId: string) => void;
+  deleteUserAccount: (userId: string, reason?: string) => void;
   /** Developer-only: a true delete, unlike revoking approval (which keeps the account, just blocks sign-in). */
-  deleteShelterAccount: (shelterId: string) => void;
+  deleteShelterAccount: (shelterId: string, reason?: string) => void;
   /** Rejects with the server's message (e.g. "Current password is incorrect") on failure. */
   changeShelterPassword: (currentPassword: string, newPassword: string) => Promise<void>;
   /** Developer-only: enforced server-side, not just stored for display. Local-only (unenforced) in offline demo mode. */
@@ -755,14 +770,16 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   );
 
   const setShelterApproval = useCallback<AppState['setShelterApproval']>(
-    (shelterId, status) => {
+    (shelterId, status, reason) => {
       const session = sessionRef.current;
       setShelters((prev) => prev.map((s) => (s.id === shelterId ? { ...s, approvalStatus: status } : s)));
       if (!session) return;
       send(
         apiActions
-          .reviewShelter(session, shelterId, status === 'approved' ? 'approve' : 'reject')
+          .reviewShelter(session, shelterId, status === 'approved' ? 'approve' : 'reject', reason)
           .then((res) => {
+            const warning = emailWarning('The shelter was updated', res.email, res.shelter?.email);
+            if (warning) setError(warning);
             if (res.temporaryPassword && res.adminEmail) {
               setIssuedLogin({
                 shelterId,
@@ -1176,11 +1193,18 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
             : apiActions
                 .resolveFlag(session, flagId, 'remove_report')
                 // At the upheld-flag limit the server deletes the account itself - nothing left to ban.
-                .then((res) =>
-                  resolution === 'account_banned' && !res.escalation?.deleted
-                    ? apiActions.banUser(session, target.reporterId)
-                    : undefined,
-                ),
+                .then((res) => {
+                  const warning = emailWarning('The account reached the flag limit and was deleted', res.escalation?.email);
+                  if (warning) setError(warning);
+                  return resolution === 'account_banned' && !res.escalation?.deleted
+                    ? apiActions
+                        .banUser(session, target.reporterId, `Upheld flag: ${target.detail || target.reason}`)
+                        .then((u) => {
+                          const w = emailWarning('The account was banned', u.emailResult, u.email);
+                          if (w) setError(w);
+                        })
+                    : undefined;
+                }),
         );
       }
       setFlags((prev) => {
@@ -1203,31 +1227,52 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   );
 
   const banUser = useCallback<AppState['banUser']>(
-    (userId) => {
+    (userId, reason) => {
       const session = sessionRef.current;
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, isBanned: true } : u)));
       setReports((prev) => prev.filter((r) => r.reporterId !== userId));
-      if (session) send(apiActions.banUser(session, userId));
+      if (session) {
+        send(
+          apiActions.banUser(session, userId, reason).then((res) => {
+            const warning = emailWarning('The account was banned', res.emailResult, res.email);
+            if (warning) setError(warning);
+          }),
+        );
+      }
     },
     [send],
   );
 
   const deleteUserAccount = useCallback<AppState['deleteUserAccount']>(
-    (userId) => {
+    (userId, reason) => {
       const session = sessionRef.current;
       setUsers((prev) => prev.filter((u) => u.id !== userId));
       setReports((prev) => prev.filter((r) => r.reporterId !== userId));
-      if (session) send(apiActions.deleteUserAccount(session, userId));
+      if (session) {
+        send(
+          apiActions.deleteUserAccount(session, userId, reason).then((res) => {
+            const warning = emailWarning('The account was deleted', res.email, res.emailedTo);
+            if (warning) setError(warning);
+          }),
+        );
+      }
     },
     [send],
   );
 
   const deleteShelterAccount = useCallback<AppState['deleteShelterAccount']>(
-    (shelterId) => {
+    (shelterId, reason) => {
       const session = sessionRef.current;
       setShelters((prev) => prev.filter((s) => s.id !== shelterId));
       setShelterAnimals((prev) => prev.filter((a) => a.shelterId !== shelterId));
-      if (session) send(apiActions.deleteShelterAccount(session, shelterId));
+      if (session) {
+        send(
+          apiActions.deleteShelterAccount(session, shelterId, reason).then((res) => {
+            const warning = emailWarning('The shelter was deleted', res.email, res.emailedTo);
+            if (warning) setError(warning);
+          }),
+        );
+      }
     },
     [send],
   );
