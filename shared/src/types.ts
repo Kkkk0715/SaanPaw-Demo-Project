@@ -154,6 +154,10 @@ export interface Conversation {
   shelterId: string;
   userId: string;
   userName: string;
+  /** Both sides' profile pictures and the shelter's name, so each app shows who it is talking to. */
+  userPhotoUrl?: string;
+  shelterName?: string;
+  shelterPhotoUrl?: string;
   /** The report that started the conversation. */
   reportId?: string;
   subject: string;

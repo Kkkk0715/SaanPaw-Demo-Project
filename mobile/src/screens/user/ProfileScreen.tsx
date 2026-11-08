@@ -38,6 +38,7 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
   const [phone, setPhone] = useState(currentUser.phone);
   const [barangay, setBarangay] = useState(currentUser.barangay);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const openEditor = () => {
     setPhoto(currentUser.photoUrl);
@@ -57,7 +58,7 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
     if (!res.canceled && res.assets[0]) setPhoto(await shrinkPhoto(res.assets[0].uri, res.assets[0].width));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!firstName.trim() || !lastName.trim()) {
       setError('Enter your first and last name.');
       return;
@@ -67,16 +68,26 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
       return;
     }
     const center = SJDM_BARANGAYS.find((b) => b.name === barangay)?.center;
-    updateUserProfile({
-      photoUrl: photo,
-      firstName: firstName.trim(),
-      middleName: middleName.trim(),
-      lastName: lastName.trim(),
-      phone,
-      barangay,
-      location: center,
-    });
-    setEditing(false);
+    setError(null);
+    setSaving(true);
+    try {
+      // Waits for the server (and the photo upload), so the sheet only closes once it is saved -
+      // and says why if it wasn't, instead of quietly rolling the changes back.
+      await updateUserProfile({
+        photoUrl: photo,
+        firstName: firstName.trim(),
+        middleName: middleName.trim(),
+        lastName: lastName.trim(),
+        phone,
+        barangay,
+        ...(center ? { location: center } : {}),
+      });
+      setEditing(false);
+    } catch (e) {
+      setError(`Your changes were not saved: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -156,7 +167,7 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
           <Choice
             options={RADIUS_OPTIONS.map((r) => ({ label: r.label, value: r.meters }))}
             value={currentUser.alertRadiusMeters}
-            onChange={(m) => updateUserProfile({ alertRadiusMeters: m })}
+            onChange={(m) => void updateUserProfile({ alertRadiusMeters: m }).catch(() => {})}
           />
           <Caption>
             Currently {formatDistance(currentUser.alertRadiusMeters)}. Changes apply straight away.
@@ -204,7 +215,12 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
           <PhoneField value={phone} onChangeText={setPhone} />
           <Select label="Barangay" value={barangay} options={SJDM_BARANGAY_NAMES} onChange={setBarangay} />
           {error ? <Caption style={{ color: theme.colors.danger }}>{error}</Caption> : null}
-          <Button label="Save changes" icon="save-outline" onPress={save} />
+          <Button
+            label={saving ? 'Saving…' : 'Save changes'}
+            icon="save-outline"
+            disabled={saving}
+            onPress={() => void save()}
+          />
         </View>
       </Sheet>
     </Screen>

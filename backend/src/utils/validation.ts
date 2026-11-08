@@ -20,7 +20,26 @@ const size = z.enum(['small', 'medium', 'large']);
 const imageUrls = z.array(text(1000)).max(5).default([]);
 
 /** Philippine mobile number, e.g. "+639171234567" - the +639 prefix plus 9 more digits. */
-const phMobile = z.string().trim().regex(/^\+639\d{9}$/, 'Enter a valid mobile number (+639 followed by 9 digits)');
+/**
+ * "0917 123 4567", "639171234567", "+63 917-123-4567" and "9171234567" all become
+ * "+639171234567". Accounts saved before the +639 rule used other formats; without this, saving
+ * any change to such a profile was rejected over the untouched phone number, and every edit
+ * (photo included) rolled back.
+ */
+export function normalizePhMobile(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const digits = value.replace(/[\s().-]/g, '');
+  if (/^\+639\d{9}$/.test(digits)) return digits;
+  if (/^639\d{9}$/.test(digits)) return `+${digits}`;
+  if (/^09\d{9}$/.test(digits)) return `+63${digits.slice(1)}`;
+  if (/^9\d{9}$/.test(digits)) return `+63${digits}`;
+  return value.trim();
+}
+
+const phMobile = z.preprocess(
+  normalizePhMobile,
+  z.string().regex(/^\+639\d{9}$/, 'Enter a valid mobile number (+639 followed by 9 digits)'),
+);
 const optionalPhMobile = z.union([z.literal(''), phMobile]).optional();
 
 /** Any email provider is accepted (Gmail, Yahoo, Outlook, a school or work domain...). */

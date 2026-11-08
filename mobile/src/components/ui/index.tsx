@@ -1,4 +1,4 @@
-import { useContext, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -581,13 +581,50 @@ export function Badge({
   );
 }
 
-export function Avatar({ name, color = theme.colors.primary, size = 40 }: { name: string; color?: string; size?: number }) {
+/**
+ * A person's or shelter's profile picture in a circle, or their initials (or an icon) when there
+ * is no picture or it fails to load.
+ */
+export function Avatar({
+  name,
+  color = theme.colors.primary,
+  size = 40,
+  uri,
+  icon,
+}: {
+  name: string;
+  color?: string;
+  size?: number;
+  uri?: string;
+  /** Shown instead of initials when there is no picture, e.g. "home" for a shelter. */
+  icon?: keyof typeof Ionicons.glyphMap;
+}) {
+  const [failed, setFailed] = useState(false);
+  // A new picture gets a fresh try - an earlier failure must not hide it.
+  useEffect(() => setFailed(false), [uri]);
   const initials = name
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase())
     .join('');
+  if (uri && !failed) {
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }}
+        resizeMode="cover"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  if (icon) {
+    return (
+      <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: color }]}>
+        <Ionicons name={icon} size={size * 0.45} color="#fff" />
+      </View>
+    );
+  }
   return (
     <View
       style={[
@@ -619,6 +656,9 @@ export function AnimalPhoto({
   iconColor?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  // Without this, one failed load (a photo still uploading, a brief network blip) hid every later
+  // photo too - a newly picked or newly saved profile picture kept showing the placeholder.
+  useEffect(() => setFailed(false), [uri]);
   const box: ImageStyle =
     size === 'full'
       ? { width: '100%', height: 170, borderRadius: radius }

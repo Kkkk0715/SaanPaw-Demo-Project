@@ -17,14 +17,17 @@ async function ownedConversation(side: Side, ownerId: string, conversationId: st
   return conversation;
 }
 
+/** Names and profile pictures of both sides, so each app can show who it is talking to. */
 async function names(userIds: unknown[], shelterIds: unknown[]) {
   const [users, shelters] = await Promise.all([
-    User.find({ _id: { $in: userIds } }, 'firstName middleName lastName').lean(),
-    Shelter.find({ _id: { $in: shelterIds } }, 'name').lean(),
+    User.find({ _id: { $in: userIds } }, 'firstName middleName lastName photoUrl').lean(),
+    Shelter.find({ _id: { $in: shelterIds } }, 'name photoUrl').lean(),
   ]);
   return {
     userName: new Map(users.map((u) => [String(u._id), combineName(u)])),
+    userPhoto: new Map(users.map((u) => [String(u._id), u.photoUrl ?? undefined])),
     shelterName: new Map(shelters.map((s) => [String(s._id), s.name])),
+    shelterPhoto: new Map(shelters.map((s) => [String(s._id), s.photoUrl ?? undefined])),
   };
 }
 
@@ -36,7 +39,13 @@ async function present(conversations: InstanceType<typeof Conversation>[]) {
   ]);
   const conversationById = new Map(conversations.map((c) => [String(c._id), c]));
   return {
-    conversations: conversations.map((c) => serializeConversation(c, lookup.userName.get(String(c.userId)) ?? 'User')),
+    conversations: conversations.map((c) =>
+      serializeConversation(c, lookup.userName.get(String(c.userId)) ?? 'User', {
+        userPhotoUrl: lookup.userPhoto.get(String(c.userId)),
+        shelterName: lookup.shelterName.get(String(c.shelterId)),
+        shelterPhotoUrl: lookup.shelterPhoto.get(String(c.shelterId)),
+      }),
+    ),
     messages: messages.map((m) => {
       const c = conversationById.get(String(m.conversationId));
       const senderName =

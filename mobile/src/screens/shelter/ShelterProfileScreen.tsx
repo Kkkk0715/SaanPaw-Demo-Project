@@ -54,6 +54,8 @@ export function ShelterProfileScreen() {
   const [barangay, setBarangay] = useState(currentShelter.barangay);
   const [radius, setRadius] = useState(currentShelter.operatingRadiusMeters);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -71,8 +73,12 @@ export function ShelterProfileScreen() {
     if (!res.canceled && res.assets[0]) setPhoto(await shrinkPhoto(res.assets[0].uri, res.assets[0].width));
   };
 
-  const save = () => {
-    updateShelterProfile({
+  const save = async () => {
+    setSaveError(null);
+    setSaving(true);
+    try {
+      // Waits for the server (and the logo upload) before saying it is saved.
+      await updateShelterProfile({
       name: name.trim(),
       photoUrl: photo,
       houseUnitNo: houseUnitNo.trim(),
@@ -85,9 +91,14 @@ export function ShelterProfileScreen() {
       barangay,
       location: center,
       operatingRadiusMeters: radius,
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const savePassword = async () => {
@@ -126,6 +137,9 @@ export function ShelterProfileScreen() {
 
   return (
     <Screen>
+      {saveError ? (
+        <Banner tone="danger" icon="alert-circle" title="Your changes were not saved" message={saveError} />
+      ) : null}
       {saved ? (
         <Banner tone="success" icon="checkmark-circle" title="Profile saved" message="Your changes are live across the app." />
       ) : null}
@@ -200,7 +214,7 @@ export function ShelterProfileScreen() {
         </Text>
       </Card>
 
-      <Button label="Save profile" icon="save-outline" onPress={save} />
+      <Button label={saving ? 'Saving…' : 'Save profile'} icon="save-outline" disabled={saving} onPress={() => void save()} />
 
       <SectionHeader title="Push notifications" />
       <PushStatusCard />

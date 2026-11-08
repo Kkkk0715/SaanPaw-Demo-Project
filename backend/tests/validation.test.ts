@@ -95,10 +95,13 @@ describe('registerUserSchema', () => {
     expect(() => registerUserSchema.parse({ ...user, middleName: '123' })).toThrow();
   });
 
-  it('only accepts a PH mobile number in +639XXXXXXXXX form', () => {
+  it('stores a PH mobile number as +639XXXXXXXXX, however it was typed', () => {
     expect(registerUserSchema.parse(user).phone).toBe('+639171234567');
-    expect(() => registerUserSchema.parse({ ...user, phone: '09171234567' })).toThrow();
+    for (const typed of ['09171234567', '0917 123 4567', '639171234567', '+63 917-123-4567', '9171234567']) {
+      expect(registerUserSchema.parse({ ...user, phone: typed }).phone).toBe('+639171234567');
+    }
     expect(() => registerUserSchema.parse({ ...user, phone: '+63917123456' })).toThrow();
+    expect(() => registerUserSchema.parse({ ...user, phone: '0817 123 4567' })).toThrow();
     expect(() => registerUserSchema.parse({ ...user, phone: '+639171234567a' })).toThrow();
   });
 
@@ -122,7 +125,8 @@ describe('registerShelterSchema', () => {
   it('accepts any email provider and requires a PH mobile contact number', () => {
     expect(registerShelterSchema.parse(shelter).email).toBe('shelter@gmail.com');
     expect(registerShelterSchema.parse({ ...shelter, email: 'shelter@yahoo.com' }).email).toBe('shelter@yahoo.com');
-    expect(() => registerShelterSchema.parse({ ...shelter, contactNumber: '0917 123 4567' })).toThrow();
+    expect(registerShelterSchema.parse({ ...shelter, contactNumber: '0917 123 4567' }).contactNumber).toBe('+639171234567');
+    expect(() => registerShelterSchema.parse({ ...shelter, contactNumber: '12345' })).toThrow();
   });
 
   it('requires at least one proof document', () => {

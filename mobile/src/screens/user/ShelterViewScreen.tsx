@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '@/constants/theme';
 import { distanceMeters, formatDistance, useApp } from '@saanpaw/shared';
 import type { Shelter } from '@saanpaw/shared';
 import {
   AnimalPhoto,
+  Avatar,
   Badge,
   Button,
   Card,
@@ -19,6 +19,7 @@ import {
   Sheet,
 } from '@/components/ui';
 import { CaseStatusPill, ShelterCard, timeAgo } from '@/components/domain';
+import { ChatThread } from '@/components/domain/ChatThread';
 
 /** User Module - Browse shelters, see the animals they hold, and message them. */
 export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelters' | 'animals' | 'messages' } } }) {
@@ -37,7 +38,6 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
   const [tab, setTab] = useState<'shelters' | 'animals' | 'messages'>(route?.params?.tab ?? 'shelters');
   const [composeFor, setComposeFor] = useState<Shelter | null>(null);
   const [draft, setDraft] = useState('');
-  const [replies, setReplies] = useState<Record<string, string>>({});
 
   const approved = shelters
     .filter((s) => s.approvalStatus === 'approved')
@@ -162,68 +162,36 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
             myThreads.map((c) => {
               const shelter = shelters.find((s) => s.id === c.shelterId);
               const thread = messagesIn(c.id);
+              const shelterName = shelter?.name ?? c.shelterName ?? 'Shelter';
+              const shelterPhoto = shelter?.photoUrl ?? c.shelterPhotoUrl;
               return (
                 <Card key={c.id}>
                   <Row gap={1} align="flex-start">
-                    <View style={[styles.threadIcon, { backgroundColor: shelter?.logoColor ?? theme.colors.primary }]}>
-                      <Ionicons name="home" size={16} color="#fff" />
-                    </View>
+                    <Avatar
+                      name={shelterName}
+                      uri={shelterPhoto}
+                      color={shelter?.logoColor ?? theme.colors.primary}
+                      icon="home"
+                      size={44}
+                    />
                     <View style={{ flex: 1, gap: 3 }}>
-                      <Text style={styles.threadTitle}>{shelter?.name ?? 'Shelter'}</Text>
+                      <Text style={styles.threadTitle}>{shelterName}</Text>
                       <Caption>{c.subject}</Caption>
                       <Caption>{timeAgo(c.lastMessageAt)}</Caption>
                     </View>
                   </Row>
 
-                  <View style={{ gap: theme.spacing(1) }}>
-                    <ScrollView style={{ maxHeight: 260 }}>
-                      <View style={{ gap: 8 }}>
-                        {thread.map((m) => (
-                          <View
-                            key={m.id}
-                            style={[
-                              styles.bubble,
-                              m.senderRole === 'user' ? styles.bubbleMine : styles.bubbleTheirs,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.bubbleText,
-                                m.senderRole === 'user' && { color: theme.colors.onPrimary },
-                              ]}
-                            >
-                              {m.body}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.bubbleTime,
-                                m.senderRole === 'user' && { color: 'rgba(255,255,255,0.7)' },
-                              ]}
-                            >
-                              {timeAgo(m.sentAt)}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    </ScrollView>
-                    <Field
-                      label="Reply"
-                      value={replies[c.id] ?? ''}
-                      onChangeText={(v) => setReplies((r) => ({ ...r, [c.id]: v }))}
-                      placeholder="Type your message..."
-                      multiline
-                    />
-                    <Button
-                      label="Send"
-                      icon="send"
-                      onPress={() => {
-                        const body = (replies[c.id] ?? '').trim();
-                        if (!body) return;
-                        sendMessage(c.id, 'user', body);
-                        setReplies((r) => ({ ...r, [c.id]: '' }));
-                      }}
-                    />
-                  </View>
+                  <ChatThread
+                    messages={thread}
+                    myRole="user"
+                    other={{
+                      name: shelterName,
+                      photoUrl: shelterPhoto,
+                      color: shelter?.logoColor ?? theme.colors.primary,
+                      icon: 'home',
+                    }}
+                    onSend={(body) => sendMessage(c.id, 'user', body)}
+                  />
                 </Card>
               );
             })
@@ -268,12 +236,6 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
 
 const styles = StyleSheet.create({
   animalName: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
-  threadIcon: { width: 36, height: 36, borderRadius: theme.radius.sm, alignItems: 'center', justifyContent: 'center' },
   threadTitle: { fontSize: 14.5, fontWeight: '700', color: theme.colors.text },
 
-  bubble: { maxWidth: '85%', padding: theme.spacing(1.25), borderRadius: theme.radius.md, gap: 3 },
-  bubbleMine: { alignSelf: 'flex-end', backgroundColor: theme.colors.primary, borderBottomRightRadius: 4 },
-  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: theme.colors.surfaceAlt, borderBottomLeftRadius: 4 },
-  bubbleText: { fontSize: 13, lineHeight: 19, color: theme.colors.text },
-  bubbleTime: { fontSize: 10, color: theme.colors.muted },
 });

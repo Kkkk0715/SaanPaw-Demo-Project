@@ -272,12 +272,19 @@ export function serializeFlag(doc: any, reporterName: string, reporterBanned: bo
   };
 }
 
-export function serializeConversation(doc: any, userName: string) {
+export function serializeConversation(
+  doc: any,
+  userName: string,
+  people: { userPhotoUrl?: string; shelterName?: string; shelterPhotoUrl?: string } = {},
+) {
   return {
     id: String(doc._id),
     shelterId: String(doc.shelterId),
     userId: String(doc.userId),
     userName,
+    userPhotoUrl: people.userPhotoUrl,
+    shelterName: people.shelterName,
+    shelterPhotoUrl: people.shelterPhotoUrl,
     reportId: doc.relatedReportId ? String(doc.relatedReportId) : undefined,
     subject: doc.subject ?? '',
     lastMessageAt: doc.lastMessageAt?.toISOString?.(),

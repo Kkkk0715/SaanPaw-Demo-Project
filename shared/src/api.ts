@@ -133,6 +133,16 @@ const withPhotoHost = <T extends { photoUrl?: string }>(baseUrl: string, item: T
 const withPhotoHosts = <T extends { photoUrl?: string }>(baseUrl: string, items: T[]): T[] =>
   items.map((item) => withPhotoHost(baseUrl, item));
 
+/** Conversations carry both sides' pictures; make them loadable like any other hosted photo. */
+const withConversationHosts = (baseUrl: string, inbox: ConversationsEnvelope): ConversationsEnvelope => ({
+  ...inbox,
+  conversations: inbox.conversations.map((c) => ({
+    ...c,
+    userPhotoUrl: c.userPhotoUrl ? resolveImageUrl(c.userPhotoUrl, baseUrl) : undefined,
+    shelterPhotoUrl: c.shelterPhotoUrl ? resolveImageUrl(c.shelterPhotoUrl, baseUrl) : undefined,
+  })),
+});
+
 /** A photo still on the device (file, content, blob or data URI) rather than one the server can already serve. */
 export const isLocalImageUri = (uri: string) => !/^https?:\/\//.test(uri) && !uri.startsWith(UPLOAD_PREFIX);
 
@@ -266,7 +276,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
       shelterAnimals: withImageHosts(s.baseUrl, animals.flat()),
       notifications,
       cases,
-      ...inbox,
+      ...withConversationHosts(s.baseUrl, inbox),
       stats,
     };
   }
@@ -289,7 +299,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
       shelterAnimals: withImageHosts(s.baseUrl, animals),
       cases,
       notifications,
-      ...inbox,
+      ...withConversationHosts(s.baseUrl, inbox),
       stats: {
         activeReports: dash.activeReports,
         reunitedThisMonth: dash.reunited,

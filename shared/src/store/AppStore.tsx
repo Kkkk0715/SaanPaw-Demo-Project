@@ -266,8 +266,9 @@ interface AppState {
   /** Developer-only: one proof file, fetched with the signed-in session. */
   openProofDocument: (documentId: string) => Promise<Blob>;
   toggleAnimalPublic: (animalId: string) => void;
-  updateShelterProfile: (patch: Partial<Shelter>) => void;
-  updateUserProfile: (patch: Partial<AppUser>) => void;
+  /** Resolves once the server has saved it (photo uploaded first); rejects with the reason it didn't. */
+  updateShelterProfile: (patch: Partial<Shelter>) => Promise<void>;
+  updateUserProfile: (patch: Partial<AppUser>) => Promise<void>;
   sendMessage: (conversationId: string, senderRole: Role, body: string) => void;
   startConversation: (shelterId: string, subject: string, body: string, reportId?: string) => string;
   /** Clears the unread count for the signed-in side of a thread. */
@@ -432,7 +433,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
 
   /** Run a request the screen already reflects: on failure show the error and roll back to server state. */
   const send = useCallback(
-    (task: Promise<unknown>) => {
+    (task: Promise<unknown>, options: { reportError?: boolean } = {}) => {
       pending.current += 1;
       mutations.current += 1;
       task
@@ -442,7 +443,9 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
         .then(
           () => refresh(),
           (e) => {
-            setError(errorMessage(e));
+            // A screen that shows its own error (a profile form) passes reportError: false so the
+            // person isn't also shown the same message in a pop-up.
+            if (options.reportError !== false) setError(errorMessage(e));
             return refresh();
           },
         );
@@ -1016,14 +1019,21 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       // Shows immediately from the device's own local file; the real hosted URL replaces it
       // once the next refresh comes back, same as a shelter animal's photo.
       setShelters((prev) => prev.map((s) => (s.id === currentShelter.id ? { ...s, ...patch } : s)));
-      if (!session) return;
+      if (!session) return Promise.resolve();
       const ready =
         patch.photoUrl && isLocalImageUri(patch.photoUrl)
           ? uploadImage(session, patch.photoUrl, 'profile').then((photoUrl) => ({ ...patch, photoUrl }))
           : Promise.resolve(
               patch.photoUrl ? { ...patch, photoUrl: toStoredImageUrl(patch.photoUrl, session.baseUrl) } : patch,
             );
-      send(ready.then((finalPatch) => apiActions.updateShelterProfile(session, finalPatch)));
+      const task = ready.then((finalPatch) => apiActions.updateShelterProfile(session, finalPatch));
+      send(task, { reportError: false });
+      return task.then(
+        () => undefined,
+        (e) => {
+          throw new Error(errorMessage(e));
+        },
+      );
     },
     [currentShelter.id, send],
   );
@@ -1032,14 +1042,21 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     (patch) => {
       const session = sessionRef.current;
       setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? { ...u, ...patch } : u)));
-      if (!session) return;
+      if (!session) return Promise.resolve();
       const ready =
         patch.photoUrl && isLocalImageUri(patch.photoUrl)
           ? uploadImage(session, patch.photoUrl, 'profile').then((photoUrl) => ({ ...patch, photoUrl }))
           : Promise.resolve(
               patch.photoUrl ? { ...patch, photoUrl: toStoredImageUrl(patch.photoUrl, session.baseUrl) } : patch,
             );
-      send(ready.then((finalPatch) => apiActions.updateUserProfile(session, finalPatch)));
+      const task = ready.then((finalPatch) => apiActions.updateUserProfile(session, finalPatch));
+      send(task, { reportError: false });
+      return task.then(
+        () => undefined,
+        (e) => {
+          throw new Error(errorMessage(e));
+        },
+      );
     },
     [currentUser.id, send],
   );
@@ -1090,6 +1107,9 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
           shelterId,
           userId: currentUser.id,
           userName: currentUser.fullName,
+          userPhotoUrl: currentUser.photoUrl,
+          shelterName: shelters.find((s) => s.id === shelterId)?.name,
+          shelterPhotoUrl: shelters.find((s) => s.id === shelterId)?.photoUrl,
           reportId,
           subject,
           lastMessageAt: at,
@@ -1105,7 +1125,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       if (session) send(apiActions.startConversation(session, { id, shelterId, subject, body, reportId }));
       return id;
     },
-    [currentUser, send],
+    [currentUser, shelters, send],
   );
 
   const markConversationRead = useCallback<AppState['markConversationRead']>(

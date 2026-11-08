@@ -12,9 +12,10 @@ export interface Barangay {
 }
 
 /**
- * The populated corridors of the city.
+ * Every barangay in the city with its map centre. The first fifteen (the populated corridors the
+ * app started with) keep their OpenStreetMap positions; the rest follow below.
  *
- * Each center is where OpenStreetMap places that barangay (its place node, cross-checked against
+ * Each of those first centers is where OpenStreetMap places that barangay (its place node, cross-checked against
  * the barangay hall's own mapped position - the two agree within ~200 m). That matters because
  * the map tiles label barangays from those same OSM nodes: a center that is off by even a couple
  * of kilometres draws the alert-radius circle on top of a neighbouring barangay's label. The
@@ -38,80 +39,76 @@ export const SJDM_BARANGAYS: Barangay[] = [
   { name: 'Citrus', center: { latitude: 14.8492, longitude: 121.0647 } },
   { name: 'Dulong Bayan', center: { latitude: 14.8268, longitude: 121.0447 } },
   { name: 'Paradise III', center: { latitude: 14.8236, longitude: 121.1146 } },
+
+  // The rest of the city's barangays, from the PSA-based coordinates PhilAtlas publishes for each
+  // (philatlas.com, one page per barangay), so a barangay picked in a dropdown also puts the pin,
+  // alert radius and shelter coverage in the right part of the city.
+  { name: 'Assumption', center: { latitude: 14.8638, longitude: 121.0634 } },
+  { name: 'Bagong Buhay', center: { latitude: 14.8552, longitude: 121.0588 } },
+  { name: 'Bagong Buhay II', center: { latitude: 14.859, longitude: 121.0589 } },
+  { name: 'Bagong Buhay III', center: { latitude: 14.8556, longitude: 121.0628 } },
+  { name: 'Ciudad Real', center: { latitude: 14.7705, longitude: 121.0928 } },
+  { name: 'Fatima', center: { latitude: 14.8467, longitude: 121.0459 } },
+  { name: 'Fatima II', center: { latitude: 14.8438, longitude: 121.0438 } },
+  { name: 'Fatima III', center: { latitude: 14.8454, longitude: 121.046 } },
+  { name: 'Fatima IV', center: { latitude: 14.8433, longitude: 121.0449 } },
+  { name: 'Fatima V', center: { latitude: 14.8464, longitude: 121.0503 } },
+  { name: 'Francisco Homes-Guijo', center: { latitude: 14.814, longitude: 121.06 } },
+  { name: 'Francisco Homes-Mulawin', center: { latitude: 14.806, longitude: 121.0629 } },
+  { name: 'Francisco Homes-Yakal', center: { latitude: 14.8103, longitude: 121.0549 } },
+  { name: 'Gumaoc Central', center: { latitude: 14.7999, longitude: 121.065 } },
+  { name: 'Gumaoc East', center: { latitude: 14.7985, longitude: 121.0675 } },
+  { name: 'Gumaoc West', center: { latitude: 14.7996, longitude: 121.0604 } },
+  { name: 'Kaybanban', center: { latitude: 14.8231, longitude: 121.0929 } },
+  { name: 'Lawang Pari', center: { latitude: 14.8568, longitude: 121.0717 } },
+  { name: 'Maharlika', center: { latitude: 14.7954, longitude: 121.0714 } },
+  { name: 'Minuyan', center: { latitude: 14.8523, longitude: 121.077 } },
+  { name: 'Minuyan II', center: { latitude: 14.8421, longitude: 121.0753 } },
+  { name: 'Minuyan III', center: { latitude: 14.8449, longitude: 121.0731 } },
+  { name: 'Minuyan IV', center: { latitude: 14.8464, longitude: 121.0755 } },
+  { name: 'Minuyan V', center: { latitude: 14.8512, longitude: 121.0746 } },
+  { name: 'St. Martin de Porres', center: { latitude: 14.8598, longitude: 121.0701 } },
+  { name: 'San Isidro', center: { latitude: 14.8206, longitude: 121.1454 } },
+  { name: 'San Martin', center: { latitude: 14.8618, longitude: 121.0577 } },
+  { name: 'San Martin II', center: { latitude: 14.8635, longitude: 121.0542 } },
+  { name: 'San Martin III', center: { latitude: 14.8606, longitude: 121.0546 } },
+  { name: 'San Martin IV', center: { latitude: 14.8621, longitude: 121.0515 } },
+  { name: 'San Pedro', center: { latitude: 14.8491, longitude: 121.0552 } },
+  { name: 'San Rafael', center: { latitude: 14.8484, longitude: 121.0454 } },
+  { name: 'San Rafael I', center: { latitude: 14.8541, longitude: 121.0474 } },
+  { name: 'San Rafael III', center: { latitude: 14.8519, longitude: 121.046 } },
+  { name: 'San Rafael IV', center: { latitude: 14.8538, longitude: 121.0437 } },
+  { name: 'San Roque', center: { latitude: 14.8192, longitude: 121.1071 } },
+  { name: 'Sta. Cruz', center: { latitude: 14.854, longitude: 121.0535 } },
+  { name: 'Sta. Cruz II', center: { latitude: 14.8538, longitude: 121.0512 } },
+  { name: 'Sta. Cruz III', center: { latitude: 14.8551, longitude: 121.0506 } },
+  { name: 'Sta. Cruz IV', center: { latitude: 14.8587, longitude: 121.0519 } },
+  { name: 'Sta. Cruz V', center: { latitude: 14.8573, longitude: 121.0494 } },
+  { name: 'Sto. Niño', center: { latitude: 14.8581, longitude: 121.0646 } },
+  { name: 'Sto. Niño II', center: { latitude: 14.8621, longitude: 121.07 } },
+  // Approximate: Francisco Homes-Narra's page could not be read, so it sits among its three
+  // Francisco Homes neighbours; the four barangays Muzon was split into in 2023 (RA 11896) are
+  // placed around the old Muzon centre following the law's boundary description (Proper central,
+  // East to the north-east, West to the west, South to the south). Refine when OSM maps them.
+  { name: 'Francisco Homes-Narra', center: { latitude: 14.8085, longitude: 121.059 } },
+  { name: 'Muzon Proper', center: { latitude: 14.8019, longitude: 121.0347 } },
+  { name: 'Muzon East', center: { latitude: 14.81, longitude: 121.04 } },
+  { name: 'Muzon West', center: { latitude: 14.803, longitude: 121.026 } },
+  { name: 'Muzon South', center: { latitude: 14.792, longitude: 121.037 } },
 ];
 
-export const SJDM_BARANGAY_NAMES = SJDM_BARANGAYS.map((b) => b.name);
+/** Every barangay name, A-Z, for dropdowns. */
+export const SJDM_BARANGAY_NAMES = SJDM_BARANGAYS.map((b) => b.name).sort((x, y) => x.localeCompare(y));
 
 /**
- * Every barangay in the city (62 since Muzon was divided into four in 2023, plus "Muzon" itself so
- * older reports and accounts still match), spelled the way the list above spells them. Only the corridors above have a map centre; the report form offers all
- * of these, because a pin can land in any of them.
+ * Same list - kept as its own name for the screens that already use it. 59 barangays as of the
+ * 2020 census plus the four Muzon was divided into in 2023; "Muzon" itself stays so older reports
+ * and accounts still match.
  */
-export const SJDM_ALL_BARANGAY_NAMES: string[] = [
-  'Assumption',
-  'Bagong Buhay I',
-  'Bagong Buhay II',
-  'Bagong Buhay III',
-  'Citrus',
-  'Ciudad Real',
-  'Dulong Bayan',
-  'Fatima I',
-  'Fatima II',
-  'Fatima III',
-  'Fatima IV',
-  'Fatima V',
-  'Francisco Homes-Guijo',
-  'Francisco Homes-Mulawin',
-  'Francisco Homes-Narra',
-  'Francisco Homes-Yakal',
-  'Gaya-Gaya',
-  'Graceville',
-  'Gumaoc Central',
-  'Gumaoc East',
-  'Gumaoc West',
-  'Kaybanban',
-  'Kaypian',
-  'Lawang Pare',
-  'Maharlika',
-  'Minuyan I',
-  'Minuyan II',
-  'Minuyan III',
-  'Minuyan IV',
-  'Minuyan V',
-  'Minuyan Proper',
-  'Muzon',
-  'Muzon East',
-  'Muzon Proper',
-  'Muzon South',
-  'Muzon West',
-  'Paradise III',
-  'Poblacion',
-  'Poblacion 1',
-  'San Isidro',
-  'San Manuel',
-  'San Martin de Porres',
-  'San Martin I',
-  'San Martin II',
-  'San Martin III',
-  'San Martin IV',
-  'San Pedro',
-  'San Rafael I',
-  'San Rafael II',
-  'San Rafael III',
-  'San Rafael IV',
-  'San Rafael V',
-  'San Roque',
-  'Sapang Palay Proper',
-  'Sta. Cruz I',
-  'Sta. Cruz II',
-  'Sta. Cruz III',
-  'Sta. Cruz IV',
-  'Sta. Cruz V',
-  'Sto. Cristo',
-  'Sto. Niño I',
-  'Sto. Niño II',
-  'Tungkong Mangga',
-];
+export const SJDM_ALL_BARANGAY_NAMES: string[] = SJDM_BARANGAY_NAMES;
+
+/** A barangay's map centre by name, or undefined for a name not on the list. */
+export const barangayCenter = (name: string | undefined) => SJDM_BARANGAYS.find((b) => b.name === name)?.center;
 
 const ROMAN: Record<string, string> = { '1': 'i', '2': 'ii', '3': 'iii', '4': 'iv', '5': 'v' };
 
@@ -125,6 +122,7 @@ function barangayKey(name: string): string {
     .replace(/\bsto\.?\s/g, 'santo ')
     .replace(/\bsta\.?\s/g, 'santa ')
     .replace(/\bst\.?\s/g, 'san ')
+    .replace(/\bsaint\s/g, 'san ')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\b([1-5])\b/g, (d) => ROMAN[d])
     .trim()
@@ -132,6 +130,9 @@ function barangayKey(name: string): string {
 }
 
 const BARANGAY_BY_KEY = new Map(SJDM_ALL_BARANGAY_NAMES.map((name) => [barangayKey(name), name]));
+// Other spellings in use for the same barangays.
+BARANGAY_BY_KEY.set(barangayKey('Lawang Pare'), 'Lawang Pari');
+BARANGAY_BY_KEY.set(barangayKey('Sapang Palay'), 'Sapang Palay Proper');
 
 /**
  * The city barangay a place name refers to, spelled as in SJDM_ALL_BARANGAY_NAMES, or null.
@@ -140,7 +141,9 @@ const BARANGAY_BY_KEY = new Map(SJDM_ALL_BARANGAY_NAMES.map((name) => [barangayK
  */
 export function matchBarangayName(name: string | undefined | null): string | null {
   if (!name) return null;
-  return BARANGAY_BY_KEY.get(barangayKey(name)) ?? null;
+  const key = barangayKey(name);
+  // "Fatima I", "Minuyan I", "Santo Niño 1": the first of a numbered set is officially unnumbered.
+  return BARANGAY_BY_KEY.get(key) ?? BARANGAY_BY_KEY.get(key.replace(/ i$/, '')) ?? null;
 }
 
 /** The first of OSM's place names for a pin that is a real city barangay. */
