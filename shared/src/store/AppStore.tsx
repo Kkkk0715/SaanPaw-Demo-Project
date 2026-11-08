@@ -23,6 +23,7 @@ import {
   toStoredImageUrl,
   uploadImage,
   type ApiSession,
+  type CollectionCount,
   type PinAddress,
   type RoadRoute,
   type Snapshot,
@@ -195,6 +196,8 @@ interface AppState {
   systemConfig: SystemConfig | null;
   /** Developer-only: null outside a live session - offline demo mode has no server to report on. */
   deployment: DeploymentInfo | null;
+  /** Developer-only: real document totals per collection from the server; null in demo mode. */
+  collectionCounts: CollectionCount[] | null;
 
   currentUser: AppUser;
   currentShelter: Shelter;
@@ -299,6 +302,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
   const [messages, setMessages] = useState<Message[]>(live ? [] : seedMessages);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(live ? null : DEMO_SYSTEM_CONFIG);
   const [deployment, setDeployment] = useState<DeploymentInfo | null>(null);
+  const [collectionCounts, setCollectionCounts] = useState<CollectionCount[] | null>(null);
 
   const [selfId, setSelfId] = useState('');
   const [serverStats, setServerStats] = useState<Snapshot['stats']>({});
@@ -350,6 +354,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     setServerStats(snap.stats);
     setSystemConfig(snap.systemConfig);
     setDeployment(snap.deployment);
+    setCollectionCounts(snap.collectionCounts);
     // The server does not rank matches yet, so keep the ones ranked on this device.
     setMatches((prev) => {
       const seen = new Set(snap.matches.map((m) => `${m.lostReportId}:${m.candidateId}`));
@@ -1243,6 +1248,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       messages,
       systemConfig,
       deployment,
+      collectionCounts,
       currentUser,
       currentShelter,
       sync,
@@ -1290,7 +1296,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     }),
     [
       users, shelters, reports, matches, shelterAnimals, cases, flags, notifications,
-      conversations, messages, systemConfig, deployment, currentUser, currentShelter, sync, issuedLogin, clearIssuedLogin,
+      conversations, messages, systemConfig, deployment, collectionCounts, currentUser, currentShelter, sync, issuedLogin, clearIssuedLogin,
       stats, reportById, shelterById,
       myReports, nearbyReports, shelterAreaReports, matchesForReport, notificationsFor,
       messagesIn, caseForReport, runImageMatch, scanPhotoMatch, createReport, setReportStatus, deleteReport,

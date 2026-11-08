@@ -206,6 +206,16 @@ export interface Snapshot {
   /** Developer-only: the System Management page's config + deployment facts. Null for other roles. */
   systemConfig: SystemConfig | null;
   deployment: DeploymentInfo | null;
+  /** Developer-only: document totals per database collection, counted by the server. */
+  collectionCounts: CollectionCount[] | null;
+}
+
+/** One row of System Management's "Database monitoring" panel. */
+export interface CollectionCount {
+  name: string;
+  count: number;
+  /** Optional breakdown, e.g. "8 lost · 5 found". */
+  detail?: string;
 }
 
 const emptySnapshot = (selfId: string): Snapshot => ({
@@ -223,6 +233,7 @@ const emptySnapshot = (selfId: string): Snapshot => ({
   stats: {},
   systemConfig: null,
   deployment: null,
+  collectionCounts: null,
 });
 
 export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
@@ -296,6 +307,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
     flags: ModerationFlag[];
     systemConfig: SystemConfig;
     deployment: DeploymentInfo;
+    collections?: CollectionCount[];
   }>(s, '/developer/overview');
   return {
     ...emptySnapshot(''),
@@ -307,6 +319,8 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
     // an empty list rather than taking the whole console down over one missing collection.
     shelterAnimals: withImageHosts(s.baseUrl, overview.shelterAnimals ?? []),
     flags: overview.flags ?? [],
+    // Null from an older backend: the panel then falls back to counting what it loaded.
+    collectionCounts: overview.collections ?? null,
   };
 }
 

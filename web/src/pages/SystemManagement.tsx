@@ -38,8 +38,20 @@ function csvSection(title: string, headers: string[], rows: unknown[][]): string
 
 /** Developer Module - Configuration, database counts, and maintenance controls. */
 export function SystemManagementPage() {
-  const { reports, users, shelters, shelterAnimals, cases, flags, notifications, messages, systemConfig, deployment, updateSystemConfig } =
-    useApp();
+  const {
+    reports,
+    users,
+    shelters,
+    shelterAnimals,
+    cases,
+    flags,
+    notifications,
+    messages,
+    systemConfig,
+    deployment,
+    collectionCounts,
+    updateSystemConfig,
+  } = useApp();
 
   const maintenance = systemConfig?.maintenanceMode ?? false;
   const { ask, dialog } = useConfirm();
@@ -61,7 +73,9 @@ export function SystemManagementPage() {
     );
   };
 
-  const collections = [
+  // Real totals counted in the database by the server. Only the offline demo (or an older backend)
+  // falls back to counting the rows this page happens to have loaded.
+  const collections: { name: string; count: number; detail?: string }[] = collectionCounts ?? [
     { name: 'reports', count: reports.length },
     { name: 'users', count: users.length },
     { name: 'shelters', count: shelters.length },
@@ -151,7 +165,10 @@ export function SystemManagementPage() {
           </Card>
 
           <Card>
-            <CardHead title="Database monitoring" sub="Document counts per collection" />
+            <CardHead
+              title="Database monitoring"
+              sub={collectionCounts ? 'Documents stored in each database collection' : 'Counts of what this page has loaded (demo mode)'}
+            />
             <table>
               <thead>
                 <tr>
@@ -164,6 +181,9 @@ export function SystemManagementPage() {
                   <tr key={c.name}>
                     <td style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 12.5 }}>
                       {c.name}
+                      {c.detail ? (
+                        <span style={{ fontFamily: 'inherit', color: 'var(--muted)', marginLeft: 10 }}>{c.detail}</span>
+                      ) : null}
                     </td>
                     <td style={{ fontWeight: 700 }}>{c.count}</td>
                   </tr>

@@ -10,6 +10,10 @@ import { ShelterAnimal } from '../../models/ShelterAnimal';
 import { ModerationFlag } from '../../models/ModerationFlag';
 import { ShelterProofDocument } from '../../models/ShelterProofDocument';
 import { DeveloperAccount } from '../../models/DeveloperAccount';
+import { AnimalCase } from '../../models/AnimalCase';
+import { Notification } from '../../models/Notification';
+import { Message } from '../../models/Message';
+import { Conversation } from '../../models/Conversation';
 import { moderationService } from '../../services/moderation.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import { sendEmail, shelterCredentialsEmail } from '../../services/email.service';
@@ -40,6 +44,38 @@ function deploymentInfo() {
   };
 }
 
+/**
+ * Real document totals for System Management's "Database monitoring" panel, counted in the
+ * database itself. The panel used to count only what the console had loaded, so collections it
+ * never loads (cases, notifications, messages) always read 0, and capped lists read low.
+ */
+async function collectionCounts() {
+  const [lost, found, users, shelters, shelterAnimals, animalCases, flags, notifications, conversations, messages] =
+    await Promise.all([
+      LostPetReport.estimatedDocumentCount(),
+      FoundAnimalReport.estimatedDocumentCount(),
+      User.estimatedDocumentCount(),
+      Shelter.estimatedDocumentCount(),
+      ShelterAnimal.estimatedDocumentCount(),
+      AnimalCase.estimatedDocumentCount(),
+      ModerationFlag.estimatedDocumentCount(),
+      Notification.estimatedDocumentCount(),
+      Conversation.estimatedDocumentCount(),
+      Message.estimatedDocumentCount(),
+    ]);
+  return [
+    { name: 'reports', count: lost + found, detail: `${lost} lost · ${found} found` },
+    { name: 'users', count: users },
+    { name: 'shelters', count: shelters },
+    { name: 'shelterAnimals', count: shelterAnimals },
+    { name: 'animalCases', count: animalCases },
+    { name: 'moderationFlags', count: flags },
+    { name: 'notifications', count: notifications },
+    { name: 'conversations', count: conversations },
+    { name: 'messages', count: messages },
+  ];
+}
+
 export const developerService = {
   /** The signed-in Developer's own account, so the console shows the email they signed in with. */
   async me(developerId: string) {
@@ -60,7 +96,7 @@ export const developerService = {
 
   /** Everything the console renders, in the shapes the shared types describe. */
   async overview() {
-    const [stats, shelters, users, lost, found, shelterAnimals, flags, systemConfig] = await Promise.all([
+    const [stats, shelters, users, lost, found, shelterAnimals, flags, systemConfig, collections] = await Promise.all([
       statsService.platformStats(),
       Shelter.find().sort({ registeredAt: -1 }).lean(),
       User.find().sort({ joinedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
@@ -70,6 +106,7 @@ export const developerService = {
       ShelterAnimal.find({ isHiddenByModeration: false }).sort({ intakeDate: -1 }).limit(OVERVIEW_LIMIT).lean(),
       ModerationFlag.find().sort({ createdAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       getSystemConfig(),
+      collectionCounts(),
     ]);
 
     const userById = new Map(users.map((u) => [String(u._id), u]));
@@ -90,6 +127,7 @@ export const developerService = {
       }),
       systemConfig,
       deployment: deploymentInfo(),
+      collections,
     };
   },
 
