@@ -17,6 +17,7 @@ import { authService } from '../auth/auth.service';
 import { REPORT_STATUSES } from '../../config/constants';
 import { ApiError } from '../../utils/ApiError';
 import { logger } from '../../utils/logger';
+import { barangayForPin } from '../../services/pinBarangay.service';
 import {
   combineName,
   serializeUser,
@@ -118,6 +119,8 @@ export const userService = {
     
     const report = await LostPetReport.create({
       ...data,
+      // The barangay the pin is in, not whichever one the app happened to send.
+      barangay: await barangayForPin(data.location.latitude, data.location.longitude),
       reporterId,
       reporterName: combineName(user),
       reporterPhone: user.phone,
@@ -227,6 +230,8 @@ export const userService = {
     
     const report = await FoundAnimalReport.create({
       ...data,
+      // The barangay the pin is in, not whichever one the app happened to send.
+      barangay: await barangayForPin(data.location.latitude, data.location.longitude),
       reporterId,
       reporterName: combineName(user),
       reporterPhone: user.phone,

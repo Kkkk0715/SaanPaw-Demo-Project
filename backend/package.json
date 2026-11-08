@@ -17,7 +17,9 @@
     "fix-barangay-centers": "ts-node-dev --transpile-only src/scripts/fix-barangay-centers.ts",
     "fix-barangay-centers:prod": "node dist/scripts/fix-barangay-centers.js",
     "backfill-addresses": "ts-node-dev --transpile-only src/scripts/backfill-report-addresses.ts",
-    "backfill-addresses:prod": "node dist/scripts/backfill-report-addresses.js"
+    "backfill-addresses:prod": "node dist/scripts/backfill-report-addresses.js",
+    "fix-report-barangays": "ts-node-dev --transpile-only src/scripts/fix-report-barangays.ts",
+    "fix-report-barangays:prod": "node dist/scripts/fix-report-barangays.js"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

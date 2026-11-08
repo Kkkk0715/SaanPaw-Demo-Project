@@ -55,7 +55,9 @@ export function ReportForm({
   const [size, setSize] = useState<AnimalReport['size']>('medium');
   const [marks, setMarks] = useState('');
   const [description, setDescription] = useState('');
-  const [barangay, setBarangay] = useState<string | null>(currentUser.barangay);
+  // The barangay of where the pin starts (refined from the map's address data on load), not simply
+  // the reporter's own barangay - the label should always describe the pin.
+  const [barangay, setBarangay] = useState<string | null>(() => nearestBarangay(currentUser.location).name);
   const [pin, setPin] = useState<LatLng>(currentUser.location);
   /** Bumped when the device location is tagged, so the map flies there by itself. */
   const [mapFocus, setMapFocus] = useState<{ center: LatLng; key: number } | null>(null);
@@ -466,10 +468,9 @@ export function ReportForm({
           focus={mapFocus}
           onPickLocation={(point) => {
             setPin(point);
-            // Keep the barangay in step with the pin.
-            if (isWithinSJDM(point.latitude, point.longitude)) {
-              setBarangay(nearestBarangay(point).name);
-            }
+            // The label follows the pin straight away (nearest barangay), then the map's own
+            // address data for the spot refines it a moment later (see the lookup above).
+            setBarangay(nearestBarangay(point).name);
           }}
         />
         <Field

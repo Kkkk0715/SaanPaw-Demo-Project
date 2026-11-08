@@ -185,7 +185,8 @@ export function formatDistance(meters: number): string {
  * the report, so auto-tagged locations get turned back into a barangay name.
  */
 export function nearestBarangay(point: LatLng): Barangay {
-  return SJDM_BARANGAYS.reduce((closest, candidate) =>
+  // "Muzon" before its 2023 split stays a valid stored name, but a pin goes to the barangay it is in now.
+  return SJDM_BARANGAYS.filter((b) => b.name !== 'Muzon').reduce((closest, candidate) =>
     distanceMeters(point, candidate.center) < distanceMeters(point, closest.center)
       ? candidate
       : closest,
