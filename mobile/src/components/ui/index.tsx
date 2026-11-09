@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -30,6 +30,12 @@ export const COLUMN = 520;
 
 /* ------------------------------------------------------------------ layout */
 
+/**
+ * Lets something inside a scrolling screen (a map) stop the page from scrolling while a finger is
+ * on it, so dragging the map pans the map instead of moving the whole page.
+ */
+export const ScrollLockContext = createContext<(locked: boolean) => void>(() => {});
+
 export function Screen({
   children,
   scroll = true,
@@ -42,17 +48,21 @@ export function Screen({
   footer?: ReactNode;
 }) {
   const bottomInset = useBottomInset();
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const lockScroll = useCallback((locked: boolean) => setScrollEnabled(!locked), []);
   const body = [
     padded ? styles.screenBodyPadded : styles.screenBody,
     { paddingBottom: theme.spacing(4) + bottomInset },
   ];
   return (
+    <ScrollLockContext.Provider value={lockScroll}>
     <KeyboardAvoidingView
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {scroll ? (
         <ScrollView
+          scrollEnabled={scrollEnabled}
           contentContainerStyle={body}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -66,6 +76,7 @@ export function Screen({
         <View style={[styles.screenFooter, { paddingBottom: theme.spacing(2) + bottomInset }]}>{footer}</View>
       ) : null}
     </KeyboardAvoidingView>
+    </ScrollLockContext.Provider>
   );
 }
 

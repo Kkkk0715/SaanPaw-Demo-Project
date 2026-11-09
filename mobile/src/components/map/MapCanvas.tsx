@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { theme } from '@/constants/theme';
+import { ScrollLockContext } from '@/components/ui';
 import { SJDM_CENTER } from '@saanpaw/shared';
 import type { LatLng } from '@saanpaw/shared';
 import { buildMapHtml, type MapMarkerConfig } from './osmMapHtml';
@@ -146,8 +147,17 @@ export function MapCanvas({
     }
   };
 
+  // While a finger is on the map the page around it stops scrolling, so a drag pans the map.
+  const lockScroll = useContext(ScrollLockContext);
+  useEffect(() => () => lockScroll(false), [lockScroll]);
+
   return (
-    <View style={[styles.wrap, { height }]}>
+    <View
+      style={[styles.wrap, { height }]}
+      onTouchStart={() => lockScroll(true)}
+      onTouchEnd={() => lockScroll(false)}
+      onTouchCancel={() => lockScroll(false)}
+    >
       <WebView
         ref={webviewRef}
         source={{ html }}
@@ -163,6 +173,9 @@ export function MapCanvas({
         geolocationEnabled={false}
         // The map draws its own attribution; a bounce here would clip it.
         bounces={false}
+        // Android: the map keeps the drag instead of handing it to the page's scroll view.
+        nestedScrollEnabled
+        overScrollMode="never"
       />
       {loadError ? (
         <View style={styles.errorOverlay} pointerEvents="none">
