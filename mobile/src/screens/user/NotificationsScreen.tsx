@@ -2,7 +2,7 @@ import { View } from 'react-native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { formatDistance, useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
-import { Banner, Button, Card, Caption, EmptyState, Screen, SectionHeader } from '@/components/ui';
+import { Banner, Button, Card, EmptyState, Screen, SectionHeader } from '@/components/ui';
 import { NotificationRow } from '@/components/domain';
 import { notificationTarget } from '@/navigation/notificationTarget';
 
@@ -69,7 +69,6 @@ export function UserNotificationsScreen({ navigation }: BottomTabScreenProps<any
         )}
       </View>
 
-      <Caption style={{ textAlign: 'center' }}>Alerts cover San Jose Del Monte only.</Caption>
     </Screen>
   );
 }

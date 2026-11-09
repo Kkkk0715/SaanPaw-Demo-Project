@@ -196,9 +196,6 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
         <View style={{ height: theme.spacing(1) }} />
         <Button label="Sign out" variant="danger" icon="log-out-outline" onPress={handleSignOut} />
 
-        <Caption style={{ textAlign: 'center', marginTop: theme.spacing(1) }}>
-          SaanPaw · San Jose Del Monte, Bulacan
-        </Caption>
       </View>
 
       <Sheet open={editing} onClose={() => setEditing(false)} title="Edit profile">

@@ -6,7 +6,6 @@ import {
   Banner,
   Button,
   Card,
-  Caption,
   EmptyState,
   Screen,
   SectionHeader,
@@ -71,9 +70,6 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
         )}
       </View>
 
-      <Caption style={{ textAlign: 'center' }}>
-        Alerts are geo-fenced to San Jose Del Monte, Bulacan.
-      </Caption>
     </Screen>
   );
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
 import {
@@ -131,9 +131,6 @@ export function RescuedAnimalsScreen({ navigation }: NativeStackScreenProps<any>
       )}
       <Pager {...page} />
 
-      <Text style={{ ...theme.type.caption, color: theme.colors.muted, textAlign: 'center' }}>
-        Change a status from Case Status.
-      </Text>
 
       <Sheet open={Boolean(tracking)} onClose={() => setTracking(null)} title="Where the report came from">
         {tracking ? <RecoveryTracker shelter={currentShelter} report={tracking} /> : null}
