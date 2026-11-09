@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
@@ -91,12 +91,14 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
             footer={
               <View style={{ gap: theme.spacing(1) }}>
                 {matchCount ? (
-                  <Row gap={0.5}>
-                    <Ionicons name="sparkles" size={13} color={theme.colors.accent} />
-                    <Text style={styles.matchLine}>
-                      {matchCount} possible {matchCount === 1 ? 'match' : 'matches'} found
-                    </Text>
-                  </Row>
+                  <Pressable onPress={() => navigation.navigate('ImageRecognition', { reportId: report.id })}>
+                    <Row gap={0.5}>
+                      <Ionicons name="sparkles" size={13} color={theme.colors.accent} />
+                      <Text style={styles.matchLine}>
+                        {matchCount} possible {matchCount === 1 ? 'match' : 'matches'} found · View
+                      </Text>
+                    </Row>
+                  </Pressable>
                 ) : null}
 
                 {linkedCase ? (

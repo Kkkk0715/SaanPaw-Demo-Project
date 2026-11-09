@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '@/constants/theme';
 import { distanceMeters, formatDistance, useApp } from '@saanpaw/shared';
-import type { Shelter } from '@saanpaw/shared';
+import type { AnimalType, Shelter, ShelterAnimal } from '@saanpaw/shared';
+
+const INTAKE_LABEL: Record<ShelterAnimal['intakeType'], string> = {
+  recovered: 'Recovered',
+  rescued: 'Rescued',
+  surrendered: 'Surrendered',
+};
 import {
   AnimalPhoto,
   Avatar,
@@ -17,6 +23,7 @@ import {
   SectionHeader,
   Segmented,
   Sheet,
+  Choice,
 } from '@/components/ui';
 import { CaseStatusPill, ShelterCard, timeAgo } from '@/components/domain';
 import { ChatThread } from '@/components/domain/ChatThread';
@@ -38,6 +45,9 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
   const [tab, setTab] = useState<'shelters' | 'animals' | 'messages'>(route?.params?.tab ?? 'shelters');
   const [composeFor, setComposeFor] = useState<Shelter | null>(null);
   const [draft, setDraft] = useState('');
+  const [viewShelter, setViewShelter] = useState<(Shelter & { distance: number }) | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'care' | 'reunited'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | AnimalType>('all');
 
   const approved = shelters
     .filter((s) => s.approvalStatus === 'approved')
@@ -47,6 +57,28 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
   /** Only animals a shelter has explicitly posted are visible to users. */
   const publicAnimals = shelterAnimals.filter((a) => a.postedPublicly);
   const myThreads = conversations.filter((c) => c.userId === currentUser.id);
+
+  const inCare = (a: ShelterAnimal) => a.caseStatus === 'under_rescue' || a.caseStatus === 'inconclusive';
+  const statusCount = {
+    care: publicAnimals.filter(inCare).length,
+    reunited: publicAnimals.filter((a) => a.caseStatus === 'reunited').length,
+  };
+  const filteredAnimals = publicAnimals
+    .filter((a) => statusFilter === 'all' || (statusFilter === 'care' ? inCare(a) : a.caseStatus === 'reunited'))
+    .filter((a) => typeFilter === 'all' || a.animalType === typeFilter)
+    // Still waiting for an owner first, then newest intake.
+    .sort((x, y) => Number(inCare(y)) - Number(inCare(x)) || +new Date(y.intakeDate) - +new Date(x.intakeDate));
+  /** One block per shelter, nearest shelter first. */
+  const animalGroups = [...new Set(filteredAnimals.map((a) => a.shelterId))]
+    .map((id) => ({
+      shelter: shelters.find((s) => s.id === id),
+      animals: filteredAnimals.filter((a) => a.shelterId === id),
+    }))
+    .sort(
+      (g1, g2) =>
+        (g1.shelter ? distanceMeters(currentUser.location, g1.shelter.location) : Infinity) -
+        (g2.shelter ? distanceMeters(currentUser.location, g2.shelter.location) : Infinity),
+    );
 
   // Threads render open on this tab, so they count as read the moment they are on screen.
   const unreadKey = myThreads.map((c) => `${c.id}:${c.unreadForUser}`).join(',');
@@ -87,6 +119,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
               key={s.id}
               shelter={s}
               distance={s.distance}
+              onPress={() => setViewShelter(s)}
               right={
                 <Button
                   label="Message"
@@ -103,52 +136,116 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
 
       {tab === 'animals' ? (
         <>
-          <SectionHeader title={`Animals in shelter care (${publicAnimals.length})`} />
+          <SectionHeader title={`Recovered animals (${publicAnimals.length})`} />
           <Caption>
-            Animals shelters have recovered and posted publicly. If one looks like your pet, message
-            the shelter to arrange verification.
+            Animals shelters have recovered and posted publicly, grouped by shelter. If one looks like
+            your pet, message the shelter to arrange verification.
           </Caption>
-          {publicAnimals.length ? (
-            publicAnimals.map((a) => {
-              const shelter = shelters.find((s) => s.id === a.shelterId);
-              return (
-                <Card key={a.id}>
-                  <Row gap={1.5} align="flex-start">
-                    <AnimalPhoto uri={a.imageUrls[0]} size={80} />
-                    <View style={{ flex: 1, gap: 5 }}>
-                      <Text style={styles.animalName}>{a.name}</Text>
-                      <Caption>{[a.breed, a.color, a.size].filter(Boolean).join(' · ')}</Caption>
-                      <Row gap={0.75}>
-                        <CaseStatusPill status={a.caseStatus} />
-                        <Badge
-                          label={a.intakeType}
-                          color={theme.colors.info}
-                          soft={theme.colors.infoSoft}
-                        />
-                      </Row>
-                      <Caption>
-                        {shelter?.name} · intake {timeAgo(a.intakeDate)}
-                      </Caption>
-                    </View>
-                  </Row>
-                  {a.notes ? <Caption>{a.notes}</Caption> : null}
+
+          <Row gap={1} style={styles.statRow}>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{statusCount.care}</Text>
+              <Caption>In shelter care</Caption>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{statusCount.reunited}</Text>
+              <Caption>Reunited</Caption>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{animalGroups.length}</Text>
+              <Caption>{animalGroups.length === 1 ? 'Shelter' : 'Shelters'}</Caption>
+            </View>
+          </Row>
+
+          <Segmented
+            options={[
+              { label: 'All', value: 'all' },
+              { label: 'In shelter care', value: 'care' },
+              { label: 'Reunited', value: 'reunited' },
+            ]}
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as typeof statusFilter)}
+          />
+          <Choice
+            options={[
+              { label: 'All animals', value: 'all', icon: 'paw-outline' },
+              { label: 'Dogs', value: 'dog' },
+              { label: 'Cats', value: 'cat' },
+              { label: 'Others', value: 'other' },
+            ]}
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v as typeof typeFilter)}
+          />
+
+          {animalGroups.length ? (
+            animalGroups.map(({ shelter, animals }) => (
+              <View key={shelter?.id ?? animals[0].shelterId} style={styles.group}>
+                <Row gap={1} style={styles.groupHeader}>
+                  <Avatar
+                    name={shelter?.name ?? 'Shelter'}
+                    uri={shelter?.photoUrl}
+                    color={shelter?.logoColor ?? theme.colors.primary}
+                    icon="home"
+                    size={40}
+                  />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.groupTitle} numberOfLines={1}>
+                      {shelter?.name ?? 'Shelter'}
+                    </Text>
+                    <Caption>
+                      {animals.length} {animals.length === 1 ? 'animal' : 'animals'}
+                      {shelter ? ` · ${formatDistance(distanceMeters(currentUser.location, shelter.location))} away` : ''}
+                    </Caption>
+                  </View>
                   {shelter ? (
                     <Button
-                      label={`Message ${shelter.name}`}
+                      label="Message"
                       variant="secondary"
                       icon="chatbubble-ellipses-outline"
+                      full={false}
                       onPress={() => setComposeFor(shelter)}
                     />
                   ) : null}
-                </Card>
-              );
-            })
+                </Row>
+
+                {animals.map((a) => (
+                  <Card key={a.id}>
+                    <Row gap={1.5} align="flex-start">
+                      <AnimalPhoto uri={a.imageUrls[0]} size={76} />
+                      <View style={{ flex: 1, gap: 5 }}>
+                        <Text style={styles.animalName}>{a.name}</Text>
+                        <Caption>{[a.breed, a.color, a.size].filter(Boolean).join(' · ') || a.animalType}</Caption>
+                        <Row gap={0.75} style={{ flexWrap: 'wrap' }}>
+                          {a.caseStatus === 'under_rescue' ? (
+                            <Badge
+                              label="In shelter care"
+                              color={theme.colors.found}
+                              soft={theme.colors.foundSoft}
+                              icon="shield-checkmark"
+                            />
+                          ) : (
+                            <CaseStatusPill status={a.caseStatus} />
+                          )}
+                          <Badge label={INTAKE_LABEL[a.intakeType] ?? a.intakeType} color={theme.colors.info} soft={theme.colors.infoSoft} />
+                        </Row>
+                        <Caption>Intake {timeAgo(a.intakeDate)}</Caption>
+                      </View>
+                    </Row>
+                    {a.notes ? <Caption>{a.notes}</Caption> : null}
+                  </Card>
+                ))}
+              </View>
+            ))
           ) : (
             <Card>
               <EmptyState
                 icon="paw-outline"
-                title="No animals posted right now"
-                message="Shelters post recovered animals here once they are ready to be claimed or adopted."
+                title={publicAnimals.length ? 'No animals match these filters' : 'No animals posted right now'}
+                message={
+                  publicAnimals.length
+                    ? 'Try another status or animal type.'
+                    : 'Shelters post recovered animals here once they are ready to be claimed or adopted.'
+                }
               />
             </Card>
           )}
@@ -209,6 +306,67 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
         </>
       ) : null}
 
+      <Sheet open={Boolean(viewShelter)} onClose={() => setViewShelter(null)} title={viewShelter?.name ?? 'Shelter'}>
+        {viewShelter ? (
+          <>
+            <View style={styles.profileHead}>
+              <Avatar
+                name={viewShelter.name}
+                uri={viewShelter.photoUrl}
+                color={viewShelter.logoColor}
+                icon="home"
+                size={88}
+              />
+              <Text style={styles.profileName}>{viewShelter.name}</Text>
+              <Caption style={{ textAlign: 'center' }}>{viewShelter.address}</Caption>
+            </View>
+            <Row gap={1} style={styles.statRow}>
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>
+                  {viewShelter.currentOccupancy}/{viewShelter.capacity}
+                </Text>
+                <Caption>Animals</Caption>
+              </View>
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>{formatDistance(viewShelter.distance)}</Text>
+                <Caption>Away</Caption>
+              </View>
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>
+                  {publicAnimals.filter((a) => a.shelterId === viewShelter.id).length}
+                </Text>
+                <Caption>Posted</Caption>
+              </View>
+            </Row>
+            {viewShelter.contactNumber ? <Caption>Contact: {viewShelter.contactNumber}</Caption> : null}
+            <Row gap={1}>
+              <Button
+                label="See animals"
+                variant="secondary"
+                icon="paw-outline"
+                full={false}
+                style={{ flex: 1 }}
+                onPress={() => {
+                  setViewShelter(null);
+                  setTab('animals');
+                }}
+              />
+              <Button
+                label="Message"
+                icon="chatbubble-ellipses-outline"
+                full={false}
+                style={{ flex: 1 }}
+                onPress={() => {
+                  const s = viewShelter;
+                  setViewShelter(null);
+                  setComposeFor(s);
+                }}
+              />
+            </Row>
+          </>
+        ) : null}
+      </Sheet>
+
       <Sheet
         open={Boolean(composeFor)}
         onClose={() => setComposeFor(null)}
@@ -237,5 +395,20 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
 const styles = StyleSheet.create({
   animalName: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
   threadTitle: { fontSize: 14.5, fontWeight: '700', color: theme.colors.text },
+  statRow: { alignItems: 'stretch' },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: theme.spacing(1),
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  statValue: { fontSize: 17, fontWeight: '800', color: theme.colors.text },
+  group: { gap: theme.spacing(1) },
+  groupHeader: { marginTop: theme.spacing(1), alignItems: 'center' },
+  groupTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
+  profileHead: { alignItems: 'center', gap: 6, paddingVertical: theme.spacing(1) },
+  profileName: { fontSize: 18, fontWeight: '800', color: theme.colors.text, textAlign: 'center' },
 
 });

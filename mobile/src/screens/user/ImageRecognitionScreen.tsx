@@ -95,6 +95,54 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
     };
   };
 
+  const renderMatch = (
+    m: { candidateId: string; candidateSource: 'found_report' | 'shelter_animal'; score: number; reasons: string[] },
+    key: string,
+  ) => {
+    const d = describe(m.candidateId, m.candidateSource);
+    return (
+      <MatchCard
+        key={key}
+        sourceLabel={d.label}
+        title={d.title}
+        subtitle={d.subtitle}
+        imageUri={d.image}
+        score={m.score}
+        reasons={m.reasons}
+        actions={
+          <Row gap={1}>
+            {d.shelterId ? (
+              <Button
+                label="Message shelter"
+                variant="secondary"
+                icon="chatbubble-ellipses-outline"
+                full={false}
+                style={{ flex: 1 }}
+                onPress={() => {
+                  startConversation(
+                    d.shelterId!,
+                    `Possible match: ${d.title}`,
+                    `Hello po, I think this animal might be my pet. Reference match confidence ${Math.round(m.score * 100)}%.`,
+                  );
+                  navigation.navigate('ShelterView');
+                }}
+              />
+            ) : (
+              <Button
+                label="View report"
+                variant="secondary"
+                icon="eye-outline"
+                full={false}
+                style={{ flex: 1 }}
+                onPress={() => navigation.navigate('ReportDetail', { reportId: m.candidateId })}
+              />
+            )}
+          </Row>
+        }
+      />
+    );
+  };
+
   return (
     <Screen>
       <Banner
@@ -122,7 +170,24 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
         </Card>
       ) : null}
 
-      <SectionHeader title="Photo to match" />
+      {linkedReport ? (
+        <>
+          <SectionHeader title={`Possible matches (${storedMatches.length})`} />
+          {storedMatches.length ? (
+            storedMatches.map((m) => renderMatch(m, m.id))
+          ) : (
+            <Card>
+              <EmptyState
+                icon="sparkles-outline"
+                title="No possible matches yet"
+                message="Found reports and shelter animals with the same details show up here on their own. You can also scan a photo below."
+              />
+            </Card>
+          )}
+        </>
+      ) : null}
+
+      <SectionHeader title={linkedReport ? 'Scan a photo' : 'Photo to match'} />
       <Card>
         <Row gap={1.5} align="flex-start">
           {image ? (
@@ -193,50 +258,7 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
         <>
           <SectionHeader title={`Results (${results.length})`} />
           {results.length ? (
-            results.map((m) => {
-              const d = describe(m.candidateId, m.candidateSource);
-              return (
-                <MatchCard
-                  key={`${m.candidateSource}-${m.candidateId}`}
-                  sourceLabel={d.label}
-                  title={d.title}
-                  subtitle={d.subtitle}
-                  imageUri={d.image}
-                  score={m.score}
-                  reasons={m.reasons}
-                  actions={
-                    <Row gap={1}>
-                      {d.shelterId ? (
-                        <Button
-                          label="Message shelter"
-                          variant="secondary"
-                          icon="chatbubble-ellipses-outline"
-                          full={false}
-                          style={{ flex: 1 }}
-                          onPress={() => {
-                            startConversation(
-                              d.shelterId!,
-                              `Possible match: ${d.title}`,
-                              `Hello po, I think this animal might be my pet. Reference match confidence ${Math.round(m.score * 100)}%.`,
-                            );
-                            navigation.navigate('ShelterView');
-                          }}
-                        />
-                      ) : (
-                        <Button
-                          label="View report"
-                          variant="secondary"
-                          icon="eye-outline"
-                          full={false}
-                          style={{ flex: 1 }}
-                          onPress={() => navigation.navigate('Search')}
-                        />
-                      )}
-                    </Row>
-                  }
-                />
-              );
-            })
+            results.map((m) => renderMatch(m, `${m.candidateSource}-${m.candidateId}`))
           ) : (
             <Card>
               <EmptyState
@@ -246,24 +268,6 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
               />
             </Card>
           )}
-        </>
-      ) : storedMatches.length ? (
-        <>
-          <SectionHeader title={`Saved matches (${storedMatches.length})`} />
-          {storedMatches.map((m) => {
-            const d = describe(m.candidateId, m.candidateSource);
-            return (
-              <MatchCard
-                key={m.id}
-                sourceLabel={d.label}
-                title={d.title}
-                subtitle={d.subtitle}
-                imageUri={d.image}
-                score={m.score}
-                reasons={m.reasons}
-              />
-            );
-          })}
         </>
       ) : null}
     </Screen>

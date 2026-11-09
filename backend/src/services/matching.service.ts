@@ -48,7 +48,29 @@ const SHORTLIST_SIZE = 8;
  */
 const GEMINI_COMPARE_LIMIT = 4;
 const MAX_RESULTS = 6;
-const MIN_SCORE = 0.2;
+/**
+ * A candidate is a possible match when its details line up (same species plus at least one more
+ * thing: colour, breed, size or a nearby location) or when the photos look alike. Photos are not
+ * required: a report whose photo comparison failed, timed out or scored low still shows up when
+ * its details agree, instead of only appearing after a manual image match.
+ */
+const ATTRIBUTE_MIN = 0.5;
+const VISION_MIN = 0.5;
+
+export interface MatchOptions {
+  /** Skip the Gemini photo comparison (cheap refresh when a report's matches are loaded). */
+  attributesOnly?: boolean;
+}
+
+/** Photo similarity weighs more than the details, but a low photo score no longer erases a detail match. */
+function combineScores(attr: number, vision: number | null): number {
+  if (vision == null) return attr;
+  return Math.min(0.99, 0.6 * vision + 0.4 * attr);
+}
+
+function keep(attr: number, vision: number | null): boolean {
+  return attr >= ATTRIBUTE_MIN || (vision != null && vision >= VISION_MIN);
+}
 
 function haversineMeters(a: LatLng, b: LatLng): number {
   const R = 6_371_000;
@@ -111,14 +133,13 @@ async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
       animalType,
       status: 'active',
       isHiddenByModeration: false,
-      imageUrls: { $exists: true, $ne: [] },
     })
+      .sort({ reportedAt: -1 })
       .limit(200)
       .lean(),
     ShelterAnimal.find({
       animalType,
       caseStatus: { $in: ['under_rescue', 'inconclusive'] },
-      imageUrls: { $exists: true, $ne: [] },
       isHiddenByModeration: false,
     })
       .limit(200)
@@ -160,7 +181,7 @@ async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
  * once Gemini is configured, its score replaces the heuristic one for whichever candidates it
  * successfully compares, with the heuristic score as the fallback for the rest.
  */
-export async function findMatches(input: MatchInput): Promise<RankedMatch[]> {
+export async function findMatches(input: MatchInput, opts: MatchOptions = {}): Promise<RankedMatch[]> {
   const candidates = await gatherCandidates(input.animalType);
 
   const shortlisted = candidates
@@ -174,23 +195,26 @@ export async function findMatches(input: MatchInput): Promise<RankedMatch[]> {
 
   const ranked = await Promise.all(
     shortlisted.map(async ({ candidate, score, reasons }, i) => {
-      const candidatePhoto = candidate.imageUrls[0];
+      const candidatePhoto = candidate.imageUrls?.[0];
       const visionResult =
-        input.imageUrl && candidatePhoto && i < GEMINI_COMPARE_LIMIT
+        !opts.attributesOnly && input.imageUrl && candidatePhoto && i < GEMINI_COMPARE_LIMIT
           ? await compareAnimalPhotos(input.imageUrl, candidatePhoto)
           : null;
+      const vision = visionResult ? visionResult.score : null;
 
       return {
         candidateId: candidate.id,
         candidateSource: candidate.source,
-        score: visionResult ? visionResult.score : score,
-        reasons: visionResult ? [visionResult.reasoning, ...reasons] : reasons,
+        score: combineScores(score, vision),
+        reasons: visionResult?.reasoning ? [visionResult.reasoning, ...reasons] : reasons,
+        keep: keep(score, vision),
       };
     }),
   );
 
   return ranked
-    .filter((m) => m.score >= MIN_SCORE)
+    .filter((m) => m.keep)
+    .map(({ keep: _keep, ...m }) => m)
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_RESULTS);
 }
@@ -205,8 +229,8 @@ async function gatherLostCandidates(animalType: AnimalType): Promise<LostCandida
     animalType,
     status: 'active',
     isHiddenByModeration: false,
-    imageUrls: { $exists: true, $ne: [] },
   })
+    .sort({ reportedAt: -1 })
     .limit(200)
     .lean();
 
@@ -234,7 +258,7 @@ export interface RankedLostMatch {
  * the moment a matching found/intake record appears, not only when they happen to file (or reopen)
  * their own lost report after it.
  */
-export async function findMatchingLostReports(input: MatchInput): Promise<RankedLostMatch[]> {
+export async function findMatchingLostReports(input: MatchInput, opts: MatchOptions = {}): Promise<RankedLostMatch[]> {
   const candidates = await gatherLostCandidates(input.animalType);
 
   const shortlisted = candidates
@@ -248,22 +272,25 @@ export async function findMatchingLostReports(input: MatchInput): Promise<Ranked
 
   const ranked = await Promise.all(
     shortlisted.map(async ({ candidate, score, reasons }, i) => {
-      const candidatePhoto = candidate.imageUrls[0];
+      const candidatePhoto = candidate.imageUrls?.[0];
       const visionResult =
-        input.imageUrl && candidatePhoto && i < GEMINI_COMPARE_LIMIT
+        !opts.attributesOnly && input.imageUrl && candidatePhoto && i < GEMINI_COMPARE_LIMIT
           ? await compareAnimalPhotos(input.imageUrl, candidatePhoto)
           : null;
+      const vision = visionResult ? visionResult.score : null;
 
       return {
         lostReportId: candidate.id,
-        score: visionResult ? visionResult.score : score,
-        reasons: visionResult ? [visionResult.reasoning, ...reasons] : reasons,
+        score: combineScores(score, vision),
+        reasons: visionResult?.reasoning ? [visionResult.reasoning, ...reasons] : reasons,
+        keep: keep(score, vision),
       };
     }),
   );
 
   return ranked
-    .filter((m) => m.score >= MIN_SCORE)
+    .filter((m) => m.keep)
+    .map(({ keep: _keep, ...m }) => m)
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_RESULTS);
 }

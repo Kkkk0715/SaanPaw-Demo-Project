@@ -10,7 +10,7 @@ import {
   reportStatusMeta,
   timeAgo,
 } from '@saanpaw/shared';
-import { AnimalPhoto, Badge, Card, Row, ScoreBar } from '@/components/ui';
+import { AnimalPhoto, Avatar, Badge, Card, Row, ScoreBar } from '@/components/ui';
 export { describeAnimal, timeAgo } from '@saanpaw/shared';
 export { AnimalTypeAndBreed } from './AnimalTypeAndBreed';
 
@@ -114,9 +114,8 @@ export function ShelterCard({
   return (
     <Card onPress={onPress}>
       <Row gap={1.5} align="flex-start">
-        <View style={[styles.shelterLogo, { backgroundColor: shelter.logoColor }]}>
-          <Ionicons name="home" size={19} color="#fff" />
-        </View>
+        {/* The shelter's own profile picture; the house icon only when none was uploaded. */}
+        <Avatar name={shelter.name} uri={shelter.photoUrl} color={shelter.logoColor} icon="home" size={48} />
         <View style={{ flex: 1, gap: 5 }}>
           <Text style={styles.cardTitle}>{shelter.name}</Text>
           <Text style={styles.cardMeta} numberOfLines={1}>

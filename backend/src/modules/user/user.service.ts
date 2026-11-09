@@ -29,6 +29,7 @@ import {
   serializeNotification,
   serializeCase,
   latLngToGeoPoint,
+  geoPointToLatLng,
 } from '../../utils/geoHelpers';
 
 export const userService = {
@@ -316,12 +317,69 @@ export const userService = {
   },
 
   // ----- Image Recognition Matching -----
+  /**
+   * Possible matches for one lost report. Besides what was saved when reports were filed, every
+   * load re-checks the open found reports and shelter animals by their details (no photo
+   * comparison, so it is quick), saving any new pairing. A found report filed earlier, one whose
+   * photo comparison failed, or one filed while matching was down still turns up here without
+   * the owner having to run an image match.
+   */
   async matchSuggestions(lostReportId: string) {
-    const matches = await MatchSuggestion.find({ lostReportId })
+    const report = await LostPetReport.findById(lostReportId).lean();
+    if (!report) return [];
+
+    const lastSeen = geoPointToLatLng(report.lastSeenLocation as any);
+    if (report.status === 'active' && lastSeen) {
+      try {
+        const ranked = await findMatches(
+          {
+            animalType: report.animalType as any,
+            color: report.color ?? undefined,
+            breed: report.breed ?? undefined,
+            size: report.size ?? undefined,
+            location: lastSeen,
+          },
+          { attributesOnly: true },
+        );
+        if (ranked.length) {
+          // Only adds pairings that are not saved yet; a stored (photo-compared) score is kept.
+          await MatchSuggestion.bulkWrite(
+            ranked.map((m) => ({
+              updateOne: {
+                filter: { lostReportId: report._id, candidateId: m.candidateId, candidateSource: m.candidateSource },
+                update: { $setOnInsert: { score: m.score, reasons: m.reasons, status: 'suggested' } },
+                upsert: true,
+              },
+            })),
+            { ordered: false },
+          );
+        }
+      } catch (err) {
+        logger.error('matching: failed to refresh suggestions for lost report', err);
+      }
+    }
+
+    const matches = await MatchSuggestion.find({ lostReportId, status: { $ne: 'dismissed' } })
       .sort({ score: -1, createdAt: -1 })
-      .limit(10)
+      .limit(20)
       .lean();
-    return matches.map(serializeMatchSuggestion);
+
+    // Drop suggestions whose found report / shelter animal is gone, closed or hidden.
+    const foundIds = matches.filter((m) => m.candidateSource === 'found_report').map((m) => m.candidateId);
+    const animalIds = matches.filter((m) => m.candidateSource === 'shelter_animal').map((m) => m.candidateId);
+    const [openFound, openAnimals] = await Promise.all([
+      foundIds.length
+        ? FoundAnimalReport.find({ _id: { $in: foundIds }, status: { $in: ['active', 'matched'] }, isHiddenByModeration: false }, '_id').lean()
+        : [],
+      animalIds.length
+        ? ShelterAnimal.find({ _id: { $in: animalIds }, caseStatus: { $nin: ['adopted'] }, isHiddenByModeration: false }, '_id').lean()
+        : [],
+    ]);
+    const open = new Set([...openFound, ...openAnimals].map((d) => String(d._id)));
+    return matches
+      .filter((m) => open.has(String(m.candidateId)))
+      .slice(0, 10)
+      .map(serializeMatchSuggestion);
   },
 
   /** Ad-hoc "scan a photo" search, not tied to any report of the caller's own - results aren't persisted. */
