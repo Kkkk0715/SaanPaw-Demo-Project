@@ -22,7 +22,7 @@ import {
 import { CASE_ICONS, CaseStatusPill, ShelterAnimalCard, describeAnimal, timeAgo } from '@/components/domain';
 import { RecoveryTracker } from '@/components/domain/RecoveryTracker';
 import { caseStatusMeta, isCaseClosed, nextAnimalStatuses, nextCaseStatuses, reportPlace, useApp } from '@saanpaw/shared';
-import type { AnimalCase, AnimalCaseStatus, AnimalReport } from '@saanpaw/shared';
+import type { AnimalCase, AnimalCaseStatus, AnimalReport, ShelterAnimal } from '@saanpaw/shared';
 import { confirmAsync } from '@/services/confirm';
 
 const statusOptions = (from: AnimalCaseStatus) =>
@@ -51,12 +51,14 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
   const [status, setStatus] = useState<AnimalCaseStatus>('reunited');
   const [note, setNote] = useState('');
   const [tracking, setTracking] = useState<AnimalReport | null>(null);
+  // Animals in care: tap one to see its details, and only then pick its outcome.
+  const [viewingAnimalId, setViewingAnimalId] = useState<string | null>(null);
 
   const myCases = cases
     .filter((c) => c.shelterId === currentShelter.id)
     .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
   const myAnimals = shelterAnimals.filter((a) => a.shelterId === currentShelter.id);
-  const animalsInRecovery = myAnimals.filter((a) => !isCaseClosed(a.caseStatus));
+  const viewingAnimal: ShelterAnimal | undefined = myAnimals.find((a) => a.id === viewingAnimalId);
 
   const casePage = usePagination(myCases);
   const animalPage = usePagination(myAnimals);
@@ -91,7 +93,10 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
       confirmLabel: 'Yes',
       cancelLabel: 'No',
     });
-    if (ok) setShelterAnimalStatus(animalId, next);
+    if (ok) {
+      setShelterAnimalStatus(animalId, next);
+      setViewingAnimalId(null);
+    }
   };
 
   return (
@@ -167,33 +172,71 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
       <Pager {...casePage} />
 
       <SectionHeader title={`Animals in care (${myAnimals.length})`} />
-      <Caption>Set the outcome for animals recorded directly in your shelter database.</Caption>
+      <Caption>Tap an animal to see its details and update its status.</Caption>
 
       {animalPage.items.map((a) => (
-        <ShelterAnimalCard key={a.id} animal={a} right={null} />
+        <ShelterAnimalCard
+          key={a.id}
+          animal={a}
+          onPress={() => setViewingAnimalId(a.id)}
+          right={<Ionicons name="chevron-forward" size={18} color={theme.colors.muted} />}
+        />
       ))}
       <Pager {...animalPage} />
 
-      {animalsInRecovery.length ? (
-        <Card>
-          <Caption>Set an outcome - animals still under recovery</Caption>
-          {animalsInRecovery.map((a) => (
-            <View key={a.id} style={styles.quickRow}>
-              <Text style={styles.quickName} numberOfLines={1}>
-                {a.name}
-              </Text>
+      <Sheet
+        open={Boolean(viewingAnimal)}
+        onClose={() => setViewingAnimalId(null)}
+        title={viewingAnimal?.name ?? 'Animal'}
+      >
+        {viewingAnimal ? (
+          <View style={{ gap: theme.spacing(1.25) }}>
+            <Row gap={1.5} align="flex-start">
+              <AnimalPhoto uri={viewingAnimal.imageUrls[0]} size={96} />
+              <View style={{ flex: 1, gap: 5 }}>
+                <Text style={styles.caseTitle}>{viewingAnimal.name}</Text>
+                <Caption>
+                  {[viewingAnimal.animalType, viewingAnimal.breed, viewingAnimal.color, viewingAnimal.size]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Caption>
+                <CaseStatusPill status={viewingAnimal.caseStatus} />
+                <Caption>
+                  {viewingAnimal.intakeType} · intake {timeAgo(viewingAnimal.intakeDate)}
+                </Caption>
+              </View>
+            </Row>
+            {viewingAnimal.notes ? <Caption>{viewingAnimal.notes}</Caption> : null}
+            {viewingAnimal.sourceReportId && reportById(viewingAnimal.sourceReportId) ? (
+              <Caption>
+                From report: {describeAnimal(reportById(viewingAnimal.sourceReportId)!)} ·{' '}
+                {reportPlace(reportById(viewingAnimal.sourceReportId)!)}
+              </Caption>
+            ) : null}
+
+            {isCaseClosed(viewingAnimal.caseStatus) ? (
+              <Row gap={0.75}>
+                <Ionicons name="lock-closed-outline" size={15} color={theme.colors.muted} />
+                <Caption>
+                  Closed as {caseStatusMeta[viewingAnimal.caseStatus].label.toLowerCase()} - its status can no longer
+                  change.
+                </Caption>
+              </Row>
+            ) : (
               <Choice
-                options={animalStatusOptions(a.caseStatus)}
+                label="Update status"
+                options={animalStatusOptions(viewingAnimal.caseStatus)}
                 value={null}
+                hint="Pick the outcome; you'll be asked to confirm."
                 onChange={(v) => {
-                  if (a.id.startsWith('pending-')) return; // still saving
-                  void setAnimalStatus(a.id, a.name, v as AnimalCaseStatus);
+                  if (viewingAnimal.id.startsWith('pending-')) return; // still saving
+                  void setAnimalStatus(viewingAnimal.id, viewingAnimal.name, v as AnimalCaseStatus);
                 }}
               />
-            </View>
-          ))}
-        </Card>
-      ) : null}
+            )}
+          </View>
+        ) : null}
+      </Sheet>
 
       <Sheet open={Boolean(editing)} onClose={() => setEditing(null)} title="Update case status">
         {editing ? (
