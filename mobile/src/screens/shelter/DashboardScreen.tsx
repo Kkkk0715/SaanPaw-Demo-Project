@@ -37,10 +37,9 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
       color: caseStatusMeta[k].color,
     }));
 
-  const occupancyPct = Math.min(
-    100,
-    Math.round((currentShelter.currentOccupancy / Math.max(1, currentShelter.capacity)) * 100),
-  );
+  // Counted from the animals actually in care (not reunited or adopted), so it moves as they come and go.
+  const occupied = mine.filter((a) => a.caseStatus === 'under_rescue' || a.caseStatus === 'inconclusive').length;
+  const occupancyPct = Math.min(100, Math.round((occupied / Math.max(1, currentShelter.capacity)) * 100));
 
   const markers: MapMarker[] = [
     ...areaReports.map((r) => ({
@@ -111,7 +110,7 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
             <View style={{ flex: 1 }}>
               <Text style={styles.occTitle}>Shelter occupancy</Text>
               <Text style={styles.occMeta}>
-                {currentShelter.currentOccupancy} of {currentShelter.capacity} places used
+                {occupied} of {currentShelter.capacity} places used
               </Text>
             </View>
             <Text style={styles.occPct}>{occupancyPct}%</Text>

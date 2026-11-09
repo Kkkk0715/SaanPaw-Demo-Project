@@ -18,6 +18,7 @@ import { REPORT_STATUSES } from '../../config/constants';
 import { ApiError } from '../../utils/ApiError';
 import { logger } from '../../utils/logger';
 import { barangayForPin } from '../../services/pinBarangay.service';
+import { withLiveOccupancy } from '../../services/occupancy.service';
 import {
   combineName,
   serializeUser,
@@ -302,7 +303,7 @@ export const userService = {
 
   // ----- Shelter View -----
   async listShelters() {
-    const shelters = await Shelter.find({ approvalStatus: 'approved' }).lean();
+    const shelters = await withLiveOccupancy(await Shelter.find({ approvalStatus: 'approved' }).lean());
     return shelters.map((sh) => serializeShelter(sh));
   },
 

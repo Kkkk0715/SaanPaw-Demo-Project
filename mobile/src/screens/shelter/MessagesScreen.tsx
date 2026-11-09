@@ -8,8 +8,10 @@ import {
   Caption,
   EmptyState,
   Row,
+  Pager,
   Screen,
   SectionHeader,
+  usePagination,
 } from '@/components/ui';
 import { timeAgo } from '@/components/domain';
 import { ChatThread } from '@/components/domain/ChatThread';
@@ -24,10 +26,12 @@ export function MessagesScreen() {
     .sort((a, b) => +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt));
 
   const unreadTotal = threads.reduce((s, c) => s + c.unreadForShelter, 0);
+  // Threads render open (chat included), so fewer per page.
+  const page = usePagination(threads, 5);
   // Every thread renders open, so it counts as read the moment it is on screen.
-  const unreadKey = threads.map((c) => `${c.id}:${c.unreadForShelter}`).join(',');
+  const unreadKey = page.items.map((c) => `${c.id}:${c.unreadForShelter}`).join(',');
   useEffect(() => {
-    threads.filter((c) => c.unreadForShelter).forEach((c) => markConversationRead(c.id));
+    page.items.filter((c) => c.unreadForShelter).forEach((c) => markConversationRead(c.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unreadKey]);
 
@@ -54,7 +58,7 @@ export function MessagesScreen() {
 
       <SectionHeader title={`Conversations (${threads.length})`} />
 
-      {threads.map((c) => {
+      {page.items.map((c) => {
         const thread = messagesIn(c.id);
         const report = c.reportId ? reportById(c.reportId) : undefined;
 
@@ -91,6 +95,7 @@ export function MessagesScreen() {
           </Card>
         );
       })}
+      <Pager {...page} />
     </Screen>
   );
 }

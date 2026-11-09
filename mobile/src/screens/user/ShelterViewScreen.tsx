@@ -24,6 +24,8 @@ import {
   Segmented,
   Sheet,
   Choice,
+  Pager,
+  usePagination,
 } from '@/components/ui';
 import { CaseStatusPill, ShelterCard, timeAgo } from '@/components/domain';
 import { ChatThread } from '@/components/domain/ChatThread';
@@ -68,23 +70,28 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
     .filter((a) => typeFilter === 'all' || a.animalType === typeFilter)
     // Still waiting for an owner first, then newest intake.
     .sort((x, y) => Number(inCare(y)) - Number(inCare(x)) || +new Date(y.intakeDate) - +new Date(x.intakeDate));
-  /** One block per shelter, nearest shelter first. */
-  const animalGroups = [...new Set(filteredAnimals.map((a) => a.shelterId))]
-    .map((id) => ({
-      shelter: shelters.find((s) => s.id === id),
-      animals: filteredAnimals.filter((a) => a.shelterId === id),
-    }))
-    .sort(
-      (g1, g2) =>
-        (g1.shelter ? distanceMeters(currentUser.location, g1.shelter.location) : Infinity) -
-        (g2.shelter ? distanceMeters(currentUser.location, g2.shelter.location) : Infinity),
-    );
+  const distanceTo = (shelterId: string) => {
+    const s = shelters.find((x) => x.id === shelterId);
+    return s ? distanceMeters(currentUser.location, s.location) : Infinity;
+  };
+  // Nearest shelter first, so a page holds whole shelter groups in order.
+  const orderedAnimals = [...filteredAnimals].sort((x, y) => distanceTo(x.shelterId) - distanceTo(y.shelterId));
+  const animalPage = usePagination(orderedAnimals, 8, `${statusFilter}|${typeFilter}`);
+  /** One block per shelter for the animals on this page. */
+  const animalGroups = [...new Set(animalPage.items.map((a) => a.shelterId))].map((id) => ({
+    shelter: shelters.find((s) => s.id === id),
+    animals: animalPage.items.filter((a) => a.shelterId === id),
+  }));
+  const shelterPage = usePagination(approved, 8);
+  const shelterCount = new Set(filteredAnimals.map((a) => a.shelterId)).size;
+  // Threads render open (chat included), so fewer per page.
+  const threadPage = usePagination(myThreads, 5);
 
   // Threads render open on this tab, so they count as read the moment they are on screen.
-  const unreadKey = myThreads.map((c) => `${c.id}:${c.unreadForUser}`).join(',');
+  const unreadKey = threadPage.items.map((c) => `${c.id}:${c.unreadForUser}`).join(',');
   useEffect(() => {
     if (tab !== 'messages') return;
-    myThreads.filter((c) => c.unreadForUser).forEach((c) => markConversationRead(c.id));
+    threadPage.items.filter((c) => c.unreadForUser).forEach((c) => markConversationRead(c.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, unreadKey]);
 
@@ -114,7 +121,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
           <Caption>
             Only shelters verified by the Developer with the SJDM local government appear here.
           </Caption>
-          {approved.map((s) => (
+          {shelterPage.items.map((s) => (
             <ShelterCard
               key={s.id}
               shelter={s}
@@ -131,6 +138,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
               }
             />
           ))}
+          <Pager {...shelterPage} />
         </>
       ) : null}
 
@@ -152,8 +160,8 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
               <Caption>Reunited</Caption>
             </View>
             <View style={styles.stat}>
-              <Text style={styles.statValue}>{animalGroups.length}</Text>
-              <Caption>{animalGroups.length === 1 ? 'Shelter' : 'Shelters'}</Caption>
+              <Text style={styles.statValue}>{shelterCount}</Text>
+              <Caption>{shelterCount === 1 ? 'Shelter' : 'Shelters'}</Caption>
             </View>
           </Row>
 
@@ -249,6 +257,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
               />
             </Card>
           )}
+          <Pager {...animalPage} />
         </>
       ) : null}
 
@@ -256,7 +265,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
         <>
           <SectionHeader title={`My conversations (${myThreads.length})`} />
           {myThreads.length ? (
-            myThreads.map((c) => {
+            threadPage.items.map((c) => {
               const shelter = shelters.find((s) => s.id === c.shelterId);
               const thread = messagesIn(c.id);
               const shelterName = shelter?.name ?? c.shelterName ?? 'Shelter';
@@ -303,6 +312,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
               />
             </Card>
           )}
+          <Pager {...threadPage} />
         </>
       ) : null}
 

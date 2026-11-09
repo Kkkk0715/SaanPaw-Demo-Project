@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme, reportKindStyle } from '@/constants/theme';
 import { distanceMeters, formatDistance, isWithinSJDM, reportPlace, useApp, type LatLng } from '@saanpaw/shared';
-import { Badge, Caption, Card, Choice, Row, SectionHeader } from '@/components/ui';
+import { Badge, Caption, Card, Choice, Pager, Row, SectionHeader, usePagination } from '@/components/ui';
 import { MapCanvas, type MapMarker } from '@/components/map/MapCanvas';
 import { ReportCard, describeAnimal } from '@/components/domain';
 import { locationService } from '@/services/locationService';
@@ -62,6 +62,8 @@ export function MapViewScreen({ route }: { route?: { params?: { focusReportId?: 
   );
 
   const approvedShelters = shelters.filter((s) => s.approvalStatus === 'approved');
+  const shelterPage = usePagination(approvedShelters, 8, filter);
+  const reportPage = usePagination(visibleReports, 8, `${filter}|${radiusOnly}`);
 
   const markers = useMemo<MapMarker[]>(() => {
     const reportPins: MapMarker[] =
@@ -184,7 +186,7 @@ export function MapViewScreen({ route }: { route?: { params?: { focusReportId?: 
           }
         />
         {filter === 'shelters'
-          ? approvedShelters.map((s) => (
+          ? shelterPage.items.map((s) => (
               <Card key={s.id} onPress={() => setSelected(s.id)}>
                 <Text style={styles.selTitle}>{s.name}</Text>
                 <Caption>
@@ -193,9 +195,7 @@ export function MapViewScreen({ route }: { route?: { params?: { focusReportId?: 
                 </Caption>
               </Card>
             ))
-          : visibleReports
-              .slice(0, 12)
-              .map((r) => (
+          : reportPage.items.map((r) => (
                 <ReportCard
                   key={r.id}
                   report={r}
@@ -203,6 +203,8 @@ export function MapViewScreen({ route }: { route?: { params?: { focusReportId?: 
                   onPress={() => setSelected(r.id)}
                 />
               ))}
+
+        {filter === 'shelters' ? <Pager {...shelterPage} /> : <Pager {...reportPage} />}
 
         {!visibleReports.length && filter !== 'shelters' ? (
           <Card>

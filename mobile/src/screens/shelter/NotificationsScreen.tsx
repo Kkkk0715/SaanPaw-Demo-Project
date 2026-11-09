@@ -7,8 +7,10 @@ import {
   Button,
   Card,
   EmptyState,
+  Pager,
   Screen,
   SectionHeader,
+  usePagination,
 } from '@/components/ui';
 import { NotificationRow } from '@/components/domain';
 import { notificationTarget } from '@/navigation/notificationTarget';
@@ -18,6 +20,7 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
   const { notificationsFor, markNotificationRead, markAllNotificationsRead, currentShelter } = useApp();
 
   const items = notificationsFor('shelter_admin');
+  const page = usePagination(items, 10);
   const unread = items.filter((n) => !n.isRead).length;
 
   return (
@@ -46,7 +49,7 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
 
       <View style={{ gap: theme.spacing(1) }}>
         {items.length ? (
-          items.map((n) => (
+          page.items.map((n) => (
             <NotificationRow
               key={n.id}
               item={n}
@@ -69,7 +72,7 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
           </Card>
         )}
       </View>
-
+      <Pager {...page} />
     </Screen>
   );
 }

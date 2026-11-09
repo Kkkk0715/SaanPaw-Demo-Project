@@ -39,7 +39,10 @@ import { PushStatusCard } from '@/components/domain/PushStatusCard';
  * The operating radius set here decides which reports reach this shelter.
  */
 export function ShelterProfileScreen() {
-  const { currentShelter, updateShelterProfile, shelterAreaReports, changeShelterPassword } = useApp();
+  const { currentShelter, updateShelterProfile, shelterAreaReports, changeShelterPassword, shelterAnimals } = useApp();
+  const occupied = shelterAnimals.filter(
+    (a) => a.shelterId === currentShelter.id && (a.caseStatus === 'under_rescue' || a.caseStatus === 'inconclusive'),
+  ).length;
   const { signOut } = useAuth();
 
   const [photo, setPhoto] = useState(currentShelter.photoUrl);
@@ -50,7 +53,6 @@ export function ShelterProfileScreen() {
   const [contact, setContact] = useState(currentShelter.contactNumber);
   const [email, setEmail] = useState(currentShelter.email);
   const [capacity, setCapacity] = useState(String(currentShelter.capacity));
-  const [occupancy, setOccupancy] = useState(String(currentShelter.currentOccupancy));
   const [barangay, setBarangay] = useState(currentShelter.barangay);
   const [radius, setRadius] = useState(currentShelter.operatingRadiusMeters);
   const [saved, setSaved] = useState(false);
@@ -87,7 +89,6 @@ export function ShelterProfileScreen() {
       contactNumber: contact.trim(),
       email: email.trim(),
       capacity: Number(capacity) || currentShelter.capacity,
-      currentOccupancy: Number(occupancy) || 0,
       barangay,
       location: center,
       operatingRadiusMeters: radius,
@@ -181,14 +182,11 @@ export function ShelterProfileScreen() {
           icon="mail-outline"
           hint="Any email provider works."
         />
-        <Row gap={1} align="flex-start">
-          <View style={{ flex: 1 }}>
-            <Field label="Capacity" value={capacity} onChangeText={setCapacity} only="digits" maxLength={5} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Field label="Current occupancy" value={occupancy} onChangeText={setOccupancy} only="digits" maxLength={5} />
-          </View>
-        </Row>
+        <Field label="Capacity" value={capacity} onChangeText={setCapacity} only="digits" maxLength={5} />
+        <Caption>
+          Current occupancy: {occupied} {occupied === 1 ? 'animal' : 'animals'} in your care. This is counted
+          automatically from Shelter Animals.
+        </Caption>
       </Card>
 
       <SectionHeader title="Operating radius" />

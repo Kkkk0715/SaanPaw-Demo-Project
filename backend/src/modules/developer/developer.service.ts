@@ -15,6 +15,7 @@ import { Notification } from '../../models/Notification';
 import { Message } from '../../models/Message';
 import { Conversation } from '../../models/Conversation';
 import { moderationService } from '../../services/moderation.service';
+import { withLiveOccupancy } from '../../services/occupancy.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import {
   accountActionEmail,
@@ -118,11 +119,12 @@ export const developerService = {
       collectionCounts(),
     ]);
 
+    const counted = await withLiveOccupancy(shelters);
     const userById = new Map(users.map((u) => [String(u._id), u]));
     const shelterById = new Map(shelters.map((s) => [String(s._id), s]));
     return {
       stats,
-      shelters: shelters.map((sh) => serializeShelter(sh, { includePrivate: true })),
+      shelters: counted.map((sh) => serializeShelter(sh, { includePrivate: true })),
       users: users.map(serializeUser),
       reports: [...lost.map(serializeLostReport), ...found.map(serializeFoundReport)],
       shelterAnimals: shelterAnimals.map(serializeShelterAnimal),

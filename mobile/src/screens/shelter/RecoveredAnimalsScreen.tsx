@@ -12,6 +12,8 @@ import {
   Screen,
   SectionHeader,
   Segmented,
+  Pager,
+  usePagination,
 } from '@/components/ui';
 import { ShelterAnimalCard, timeAgo } from '@/components/domain';
 import { useApp } from '@saanpaw/shared';
@@ -31,6 +33,7 @@ export function RecoveredAnimalsScreen({ navigation }: NativeStackScreenProps<an
   const unposted = recovered.filter((a) => !a.postedPublicly);
   const posted = recovered.filter((a) => a.postedPublicly);
   const shown = tab === 'posted' ? posted : unposted;
+  const page = usePagination(shown, undefined, tab);
 
   return (
     <Screen>
@@ -53,7 +56,7 @@ export function RecoveredAnimalsScreen({ navigation }: NativeStackScreenProps<an
       <SectionHeader title={tab === 'posted' ? 'Publicly visible' : 'Awaiting posting'} />
 
       {shown.length ? (
-        shown.map((a) => (
+        page.items.map((a) => (
           <ShelterAnimalCard
             key={a.id}
             animal={a}
@@ -83,6 +86,7 @@ export function RecoveredAnimalsScreen({ navigation }: NativeStackScreenProps<an
           />
         </Card>
       )}
+      <Pager {...page} />
 
       {posted.length ? (
         <Card>

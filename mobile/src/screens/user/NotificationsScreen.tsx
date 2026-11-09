@@ -2,7 +2,7 @@ import { View } from 'react-native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { formatDistance, useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
-import { Banner, Button, Card, EmptyState, Screen, SectionHeader } from '@/components/ui';
+import { Banner, Button, Card, EmptyState, Pager, Screen, SectionHeader, usePagination } from '@/components/ui';
 import { NotificationRow } from '@/components/domain';
 import { notificationTarget } from '@/navigation/notificationTarget';
 
@@ -15,6 +15,7 @@ export function UserNotificationsScreen({ navigation }: BottomTabScreenProps<any
   const { notificationsFor, markNotificationRead, markAllNotificationsRead, currentUser } = useApp();
 
   const items = notificationsFor('user');
+  const page = usePagination(items, 10);
   const unread = items.filter((n) => !n.isRead).length;
 
   return (
@@ -43,7 +44,7 @@ export function UserNotificationsScreen({ navigation }: BottomTabScreenProps<any
 
       <View style={{ gap: theme.spacing(1) }}>
         {items.length ? (
-          items.map((n) => (
+          page.items.map((n) => (
             <NotificationRow
               key={n.id}
               item={n}
@@ -68,7 +69,7 @@ export function UserNotificationsScreen({ navigation }: BottomTabScreenProps<any
           </Card>
         )}
       </View>
-
+      <Pager {...page} />
     </Screen>
   );
 }

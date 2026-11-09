@@ -104,14 +104,18 @@ export interface ChartSeries {
  * Grouped vertical bars built from Views (no chart library), so it renders the same on Android,
  * iOS and web. Each bar shows its value above it, so nothing needs a tooltip.
  */
+const VALUE_SPACE = 24;
+
 export function BarChart({ categories, series, height = 130 }: { categories: string[]; series: ChartSeries[]; height?: number }) {
   const max = Math.max(1, ...series.flatMap((s) => s.values));
+  // Room above the tallest bar for its number, so the number never runs into the card's title.
+  const area = height + VALUE_SPACE;
   return (
-    <View>
-      <View style={[styles.chartArea, { height: height + 18 }]}>
+    <View style={styles.chart}>
+      <View style={[styles.chartArea, { height: area }]}>
         {categories.map((c, ci) => (
           <View key={c + ci} style={styles.chartGroup}>
-            <View style={[styles.chartBars, { height: height + 18 }]}>
+            <View style={[styles.chartBars, { height: area }]}>
               {series.map((s) => {
                 const v = s.values[ci] ?? 0;
                 return (
@@ -194,11 +198,21 @@ const styles = StyleSheet.create({
   },
   pagerBtnText: { ...theme.type.label, color: theme.colors.primary },
 
-  chartArea: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  chart: { marginTop: theme.spacing(1.5) },
+  chartArea: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, overflow: 'hidden' },
   chartGroup: { flex: 1, alignItems: 'center' },
   chartBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, width: '100%', justifyContent: 'center' },
   chartBarCol: { flex: 1, maxWidth: 16, alignItems: 'center', justifyContent: 'flex-end' },
-  chartValue: { ...theme.type.tiny, fontSize: 10, color: theme.colors.textSoft, marginBottom: 2 },
+  chartValue: {
+    ...theme.type.tiny,
+    fontSize: 10,
+    lineHeight: 14,
+    height: 14,
+    includeFontPadding: false,
+    textAlign: 'center',
+    color: theme.colors.textSoft,
+    marginBottom: 3,
+  },
   chartLabel: { ...theme.type.tiny, color: theme.colors.muted, marginTop: 4 },
   legend: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 8 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },

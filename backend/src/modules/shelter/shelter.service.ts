@@ -5,6 +5,7 @@ import { AnimalCase } from '../../models/AnimalCase';
 import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
 import { MatchSuggestion } from '../../models/MatchSuggestion';
+import { withLiveOccupancy } from '../../services/occupancy.service';
 import { Notification } from '../../models/Notification';
 import { ShelterProofDocument } from '../../models/ShelterProofDocument';
 import { deleteShelterAnimalCascade } from '../../services/cascadeDelete.service';
@@ -494,8 +495,9 @@ export const shelterService = {
   },
 
   async getMe(shelterId: string) {
-    const shelter = await Shelter.findById(shelterId).lean();
-    if (!shelter) throw ApiError.notFound('Shelter not found');
+    const found = await Shelter.findById(shelterId).lean();
+    if (!found) throw ApiError.notFound('Shelter not found');
+    const [shelter] = await withLiveOccupancy([found]);
     return serializeShelter(shelter, { includePrivate: true });
   },
 
@@ -513,7 +515,7 @@ export const shelterService = {
       'operatingRadiusMeters',
       'email',
       'capacity',
-      'currentOccupancy',
+      // currentOccupancy is not editable: it is counted from the shelter's animals.
     ];
     const update = Object.fromEntries(
       Object.entries(patch)
@@ -527,8 +529,10 @@ export const shelterService = {
         })
     );
     
-    const shelter = await Shelter.findByIdAndUpdate(shelterId, update, { new: true });
-    return shelter ? serializeShelter(shelter, { includePrivate: true }) : null;
+    const updated = await Shelter.findByIdAndUpdate(shelterId, update, { new: true }).lean();
+    if (!updated) return null;
+    const [shelter] = await withLiveOccupancy([updated]);
+    return serializeShelter(shelter, { includePrivate: true });
   },
 
   // ----- Change the password the Developer issued -----
