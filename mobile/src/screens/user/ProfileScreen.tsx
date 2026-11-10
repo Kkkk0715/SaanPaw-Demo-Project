@@ -3,10 +3,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { RADIUS_OPTIONS, SJDM_BARANGAYS, SJDM_BARANGAY_NAMES, formatDistance, useApp } from '@saanpaw/shared';
+import { RADIUS_OPTIONS, SJDM_BARANGAY_NAMES, barangayCenter, formatDistance, useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
 import {
-  AnimalPhoto,
+  Avatar,
   Button,
   Card,
   Caption,
@@ -39,6 +39,7 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
   const [barangay, setBarangay] = useState(currentUser.barangay);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [radiusError, setRadiusError] = useState<string | null>(null);
 
   const openEditor = () => {
     setPhoto(currentUser.photoUrl);
@@ -67,7 +68,9 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
       setError('Enter a complete mobile number.');
       return;
     }
-    const center = SJDM_BARANGAYS.find((b) => b.name === barangay)?.center;
+    // The registered spot only moves when the barangay changes - saving a new name or photo must
+    // not drag it back to the barangay centre.
+    const center = barangay !== currentUser.barangay ? barangayCenter(barangay) : undefined;
     setError(null);
     setSaving(true);
     try {
@@ -100,7 +103,8 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
     if (confirmed) signOut();
   };
 
-  const activeReports = myReports.filter((r) => r.status !== 'closed').length;
+  // Open reports only (still missing / possible match), the same as "My reports" on Home.
+  const activeReports = myReports.filter((r) => r.status === 'active' || r.status === 'matched').length;
   const unread = notificationsFor('user').filter((n) => !n.isRead).length;
 
   return (
@@ -110,25 +114,25 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
           <Ionicons name="create-outline" size={18} color={theme.colors.onPrimary} />
         </Pressable>
 
-        <AnimalPhoto uri={currentUser.photoUrl} size={74} radius={37} tint="rgba(255,255,255,0.18)" iconColor="#fff" />
+        <Avatar name={currentUser.fullName} uri={currentUser.photoUrl} color="rgba(255,255,255,0.18)" size={74} />
         <Text style={styles.name}>{currentUser.fullName}</Text>
         <Text style={styles.email}>{currentUser.email}</Text>
 
         <View style={styles.heroStats}>
-          <View style={styles.heroStat}>
+          <Pressable style={styles.heroStat} onPress={() => navigation.navigate('LostPetStatus')}>
             <Text style={styles.heroStatValue}>{myReports.length}</Text>
             <Text style={styles.heroStatLabel}>Reports</Text>
-          </View>
+          </Pressable>
           <View style={styles.heroDivider} />
-          <View style={styles.heroStat}>
+          <Pressable style={styles.heroStat} onPress={() => navigation.navigate('LostPetStatus')}>
             <Text style={styles.heroStatValue}>{activeReports}</Text>
             <Text style={styles.heroStatLabel}>Active</Text>
-          </View>
+          </Pressable>
           <View style={styles.heroDivider} />
-          <View style={styles.heroStat}>
+          <Pressable style={styles.heroStat} onPress={() => navigation.navigate('Alerts')}>
             <Text style={styles.heroStatValue}>{unread}</Text>
             <Text style={styles.heroStatLabel}>Unread</Text>
-          </View>
+          </Pressable>
         </View>
       </View>
 
@@ -167,8 +171,14 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
           <Choice
             options={RADIUS_OPTIONS.map((r) => ({ label: r.label, value: r.meters }))}
             value={currentUser.alertRadiusMeters}
-            onChange={(m) => void updateUserProfile({ alertRadiusMeters: m }).catch(() => {})}
+            onChange={(m) => {
+              setRadiusError(null);
+              void updateUserProfile({ alertRadiusMeters: m }).catch((e) =>
+                setRadiusError(`The radius was not saved: ${e instanceof Error ? e.message : String(e)}`),
+              );
+            }}
           />
+          {radiusError ? <Caption style={{ color: theme.colors.danger }}>{radiusError}</Caption> : null}
           <Caption>
             Currently {formatDistance(currentUser.alertRadiusMeters)}. Changes apply straight away.
           </Caption>
@@ -201,7 +211,7 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
       <Sheet open={editing} onClose={() => setEditing(false)} title="Edit profile">
         <View style={{ gap: theme.spacing(1.5) }}>
           <Row gap={1.5} align="flex-start">
-            <AnimalPhoto uri={photo} size={72} />
+            <Avatar name={currentUser.fullName} uri={photo} size={72} />
             <View style={{ flex: 1 }}>
               <Button label="Change photo" variant="secondary" icon="camera-outline" onPress={pickPhoto} />
             </View>

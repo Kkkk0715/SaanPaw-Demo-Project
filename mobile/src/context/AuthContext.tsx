@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Role } from '@saanpaw/shared';
 import { apiRequest } from '../services/api';
-import { registerForPushNotificationsAsync } from '../services/pushNotifications';
+import { markPushTokenSaved, registerForPushNotificationsAsync } from '../services/pushNotifications';
 import { tokenStorage } from '../services/tokenStorage';
 
 const SESSION_KEY = 'saanpaw.session';
@@ -62,10 +62,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (DEMO_MODE || !role || !token) return;
     let cancelled = false;
-    void registerForPushNotificationsAsync().then((pushToken) => {
+    void registerForPushNotificationsAsync().then(async (pushToken) => {
       if (cancelled || !pushToken) return;
       const path = role === 'user' ? '/user/push-token' : '/shelter/push-token';
-      void apiRequest(path, { method: 'PUT', body: JSON.stringify({ token: pushToken }) }, token).catch(() => {});
+      const save = () => apiRequest(path, { method: 'PUT', body: JSON.stringify({ token: pushToken }) }, token);
+      // Without the token on the server no push can ever reach this phone, so a failed save is
+      // retried once and then shown in Profile instead of being ignored.
+      try {
+        await save().catch(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          return save();
+        });
+        if (!cancelled) markPushTokenSaved(true);
+      } catch (e) {
+        if (!cancelled) markPushTokenSaved(false, e instanceof Error ? e.message : String(e));
+      }
     });
     return () => {
       cancelled = true;

@@ -244,7 +244,10 @@ interface AppState {
     breed?: string;
     location: LatLng;
   }) => { id: string; source: 'found_report' | 'shelter_animal'; score: number; reasons: string[] }[];
-  /** Ad-hoc "scan a photo" search, not tied to any existing report; results are not persisted. */
+  /**
+   * "Scan a photo" search. With `lostReportId` (one of your own lost reports) the results are saved
+   * as that report's possible matches; without it nothing is saved.
+   */
   scanPhotoMatch: (input: {
     animalType: AnimalType;
     color?: string;
@@ -252,6 +255,7 @@ interface AppState {
     size?: AnimalReport['size'];
     location: LatLng;
     photoUrl?: string;
+    lostReportId?: string;
   }) => Promise<{ candidateId: string; candidateSource: 'found_report' | 'shelter_animal'; score: number; reasons: string[] }[]>;
 
   // ---- actions
@@ -510,7 +514,8 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     (kind?: ReportKind) =>
       reports
         .filter((r) => (kind ? r.kind === kind : true))
-        .filter((r) => r.status !== 'closed')
+        // Still open only: a recovered pet or a closed report is not "near you" any more.
+        .filter((r) => r.status === 'active' || r.status === 'matched')
         .map((r) => ({ ...r, distance: distanceMeters(currentUser.location, r.location) }))
         .filter((r) => r.distance <= currentUser.alertRadiusMeters)
         .sort((a, b) => a.distance - b.distance),
@@ -654,9 +659,12 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
           reasons: m.reasons,
         }));
       }
-      return apiActions.scanPhoto(session, input);
+      const ranked = await apiActions.scanPhoto(session, input);
+      // Saved on the server as the report's possible matches: reload so the list and count show them.
+      if (input.lostReportId) void refresh();
+      return ranked;
     },
-    [runImageMatch],
+    [runImageMatch, refresh],
   );
 
   // ---------------------------------------------------------------- actions

@@ -8,9 +8,13 @@ const matchSuggestionSchema = new Schema(
     candidateSource: { type: String, enum: ['found_report', 'shelter_animal'], required: true },
     score: { type: Number, required: true },
     reasons: { type: [String], default: [] },
+    /**
+     * suggested / confirmed: shown to the owner. dismissed: the owner hid it. rejected: the photos
+     * were compared and it is not the same animal - kept only so the pair is not compared again.
+     */
     status: {
       type: String,
-      enum: ['suggested', 'confirmed', 'dismissed'],
+      enum: ['suggested', 'confirmed', 'dismissed', 'rejected'],
       default: 'suggested',
     },
   },

@@ -46,6 +46,7 @@ router.get('/reports/search', asyncHandler(userController.searchReports));
 router.get('/notifications', asyncHandler(userController.listNotifications));
 router.patch('/notifications/:id/read', asyncHandler(userController.markNotificationRead));
 router.put('/push-token', asyncHandler(userController.updatePushToken));
+router.post('/push-test', asyncHandler(userController.testPush));
 
 // Message box
 router.get('/conversations', asyncHandler(userController.listConversations));

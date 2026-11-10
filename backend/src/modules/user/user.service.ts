@@ -8,7 +8,12 @@ import { Notification } from '../../models/Notification';
 import { MatchSuggestion } from '../../models/MatchSuggestion';
 import { smartAlertService } from '../../services/smartAlert.service';
 import { moderationService } from '../../services/moderation.service';
-import { findMatches, findMatchingLostReports } from '../../services/matching.service';
+import {
+  alertOwnersOfNewMatches,
+  evaluateNewCandidates,
+  findMatches,
+  findMatchingLostReports,
+} from '../../services/matching.service';
 import { statsService } from '../../services/stats.service';
 import { deleteReportCascade } from '../../services/cascadeDelete.service';
 import { findDuplicatePhotos } from '../../services/photoFingerprint.service';
@@ -291,6 +296,10 @@ export const userService = {
             })),
             { ordered: false },
           );
+          await alertOwnersOfNewMatches(
+            ranked.map((m) => m.lostReportId),
+            `A found ${report.animalType} reported in Brgy. ${report.barangay ?? 'San Jose Del Monte'}`,
+          );
         }
       } catch (err) {
         logger.error('matching: failed to rank lost reports for new found report', err);
@@ -330,25 +339,28 @@ export const userService = {
     if (!report) return [];
 
     const lastSeen = geoPointToLatLng(report.lastSeenLocation as any);
-    if (report.status === 'active' && lastSeen) {
+    if ((report.status === 'active' || report.status === 'matched') && lastSeen) {
       try {
-        const ranked = await findMatches(
+        // Every pair checked before (shown, hidden or ruled out) is skipped; only new found reports
+        // and shelter animals are checked, a couple of photo comparisons at a time.
+        const known = await MatchSuggestion.find({ lostReportId: report._id }, 'candidateId candidateSource').lean();
+        const evaluated = await evaluateNewCandidates(
           {
             animalType: report.animalType as any,
             color: report.color ?? undefined,
             breed: report.breed ?? undefined,
             size: report.size ?? undefined,
             location: lastSeen,
+            imageUrl: report.imageUrls?.[0],
           },
-          { attributesOnly: true },
+          new Set(known.map((k) => `${k.candidateSource}:${String(k.candidateId)}`)),
         );
-        if (ranked.length) {
-          // Only adds pairings that are not saved yet; a stored (photo-compared) score is kept.
+        if (evaluated.length) {
           await MatchSuggestion.bulkWrite(
-            ranked.map((m) => ({
+            evaluated.map((m) => ({
               updateOne: {
                 filter: { lostReportId: report._id, candidateId: m.candidateId, candidateSource: m.candidateSource },
-                update: { $setOnInsert: { score: m.score, reasons: m.reasons, status: 'suggested' } },
+                update: { $setOnInsert: { score: m.score, reasons: m.reasons, status: m.verdict } },
                 upsert: true,
               },
             })),
@@ -360,7 +372,7 @@ export const userService = {
       }
     }
 
-    const matches = await MatchSuggestion.find({ lostReportId, status: { $ne: 'dismissed' } })
+    const matches = await MatchSuggestion.find({ lostReportId, status: { $in: ['suggested', 'confirmed'] } })
       .sort({ score: -1, createdAt: -1 })
       .limit(20)
       .lean();
@@ -384,14 +396,18 @@ export const userService = {
   },
 
   /** Ad-hoc "scan a photo" search, not tied to any report of the caller's own - results aren't persisted. */
-  async scanPhoto(input: {
-    animalType: string;
-    color?: string;
-    breed?: string;
-    size?: string;
-    location: { latitude: number; longitude: number };
-    photoUrl?: string;
-  }) {
+  async scanPhoto(
+    userId: string,
+    input: {
+      animalType: string;
+      color?: string;
+      breed?: string;
+      size?: string;
+      location: { latitude: number; longitude: number };
+      photoUrl?: string;
+      lostReportId?: string;
+    },
+  ) {
     const ranked = await findMatches({
       animalType: input.animalType as any,
       color: input.color,
@@ -400,6 +416,38 @@ export const userService = {
       location: input.location,
       imageUrl: input.photoUrl,
     });
+
+    // A scan for one of the owner's own lost reports is saved as that report's possible matches,
+    // so what the scan found is still listed (and counted) after leaving the screen.
+    if (input.lostReportId && ranked.length) {
+      const own = await LostPetReport.exists({ _id: input.lostReportId, reporterId: userId });
+      if (own) {
+        try {
+          const hidden = await MatchSuggestion.find(
+            // Hidden by the owner, or already confirmed: leave those as they are.
+            { lostReportId: input.lostReportId, status: { $in: ['dismissed', 'confirmed'] } },
+            'candidateId candidateSource',
+          ).lean();
+          const skip = new Set(hidden.map((h) => `${h.candidateSource}:${String(h.candidateId)}`));
+          const keepers = ranked.filter((m) => !skip.has(`${m.candidateSource}:${m.candidateId}`));
+          if (keepers.length) {
+            await MatchSuggestion.bulkWrite(
+              keepers.map((m) => ({
+                updateOne: {
+                  filter: { lostReportId: input.lostReportId, candidateId: m.candidateId, candidateSource: m.candidateSource },
+                  update: { $max: { score: m.score }, $set: { reasons: m.reasons, status: 'suggested' } },
+                  upsert: true,
+                },
+              })),
+              { ordered: false },
+            );
+          }
+        } catch (err) {
+          logger.error('matching: failed to save scan results', err);
+        }
+      }
+    }
+
     return ranked.map((m) => ({
       candidateId: m.candidateId,
       candidateSource: m.candidateSource,

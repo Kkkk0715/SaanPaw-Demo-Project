@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '@/constants/theme';
 import { distanceMeters, formatDistance, useApp } from '@saanpaw/shared';
 import type { AnimalType, Shelter, ShelterAnimal } from '@saanpaw/shared';
@@ -45,6 +45,11 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
 
   // A message notification opens straight onto the messages tab.
   const [tab, setTab] = useState<'shelters' | 'animals' | 'messages'>(route?.params?.tab ?? 'shelters');
+  // Opening this screen again with a tab (a message notification, "Message shelter") switches to it.
+  const requestedTab = route?.params?.tab;
+  useEffect(() => {
+    if (requestedTab) setTab(requestedTab);
+  }, [requestedTab]);
   const [composeFor, setComposeFor] = useState<Shelter | null>(null);
   const [draft, setDraft] = useState('');
   const [viewShelter, setViewShelter] = useState<(Shelter & { distance: number }) | null>(null);
@@ -74,16 +79,18 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
     const s = shelters.find((x) => x.id === shelterId);
     return s ? distanceMeters(currentUser.location, s.location) : Infinity;
   };
-  // Nearest shelter first, so a page holds whole shelter groups in order.
-  const orderedAnimals = [...filteredAnimals].sort((x, y) => distanceTo(x.shelterId) - distanceTo(y.shelterId));
-  const animalPage = usePagination(orderedAnimals, 8, `${statusFilter}|${typeFilter}`);
-  /** One block per shelter for the animals on this page. */
-  const animalGroups = [...new Set(animalPage.items.map((a) => a.shelterId))].map((id) => ({
-    shelter: shelters.find((s) => s.id === id),
-    animals: animalPage.items.filter((a) => a.shelterId === id),
-  }));
+  /** One section per shelter (nearest first); pages turn by shelter, never splitting one. */
+  const animalGroups = [...new Set(filteredAnimals.map((a) => a.shelterId))]
+    .sort((x, y) => distanceTo(x) - distanceTo(y))
+    .map((id) => ({
+      shelter: shelters.find((s) => s.id === id),
+      animals: filteredAnimals.filter((a) => a.shelterId === id),
+    }));
+  const groupPage = usePagination(animalGroups, 3, `${statusFilter}|${typeFilter}`);
+  const [viewAnimal, setViewAnimal] = useState<ShelterAnimal | null>(null);
+  const viewAnimalShelter = viewAnimal ? shelters.find((s) => s.id === viewAnimal.shelterId) : undefined;
   const shelterPage = usePagination(approved, 8);
-  const shelterCount = new Set(filteredAnimals.map((a) => a.shelterId)).size;
+  const shelterCount = animalGroups.length;
   // Threads render open (chat included), so fewer per page.
   const threadPage = usePagination(myThreads, 5);
 
@@ -185,65 +192,80 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
             onChange={(v) => setTypeFilter(v as typeof typeFilter)}
           />
 
-          {animalGroups.length ? (
-            animalGroups.map(({ shelter, animals }) => (
-              <View key={shelter?.id ?? animals[0].shelterId} style={styles.group}>
-                <Row gap={1} style={styles.groupHeader}>
-                  <Avatar
-                    name={shelter?.name ?? 'Shelter'}
-                    uri={shelter?.photoUrl}
-                    color={shelter?.logoColor ?? theme.colors.primary}
-                    icon="home"
-                    size={40}
-                  />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.groupTitle} numberOfLines={1}>
-                      {shelter?.name ?? 'Shelter'}
-                    </Text>
-                    <Caption>
-                      {animals.length} {animals.length === 1 ? 'animal' : 'animals'}
-                      {shelter ? ` · ${formatDistance(distanceMeters(currentUser.location, shelter.location))} away` : ''}
-                    </Caption>
-                  </View>
-                  {shelter ? (
-                    <Button
-                      label="Message"
-                      variant="secondary"
-                      icon="chatbubble-ellipses-outline"
-                      full={false}
-                      onPress={() => setComposeFor(shelter)}
+          {groupPage.items.length ? (
+            groupPage.items.map(({ shelter, animals }) => {
+              const care = animals.filter(inCare).length;
+              const reunited = animals.filter((x) => x.caseStatus === 'reunited').length;
+              return (
+                <Card key={shelter?.id ?? animals[0].shelterId}>
+                  {/* Each shelter gets its own section, so its animals read as one showcase. */}
+                  <Row gap={1} style={styles.groupHeader}>
+                    <Avatar
+                      name={shelter?.name ?? 'Shelter'}
+                      uri={shelter?.photoUrl}
+                      color={shelter?.logoColor ?? theme.colors.primary}
+                      icon="home"
+                      size={44}
                     />
-                  ) : null}
-                </Row>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.groupTitle} numberOfLines={1}>
+                        {shelter?.name ?? 'Shelter'}
+                      </Text>
+                      <Caption>
+                        {shelter
+                          ? `Brgy. ${shelter.barangay} · ${formatDistance(distanceMeters(currentUser.location, shelter.location))} away`
+                          : 'Shelter'}
+                      </Caption>
+                    </View>
+                    {shelter ? (
+                      <Button
+                        label="Message"
+                        variant="secondary"
+                        icon="chatbubble-ellipses-outline"
+                        full={false}
+                        onPress={() => setComposeFor(shelter)}
+                      />
+                    ) : null}
+                  </Row>
+                  <Row gap={0.75} style={{ flexWrap: 'wrap' }}>
+                    <Badge label={`${animals.length} ${animals.length === 1 ? 'animal' : 'animals'}`} icon="paw" />
+                    {care ? (
+                      <Badge label={`${care} in shelter care`} color={theme.colors.found} soft={theme.colors.foundSoft} />
+                    ) : null}
+                    {reunited ? (
+                      <Badge label={`${reunited} reunited`} color={theme.colors.primary} soft={theme.colors.primarySoft} />
+                    ) : null}
+                  </Row>
 
-                {animals.map((a) => (
-                  <Card key={a.id}>
-                    <Row gap={1.5} align="flex-start">
-                      <AnimalPhoto uri={a.imageUrls[0]} size={76} />
-                      <View style={{ flex: 1, gap: 5 }}>
-                        <Text style={styles.animalName}>{a.name}</Text>
-                        <Caption>{[a.breed, a.color, a.size].filter(Boolean).join(' · ') || a.animalType}</Caption>
-                        <Row gap={0.75} style={{ flexWrap: 'wrap' }}>
-                          {a.caseStatus === 'under_rescue' ? (
-                            <Badge
-                              label="In shelter care"
-                              color={theme.colors.found}
-                              soft={theme.colors.foundSoft}
-                              icon="shield-checkmark"
-                            />
-                          ) : (
-                            <CaseStatusPill status={a.caseStatus} />
-                          )}
-                          <Badge label={INTAKE_LABEL[a.intakeType] ?? a.intakeType} color={theme.colors.info} soft={theme.colors.infoSoft} />
-                        </Row>
-                        <Caption>Intake {timeAgo(a.intakeDate)}</Caption>
-                      </View>
-                    </Row>
-                    {a.notes ? <Caption>{a.notes}</Caption> : null}
-                  </Card>
-                ))}
-              </View>
-            ))
+                  <ScrollView
+                    horizontal
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.shelf}
+                  >
+                    {animals.map((x) => (
+                      <Pressable key={x.id} style={styles.tile} onPress={() => setViewAnimal(x)}>
+                        <AnimalPhoto uri={x.imageUrls[0]} size={132} />
+                        <Text style={styles.tileName} numberOfLines={1}>
+                          {x.name}
+                        </Text>
+                        <Text style={styles.tileMeta} numberOfLines={1}>
+                          {[x.breed, x.color].filter(Boolean).join(' · ') || x.animalType}
+                        </Text>
+                        {inCare(x) ? (
+                          <Badge label="In shelter care" color={theme.colors.found} soft={theme.colors.foundSoft} />
+                        ) : (
+                          <CaseStatusPill status={x.caseStatus} />
+                        )}
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                  {animals.length > 2 ? <Caption>Swipe to see all {animals.length}. Tap an animal for details.</Caption> : (
+                    <Caption>Tap an animal for details.</Caption>
+                  )}
+                </Card>
+              );
+            })
           ) : (
             <Card>
               <EmptyState
@@ -257,7 +279,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
               />
             </Card>
           )}
-          <Pager {...animalPage} />
+          <Pager {...groupPage} />
         </>
       ) : null}
 
@@ -315,6 +337,45 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
           <Pager {...threadPage} />
         </>
       ) : null}
+
+      <Sheet open={Boolean(viewAnimal)} onClose={() => setViewAnimal(null)} title={viewAnimal?.name ?? 'Animal'}>
+        {viewAnimal ? (
+          <View style={{ gap: theme.spacing(1.25) }}>
+            <AnimalPhoto uri={viewAnimal.imageUrls[0]} size="full" />
+            <Text style={styles.animalName}>{viewAnimal.name}</Text>
+            <Caption>
+              {[viewAnimal.animalType, viewAnimal.breed, viewAnimal.color, viewAnimal.size].filter(Boolean).join(' · ')}
+            </Caption>
+            <Row gap={0.75} style={{ flexWrap: 'wrap' }}>
+              {inCare(viewAnimal) ? (
+                <Badge label="In shelter care" color={theme.colors.found} soft={theme.colors.foundSoft} icon="shield-checkmark" />
+              ) : (
+                <CaseStatusPill status={viewAnimal.caseStatus} />
+              )}
+              <Badge
+                label={INTAKE_LABEL[viewAnimal.intakeType] ?? viewAnimal.intakeType}
+                color={theme.colors.info}
+                soft={theme.colors.infoSoft}
+              />
+            </Row>
+            <Caption>
+              {viewAnimalShelter ? `At ${viewAnimalShelter.name} · ` : ''}intake {timeAgo(viewAnimal.intakeDate)}
+            </Caption>
+            {viewAnimal.notes ? <Caption>{viewAnimal.notes}</Caption> : null}
+            {viewAnimalShelter ? (
+              <Button
+                label="Message this shelter"
+                icon="chatbubble-ellipses-outline"
+                onPress={() => {
+                  const s = viewAnimalShelter;
+                  setViewAnimal(null);
+                  setComposeFor(s);
+                }}
+              />
+            ) : null}
+          </View>
+        ) : null}
+      </Sheet>
 
       <Sheet open={Boolean(viewShelter)} onClose={() => setViewShelter(null)} title={viewShelter?.name ?? 'Shelter'}>
         {viewShelter ? (
@@ -416,6 +477,10 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: 17, fontWeight: '800', color: theme.colors.text },
   group: { gap: theme.spacing(1) },
+  shelf: { gap: theme.spacing(1.25), paddingVertical: theme.spacing(0.5) },
+  tile: { width: 132, gap: 4 },
+  tileName: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
+  tileMeta: { fontSize: 12, color: theme.colors.textSoft },
   groupHeader: { marginTop: theme.spacing(1), alignItems: 'center' },
   groupTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
   profileHead: { alignItems: 'center', gap: 6, paddingVertical: theme.spacing(1) },

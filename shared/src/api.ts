@@ -448,7 +448,15 @@ export const apiActions = {
   /** Ad-hoc "scan a photo" search, not tied to any report - uploads the photo first if it's still local. */
   scanPhoto: async (
     s: ApiSession,
-    input: { animalType: AnimalType; color?: string; breed?: string; size?: AnimalSize; location: LatLng; photoUrl?: string },
+    input: {
+      animalType: AnimalType;
+      color?: string;
+      breed?: string;
+      size?: AnimalSize;
+      location: LatLng;
+      photoUrl?: string;
+      lostReportId?: string;
+    },
   ) => {
     const photoUrl = input.photoUrl && isLocalImageUri(input.photoUrl) ? await uploadImage(s, input.photoUrl) : input.photoUrl;
     return call<Pick<MatchSuggestion, 'candidateId' | 'candidateSource' | 'score' | 'reasons'>[]>(s, '/user/match/scan', {

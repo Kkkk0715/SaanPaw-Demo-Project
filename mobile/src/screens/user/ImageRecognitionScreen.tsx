@@ -28,7 +28,7 @@ import type { AnimalReport, AnimalType } from '@saanpaw/shared';
  */
 export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenProps<any>) {
   const reportId = (route.params as { reportId?: string } | undefined)?.reportId;
-  const { reportById, shelterById, matchesForReport, scanPhotoMatch, shelterAnimals, startConversation } =
+  const { reportById, shelterById, matchesForReport, scanPhotoMatch, shelterAnimals, startConversation, currentUser } =
     useApp();
 
   const linkedReport = reportId ? reportById(reportId) : undefined;
@@ -62,8 +62,10 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
         animalType,
         color,
         size,
-        location: linkedReport?.location ?? { latitude: 14.8136, longitude: 121.0453 },
+        // Where the pet was last seen, or (for a photo not tied to a report) where you are registered.
+        location: linkedReport?.location ?? currentUser.location,
         photoUrl: image ?? undefined,
+        lostReportId: linkedReport?.kind === 'lost' && linkedReport.reporterId === currentUser.id ? linkedReport.id : undefined,
       });
       setResults(ranked);
     } catch (e) {
@@ -124,7 +126,7 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
                     `Possible match: ${d.title}`,
                     `Hello po, I think this animal might be my pet. Reference match confidence ${Math.round(m.score * 100)}%.`,
                   );
-                  navigation.navigate('ShelterView');
+                  navigation.navigate('ShelterView', { tab: 'messages' });
                 }}
               />
             ) : (

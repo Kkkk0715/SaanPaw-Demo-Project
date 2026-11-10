@@ -127,7 +127,7 @@ export function ShelterAnimalsScreen() {
         tone="info"
         icon="albums"
         title={`${mine.length} animals on record`}
-        message={`Animals in ${currentShelter.name}'s care. Anything marked public also appears to users under Shelter View and is included in image-recognition matching.`}
+        message={`Animals in ${currentShelter.name}'s care. Anything marked public also appears to users under Shelter View. Animals still in your care are compared against open lost pet reports either way.`}
       />
 
       {notices.map((n) => (

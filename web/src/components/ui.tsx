@@ -1,5 +1,33 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { colors, paginate, type Page } from '@saanpaw/shared';
+
+/**
+ * Escape closes the top-most open window only: a confirm dialog opened over a detail window closes
+ * first, and the detail window stays until Escape is pressed again.
+ */
+const escapeStack: { current: () => void }[] = [];
+let escapeListening = false;
+function onEscapeKey(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !escapeStack.length) return;
+  e.preventDefault();
+  escapeStack[escapeStack.length - 1].current();
+}
+function useEscapeToClose(onClose: () => void) {
+  const handler = useRef(onClose);
+  handler.current = onClose;
+  useEffect(() => {
+    const entry = { current: () => handler.current() };
+    escapeStack.push(entry);
+    if (!escapeListening) {
+      window.addEventListener('keydown', onEscapeKey);
+      escapeListening = true;
+    }
+    return () => {
+      const i = escapeStack.indexOf(entry);
+      if (i >= 0) escapeStack.splice(i, 1);
+    };
+  }, []);
+}
 
 /** Building blocks for the console. Plain DOM, no UI library. */
 
@@ -24,30 +52,6 @@ export function CardHead({
       </div>
       {actions ? <div style={{ marginLeft: 'auto' }}>{actions}</div> : null}
     </header>
-  );
-}
-
-export function Stat({
-  value,
-  label,
-  icon,
-  color = colors.primary,
-  soft = colors.primarySoft,
-}: {
-  value: number | string;
-  label: string;
-  icon: string;
-  color?: string;
-  soft?: string;
-}) {
-  return (
-    <div className="stat">
-      <div className="icon" style={{ background: soft, color }} aria-hidden>
-        {icon}
-      </div>
-      <div className="value">{value}</div>
-      <div className="label">{label}</div>
-    </div>
   );
 }
 
@@ -188,7 +192,7 @@ export function Tabs<T extends string>({
   );
 }
 
-/** Overlay for a detail view or confirmation that doesn't fit inline. Click the backdrop or × to close. */
+/** Overlay for a detail view that doesn't fit inline. Click the backdrop or ×, or press Escape, to close. */
 export function Modal({
   title,
   sub,
@@ -202,6 +206,7 @@ export function Modal({
   children: ReactNode;
   actions?: ReactNode;
 }) {
+  useEscapeToClose(onClose);
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -276,13 +281,7 @@ export function ConfirmDialog({
 }) {
   const [reasonText, setReasonText] = useState('');
   const missingReason = Boolean(reason?.required) && !reasonText.trim();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
+  useEscapeToClose(onCancel);
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>

@@ -46,7 +46,11 @@ export function RescuedAnimalsScreen({ navigation }: NativeStackScreenProps<any>
       .map((a) => ({
         kind: 'animal',
         id: a.id,
-        group: a.intakeType === 'surrendered' ? 'pets' : 'strays',
+        // A pet has a known owner: surrendered by them, or taken on from a lost-pet report.
+        group:
+          a.intakeType === 'surrendered' || (a.sourceReportId && reportById(a.sourceReportId)?.kind === 'lost')
+            ? 'pets'
+            : 'strays',
         at: a.intakeDate,
         animal: a,
       }));

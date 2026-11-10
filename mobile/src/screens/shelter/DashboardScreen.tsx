@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { caseStatusMeta, countBy, formatDistance, reportPlace, reportsPerDay, useApp } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
-import { BarChart, BreakdownBars, Card, ListRow, Row, Screen, SectionHeader } from '@/components/ui';
+import { Avatar, BarChart, BreakdownBars, Card, ListRow, Row, Screen, SectionHeader } from '@/components/ui';
 import { MapCanvas, type MapMarker } from '@/components/map/MapCanvas';
 import { ReportCard, describeAnimal } from '@/components/domain';
 
@@ -58,21 +58,34 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
     { label: 'Reunited', value: byStatus.reunited ?? 0, color: theme.colors.primary },
   ];
 
-  /** The four daily jobs get colour; everything else sits in the list below. */
+  // Recovered or rescued animals still in care that the public cannot see yet.
+  const unpostedRecovered = mine.filter(
+    (a) => !a.postedPublicly && a.caseStatus === 'under_rescue' && (a.intakeType === 'recovered' || a.intakeType === 'rescued'),
+  ).length;
+  /**
+   * The four daily jobs get colour; everything else sits in the list below. Each badge is the
+   * number of things waiting on that job: reports not responded to, open cases without an outcome,
+   * and recovered animals not posted yet.
+   */
   const actions = [
     { label: 'Animal\nreports', icon: 'documents' as const, bg: theme.colors.danger, route: 'AnimalReports', badge: unhandled },
-    { label: 'Case\nstatus', icon: 'pulse' as const, bg: theme.colors.info, route: 'AnimalStatus', badge: 0 },
-    { label: 'Shelter\nanimals', icon: 'paw' as const, bg: theme.colors.primary, route: 'ShelterAnimals', badge: 0 },
-    { label: 'Post\nrecovered', icon: 'megaphone' as const, bg: theme.colors.accent, route: 'RecoveredAnimals', badge: 0 },
+    { label: 'Case\nstatus', icon: 'pulse' as const, bg: theme.colors.info, route: 'AnimalStatus', badge: openCases.length },
+    { label: 'Shelter\nanimals', icon: 'paw' as const, bg: theme.colors.primary, route: 'ShelterAnimals', badge: occupied },
+    { label: 'Post\nrecovered', icon: 'megaphone' as const, bg: theme.colors.accent, route: 'RecoveredAnimals', badge: unpostedRecovered },
   ];
 
   return (
     <Screen padded={false}>
       <SafeAreaView edges={['top']} style={styles.hero}>
         <Row gap={1.25} align="flex-start">
-          <View style={styles.logo}>
-            <Ionicons name="home" size={21} color={theme.colors.onPrimary} />
-          </View>
+          {/* The shelter's own profile picture; the house icon only when none was uploaded. */}
+          <Avatar
+            name={currentShelter.name}
+            uri={currentShelter.photoUrl}
+            color="rgba(255,255,255,0.16)"
+            icon="home"
+            size={42}
+          />
           <View style={{ flex: 1 }}>
             <Text style={styles.shelterName} numberOfLines={2}>
               {currentShelter.name}
@@ -186,7 +199,7 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
             key={r.id}
             report={r}
             distance={r.distance}
-            onPress={() => navigation.navigate('AnimalReports')}
+            onPress={() => navigation.navigate('ReportDetail', { reportId: r.id })}
           />
         ))}
 

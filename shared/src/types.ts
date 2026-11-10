@@ -197,6 +197,8 @@ export interface DeploymentInfo {
   databaseConnected: boolean;
   uptimeSeconds: number;
   nodeVersion: string;
+  /** Account emails (deletion, ban, approval) waiting to be retried, and ones given up on. */
+  emailQueue?: { queued: number; failed: number };
 }
 
 export interface AppUser {

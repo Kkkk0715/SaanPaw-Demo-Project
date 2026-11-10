@@ -95,7 +95,11 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
           activeOwn
             .slice(0, 2)
             .map((r) => (
-              <ReportCard key={r.id} report={r} onPress={() => navigation.navigate('LostPetStatus' as never)} />
+              <ReportCard
+                key={r.id}
+                report={r}
+                onPress={() => navigation.navigate('ReportDetail' as never, { reportId: r.id } as never)}
+              />
             ))
         ) : (
           <Card>
@@ -122,7 +126,12 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
           nearby
             .slice(0, 4)
             .map((r) => (
-              <ReportCard key={r.id} report={r} distance={r.distance} onPress={() => navigation.navigate('Search')} />
+              <ReportCard
+                key={r.id}
+                report={r}
+                distance={r.distance}
+                onPress={() => navigation.navigate('ReportDetail' as never, { reportId: r.id } as never)}
+              />
             ))
         ) : (
           <Card>

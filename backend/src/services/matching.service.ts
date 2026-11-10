@@ -4,7 +4,9 @@ import { LostPetReport } from '../models/LostPetReport';
 import { Shelter } from '../models/Shelter';
 import { ShelterAnimal } from '../models/ShelterAnimal';
 import { geoPointToLatLng, type LatLng } from '../utils/geoHelpers';
-import { compareAnimalPhotos } from './gemini.service';
+import { compareAnimalPhotos, geminiConfigured } from './gemini.service';
+import { notify } from './pushNotification.service';
+import { logger } from '../utils/logger';
 
 export type AnimalType = (typeof ANIMAL_TYPES)[number];
 type CandidateSource = 'found_report' | 'shelter_animal';
@@ -131,7 +133,8 @@ async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
   const [foundReports, shelterAnimals] = await Promise.all([
     FoundAnimalReport.find({
       animalType,
-      status: 'active',
+      // A found report already suggested for someone else's pet is still unclaimed.
+      status: { $in: ['active', 'matched'] },
       isHiddenByModeration: false,
     })
       .sort({ reportedAt: -1 })
@@ -217,6 +220,88 @@ export async function findMatches(input: MatchInput, opts: MatchOptions = {}): P
     .map(({ keep: _keep, ...m }) => m)
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_RESULTS);
+}
+
+export interface EvaluatedMatch extends RankedMatch {
+  /** suggested: show it to the owner. rejected: the photos say it is a different animal. */
+  verdict: 'suggested' | 'rejected';
+}
+
+/**
+ * Checks a lost report against the found reports and shelter animals it has not been checked
+ * against yet, so possible matches appear on their own instead of only after a manual image scan.
+ *
+ * Found reports go first. Up to `photoBudget` of them also get a Gemini photo comparison, which
+ * decides on its own: alike photos make it a match even when the typed details differ (one owner
+ * writes "orange", the finder writes "ginger"), different photos rule it out. Without a photo
+ * comparison the details decide (same species plus colour, breed, size or a nearby spot). A
+ * candidate that could not be decided yet is left out of the result and tried again next time.
+ */
+export async function evaluateNewCandidates(
+  input: MatchInput,
+  alreadyEvaluated: Set<string>,
+  photoBudget = 2,
+): Promise<EvaluatedMatch[]> {
+  const scored = (await gatherCandidates(input.animalType))
+    .filter((c) => !alreadyEvaluated.has(`${c.source}:${c.id}`))
+    .map((c) => ({ candidate: c, attr: attributeScore(input, c) }))
+    .filter((x): x is { candidate: Candidate; attr: { score: number; reasons: string[] } } => Boolean(x.attr))
+    .sort(
+      (a, b) =>
+        Number(b.candidate.source === 'found_report') - Number(a.candidate.source === 'found_report') ||
+        b.attr.score - a.attr.score,
+    );
+
+  let budget = geminiConfigured && input.imageUrl ? photoBudget : 0;
+  const plan = scored.map((x) => {
+    const compare = budget > 0 && Boolean(x.candidate.imageUrls?.[0]);
+    if (compare) budget -= 1;
+    return { ...x, compare };
+  });
+
+  const results = await Promise.all(
+    plan.map(async ({ candidate, attr, compare }): Promise<EvaluatedMatch | null> => {
+      const vision = compare ? await compareAnimalPhotos(input.imageUrl!, candidate.imageUrls[0]) : null;
+      const base = { candidateId: candidate.id, candidateSource: candidate.source };
+      if (vision) {
+        const isMatch = keep(attr.score, vision.score) && vision.score >= VISION_MIN * 0.6;
+        return {
+          ...base,
+          score: combineScores(attr.score, vision.score),
+          reasons: vision.reasoning ? [vision.reasoning, ...attr.reasons] : attr.reasons,
+          verdict: isMatch ? 'suggested' : 'rejected',
+        };
+      }
+      if (keep(attr.score, null)) return { ...base, score: attr.score, reasons: attr.reasons, verdict: 'suggested' };
+      return null; // not decided yet: no photo comparison this time and the details alone are too thin
+    }),
+  );
+  return results.filter((r): r is EvaluatedMatch => Boolean(r));
+}
+
+/**
+ * Tells each owner whose lost pet may have just turned up: an entry in their alerts plus a push to
+ * their phone. Never throws - the report or intake that found the match is already saved.
+ */
+export async function alertOwnersOfNewMatches(lostReportIds: string[], what: string): Promise<void> {
+  try {
+    if (!lostReportIds.length) return;
+    const reports = await LostPetReport.find({ _id: { $in: lostReportIds } }, 'reporterId name animalType').lean();
+    await Promise.all(
+      reports.map((r) =>
+        notify({
+          audienceType: 'user',
+          audienceId: r.reporterId,
+          type: 'match',
+          refId: r._id,
+          title: `Possible match for ${r.name || `your ${r.animalType}`}`,
+          body: `${what} may be your pet. Open SaanPaw to compare.`,
+        }),
+      ),
+    );
+  } catch (err) {
+    logger.error('matching: failed to alert owners of new matches', err);
+  }
 }
 
 interface LostCandidate extends ScorableCandidate {

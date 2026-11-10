@@ -88,6 +88,7 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
           <ReportCard
             key={report.id}
             report={report}
+            onPress={() => navigation.navigate('ReportDetail', { reportId: report.id })}
             footer={
               <View style={{ gap: theme.spacing(1) }}>
                 {matchCount ? (
@@ -157,16 +158,30 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
         <Caption>
           {editing?.name ?? 'This report'} · reported {editing ? timeAgo(editing.reportedAt) : ''}
         </Caption>
+        {/* A found-animal report is not "missing" - its wording follows the report kind. */}
         <Choice
-          options={[
-            { label: 'Still missing', value: 'active' },
-            { label: 'Possible match', value: 'matched' },
-            { label: 'Recovered', value: 'recovered' },
-            { label: 'Closed', value: 'closed' },
-          ]}
+          options={
+            editing?.kind === 'found'
+              ? [
+                  { label: 'Still unclaimed', value: 'active' },
+                  { label: 'Possible owner', value: 'matched' },
+                  { label: 'Returned to owner', value: 'recovered' },
+                  { label: 'Closed', value: 'closed' },
+                ]
+              : [
+                  { label: 'Still missing', value: 'active' },
+                  { label: 'Possible match', value: 'matched' },
+                  { label: 'Recovered', value: 'recovered' },
+                  { label: 'Closed', value: 'closed' },
+                ]
+          }
           value={draftStatus}
           onChange={(v) => setDraftStatus(v as ReportStatus)}
-          hint="Recovered notifies the shelters that responded and clears the report from nearby alerts."
+          hint={
+            editing?.kind === 'found'
+              ? 'Returned to owner notifies the shelters that responded and clears the report from nearby alerts.'
+              : 'Recovered notifies the shelters that responded and clears the report from nearby alerts.'
+          }
         />
         <Button label="Save status" onPress={apply} icon="checkmark" />
         <Button

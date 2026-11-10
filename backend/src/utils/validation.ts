@@ -127,6 +127,8 @@ export const matchScanSchema = z.object({
   size: size.optional(),
   location: latLngSchema,
   photoUrl: optionalText(1000),
+  /** The owner's lost report this scan is for: its results are saved as that report's possible matches. */
+  lostReportId: z.string().regex(/^[a-f0-9]{24}$/i).optional(),
 });
 
 export const userProfileSchema = z.object({

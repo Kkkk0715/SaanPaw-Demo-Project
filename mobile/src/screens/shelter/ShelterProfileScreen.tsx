@@ -4,15 +4,15 @@ import { Text, View } from 'react-native';
 import { theme } from '@/constants/theme';
 import {
   RADIUS_OPTIONS,
-  SJDM_BARANGAYS,
   SJDM_BARANGAY_NAMES,
+  barangayCenter,
   formatDistance,
   maskPrivate,
   passwordMeetsRules,
   useApp,
 } from '@saanpaw/shared';
 import {
-  AnimalPhoto,
+  Avatar,
   Badge,
   Banner,
   Button,
@@ -65,7 +65,10 @@ export function ShelterProfileScreen() {
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
-  const center = SJDM_BARANGAYS.find((b) => b.name === barangay)?.center ?? currentShelter.location;
+  // The shelter keeps its exact pin until the barangay is changed; only then does it move to that
+  // barangay's centre. Saving a new name or photo must not move the shelter.
+  const barangayChanged = barangay !== currentShelter.barangay;
+  const center = (barangayChanged ? barangayCenter(barangay) : undefined) ?? currentShelter.location;
   const coverage = shelterAreaReports().length;
 
   const pickPhoto = async () => {
@@ -90,7 +93,7 @@ export function ShelterProfileScreen() {
       email: email.trim(),
       capacity: Number(capacity) || currentShelter.capacity,
       barangay,
-      location: center,
+      ...(barangayChanged ? { location: center } : {}),
       operatingRadiusMeters: radius,
       });
       setSaved(true);
@@ -162,7 +165,7 @@ export function ShelterProfileScreen() {
       <SectionHeader title="Shelter information" />
       <Card>
         <Row gap={1.5} align="flex-start">
-          <AnimalPhoto uri={photo} size={72} />
+          <Avatar name={name || currentShelter.name} uri={photo} color={currentShelter.logoColor} icon="home" size={72} />
           <View style={{ flex: 1 }}>
             <Button label="Change photo" variant="secondary" icon="camera-outline" onPress={pickPhoto} />
             <Caption>Shown to pet owners browsing shelters.</Caption>

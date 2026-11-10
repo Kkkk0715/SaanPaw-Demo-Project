@@ -19,6 +19,7 @@ import { withLiveOccupancy } from '../../services/occupancy.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import {
   accountActionEmail,
+  emailQueueCounts,
   retryQueuedEmails,
   sendEmail,
   shelterCredentialsEmail,
@@ -42,12 +43,15 @@ const OVERVIEW_LIMIT = 500;
 
 
 /** Facts about the running instance, computed fresh on every call - never stored. */
-function deploymentInfo() {
+async function deploymentInfo() {
+  // Shown on System Management so an email that never went out (ban, deletion, approval) is visible.
+  const emailQueue = await emailQueueCounts().catch(() => undefined);
   return {
     environment: env.nodeEnv,
     databaseConnected: mongoose.connection.readyState === 1,
     uptimeSeconds: Math.round(process.uptime()),
     nodeVersion: process.version,
+    emailQueue,
   };
 }
 
@@ -137,7 +141,7 @@ export const developerService = {
         return serializeFlag(f, reporter ? combineName(reporter) : 'Unknown user', Boolean(reporter?.isBanned));
       }),
       systemConfig,
-      deployment: deploymentInfo(),
+      deployment: await deploymentInfo(),
       collections,
     };
   },
@@ -236,7 +240,7 @@ export const developerService = {
 
   // ----- System Management -----
   async systemConfig() {
-    return { config: await getSystemConfig(), deployment: deploymentInfo() };
+    return { config: await getSystemConfig(), deployment: await deploymentInfo() };
   },
 
   async updateSystemConfig(patch: Partial<SystemConfigValue>) {

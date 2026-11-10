@@ -60,14 +60,14 @@ export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>)
         tone="info"
         icon="radio"
         title={`Reports within ${formatDistance(currentShelter.operatingRadiusMeters)}`}
-        message={`Every lost and found report inside ${currentShelter.name}'s operating radius appears here automatically, newest and nearest first.`}
+        message={`Every open lost and found report inside ${currentShelter.name}'s operating radius appears here automatically, nearest first.`}
       />
 
       <Segmented
         options={[
           { label: `All (${all.length})`, value: 'all' },
-          { label: 'Lost', value: 'lost', color: theme.colors.danger },
-          { label: 'Found', value: 'found', color: theme.colors.found },
+          { label: `Lost (${all.filter((r) => r.kind === 'lost').length})`, value: 'lost', color: theme.colors.danger },
+          { label: `Found (${all.filter((r) => r.kind === 'found').length})`, value: 'found', color: theme.colors.found },
         ]}
         value={kind}
         onChange={(v) => setKind(v as ReportKind | 'all')}
@@ -92,6 +92,7 @@ export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>)
               key={r.id}
               report={r}
               distance={r.distance}
+              onPress={() => navigation.navigate('ReportDetail', { reportId: r.id })}
               footer={
                 <View style={{ gap: theme.spacing(1) }}>
                   <Caption>

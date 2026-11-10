@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { messagingService } from '../messaging/messaging.service';
 import { ApiError } from '../../utils/ApiError';
+import { sendTestPush } from '../../services/pushNotification.service';
 import {
   caseStatusSchema,
   changePasswordSchema,
@@ -80,6 +81,8 @@ export const shelterController = {
     if (typeof req.body?.token !== 'string' || !req.body.token) throw ApiError.badRequest('token is required');
     res.json(await shelterService.updatePushToken(sid(req), req.body.token));
   },
+  /** Profile's "Send a test notification": pushes to this account's phone and says what happened. */
+  testPush: async (req: Request, res: Response) => res.json(await sendTestPush('shelter', sid(req))),
 
   // ----- Message box -----
   listConversations: async (req: Request, res: Response) =>

@@ -151,14 +151,14 @@ export async function emailQueueCounts() {
 export function shelterCredentialsEmail(params: { shelterName: string; email: string; password: string }): EmailMessage {
   const text =
     `Hi ${params.shelterName},\n\n` +
-    `Your shelter has been approved on SaanPaw. Sign in to the Developer-issued console with:\n\n` +
+    `Your shelter has been approved on SaanPaw. Open the SaanPaw mobile app, choose Shelter Admin and sign in with:\n\n` +
     `Email: ${params.email}\n` +
     `Password: ${params.password}\n\n` +
     `Change this password after you sign in (Shelter Profile > Change password).\n\n` +
     `- SaanPaw, San Jose Del Monte, Bulacan`;
   const html = `
     <p>Hi ${params.shelterName},</p>
-    <p>Your shelter has been approved on SaanPaw. Sign in with:</p>
+    <p>Your shelter has been approved on SaanPaw. Open the SaanPaw mobile app, choose <b>Shelter Admin</b> and sign in with:</p>
     <p><b>Email:</b> ${params.email}<br/><b>Password:</b> ${params.password}</p>
     <p>Change this password after you sign in (Shelter Profile &gt; Change password).</p>
     <p>- SaanPaw, San Jose Del Monte, Bulacan</p>

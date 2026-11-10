@@ -35,6 +35,19 @@ const setStatus = (next: PushStatus) => {
   listeners.forEach((l) => l(next));
 };
 
+/**
+ * Called once the token has (or has not) reached the server. The phone can have a token and still
+ * get nothing if the server never stored it, so "on" is only shown after the server has it.
+ */
+export function markPushTokenSaved(saved: boolean, reason?: string) {
+  if (saved) setStatus({ state: 'on' });
+  else
+    setStatus({
+      state: 'failed',
+      reason: `This phone could not be registered with SaanPaw for alerts${reason ? ` (${reason})` : ''}. Reopen the app to try again.`,
+    });
+}
+
 /** The current push status, updating when registration finishes. */
 export function usePushStatus(): PushStatus {
   const [value, setValue] = useState(status);
@@ -115,7 +128,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     }
 
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
-    setStatus({ state: 'on' });
+    // Stays "setting up" until the server has stored the token (see markPushTokenSaved).
     return data;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

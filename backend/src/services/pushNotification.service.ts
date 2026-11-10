@@ -1,4 +1,3 @@
-import type { Expo as ExpoType, ExpoPushMessage } from 'expo-server-sdk';
 import { Notification } from '../models/Notification';
 import { Shelter } from '../models/Shelter';
 import { User } from '../models/User';
@@ -6,18 +5,22 @@ import type { NOTIFICATION_TYPES } from '../config/constants';
 import { logger } from '../utils/logger';
 
 /**
- * expo-server-sdk ships as an ES module. A static `import { Expo } from 'expo-server-sdk'` compiles
- * to `require('expo-server-sdk')` under this project's CommonJS output, which throws
- * `ERR_REQUIRE_ESM` on Node runtimes without require()-of-ESM support - Vercel's included, even
- * though it works unnoticed on a newer local Node that does support it. A plain `import()` doesn't
- * fix that: under `module: CommonJS`, tsc downlevels it right back to
- * `Promise.resolve().then(() => require(...))`, the same crash. `Function(...)` builds the import
- * call from a string at runtime so tsc never sees the `import` token to downlevel - this is the
- * standard workaround for loading an ESM-only package from CommonJS.
+ * Push notifications go straight to Expo's push service over HTTPS.
+ *
+ * This used to load the expo-server-sdk package through a runtime-built dynamic import (it is an
+ * ES module and this backend compiles to CommonJS). That trick also hid the package from Vercel's
+ * bundler, so on the deployed backend the SDK - or one of its own dependencies - could be missing:
+ * every push then failed inside a try/catch, while the in-app notification was still saved. That is
+ * exactly "the alert shows in the app's list but never pops up on the phone". Calling the push
+ * service directly needs no package at all, so there is nothing left to go missing.
  */
-let expoModule: Promise<typeof import('expo-server-sdk')> | null = null;
-const importExpoSdk = new Function('return import("expo-server-sdk")') as () => Promise<typeof import('expo-server-sdk')>;
-const loadExpo = () => (expoModule ??= importExpoSdk());
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+/** Expo accepts at most 100 messages per request. */
+const CHUNK_SIZE = 100;
+const PUSH_TIMEOUT_MS = 8000;
+
+const isExpoPushToken = (token: unknown): token is string =>
+  typeof token === 'string' && /^Expo(nent)?PushToken\[.+\]$/.test(token);
 
 export interface PushPayload {
   token?: string | null;
@@ -26,53 +29,104 @@ export interface PushPayload {
   data?: Record<string, unknown>;
 }
 
+export interface PushOutcome {
+  /** Messages Expo accepted for delivery. */
+  sent: number;
+  /** One line per message Expo refused, e.g. "InvalidCredentials: ..." when Firebase is not set up. */
+  errors: string[];
+  /** Payloads skipped because the account has no (valid) push token. */
+  skipped: number;
+}
+
+interface ExpoTicket {
+  status: 'ok' | 'error';
+  id?: string;
+  message?: string;
+  details?: { error?: string };
+}
+
+/** A phone that uninstalled the app (or reset its token) is forgotten, so it stops being tried. */
+async function forgetToken(token: string): Promise<void> {
+  await Promise.all([
+    User.updateMany({ expoPushToken: token }, { $unset: { expoPushToken: 1 } }),
+    Shelter.updateMany({ expoPushToken: token }, { $unset: { expoPushToken: 1 } }),
+  ]).catch(() => undefined);
+}
+
 /**
- * Sends to as many of the given tokens as are valid Expo push tokens; silently skips the rest
- * (a device that never registered one, or registered on web where none exists). Never throws -
- * a failed or partial push must not block whatever triggered it, same as sendEmail(). That
- * includes loadExpo() itself: if the SDK can't be loaded (e.g. missing from a deployment bundle
- * that didn't trace the dynamic import), this logs and returns rather than taking the caller down.
+ * Sends to every payload that has a valid Expo push token and skips the rest. Never throws: a
+ * failed push must not undo whatever triggered it (a report filed, a message sent).
  */
-export async function sendPushNotifications(payloads: PushPayload[]): Promise<void> {
-  try {
-    const { Expo } = await loadExpo();
-    const messages: ExpoPushMessage[] = payloads
-      .filter((p): p is PushPayload & { token: string } => Boolean(p.token) && Expo.isExpoPushToken(p.token))
-      // 'alerts' is the high-importance Android channel the app creates, so the alert pops up on
-      // screen; high priority wakes a phone that is idle instead of holding the alert back.
-      .map((p) => ({
-        to: p.token,
-        title: p.title,
-        body: p.body,
-        data: p.data,
-        sound: 'default' as const,
-        channelId: 'alerts',
-        priority: 'high' as const,
-      }));
+export async function sendPushNotifications(payloads: PushPayload[]): Promise<PushOutcome> {
+  const outcome: PushOutcome = { sent: 0, errors: [], skipped: 0 };
+  const messages = payloads
+    .filter((p) => {
+      const ok = isExpoPushToken(p.token);
+      if (!ok) outcome.skipped += 1;
+      return ok;
+    })
+    // 'alerts' is the high-importance Android channel the app creates, so the alert pops up on the
+    // screen; high priority wakes a phone that is idle instead of holding the alert back.
+    .map((p) => ({
+      to: p.token as string,
+      title: p.title,
+      body: p.body,
+      data: p.data ?? {},
+      sound: 'default',
+      channelId: 'alerts',
+      priority: 'high',
+    }));
+  if (!messages.length) return outcome;
 
-    if (!messages.length) return;
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+  // Only needed when "Enhanced push security" is turned on for the project in Expo.
+  if (process.env.EXPO_ACCESS_TOKEN) headers.Authorization = `Bearer ${process.env.EXPO_ACCESS_TOKEN}`;
 
-    const expo: ExpoType = new Expo();
-    for (const chunk of expo.chunkPushNotifications(messages)) {
-      const receipts = await expo.sendPushNotificationsAsync(chunk);
-      for (const r of receipts) {
-        if (r.status === 'error') logger.error(`push: delivery error (${r.message ?? 'unknown'})`);
+  for (let i = 0; i < messages.length; i += CHUNK_SIZE) {
+    const chunk = messages.slice(i, i + CHUNK_SIZE);
+    try {
+      const response = await fetch(EXPO_PUSH_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(chunk),
+        signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
+      });
+      const payload = (await response.json().catch(() => null)) as { data?: ExpoTicket[]; errors?: { message?: string }[] } | null;
+      if (!response.ok || !payload?.data) {
+        const reason = payload?.errors?.map((e) => e.message).join('; ') || `HTTP ${response.status}`;
+        outcome.errors.push(reason);
+        logger.error(`push: Expo refused the request (${reason})`);
+        continue;
       }
+      payload.data.forEach((ticket, idx) => {
+        if (ticket.status === 'ok') {
+          outcome.sent += 1;
+          return;
+        }
+        const code = ticket.details?.error ?? 'Error';
+        outcome.errors.push(`${code}: ${ticket.message ?? 'unknown'}`);
+        logger.error(`push: delivery error ${code} (${ticket.message ?? 'unknown'})`);
+        if (code === 'DeviceNotRegistered') void forgetToken(chunk[idx].to);
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      outcome.errors.push(reason);
+      logger.error('push: failed to reach Expo push service', err);
     }
-  } catch (err) {
-    logger.error('push: failed to send batch', err);
   }
+  return outcome;
 }
 
 type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 /**
- * The one place that creates a Notification: persists it for the in-app list, then best-effort
- * pushes it to whichever device token (if any) that user or shelter has registered. Every call
- * site that used to call `Notification.create` directly should call this instead, so an alert
- * is never silently in-app-only again. Never throws: every current call site runs this after its
- * own primary write already succeeded (a case opened, a status changed, a report filed), so a
- * notification failure here must never turn that already-committed write into a failed request.
+ * The one place that creates a Notification: persists it for the in-app list, then pushes it to
+ * the phone that user or shelter signed in on (if any). Never throws: every call site runs this
+ * after its own primary write already succeeded, so a notification failure must never turn that
+ * already-committed write into a failed request.
  */
 export async function notify(params: {
   audienceType: 'user' | 'shelter';
@@ -108,4 +162,33 @@ export async function notify(params: {
   } catch (err) {
     logger.error('notify: failed to create/push notification', err);
   }
+}
+
+/**
+ * Profile's "Send a test notification": pushes straight to the phone this account signed in on and
+ * reports exactly what Expo said, so a setup problem (no token yet, Firebase credentials missing in
+ * Expo) is visible instead of silent.
+ */
+export async function sendTestPush(audienceType: 'user' | 'shelter', audienceId: string) {
+  const account =
+    audienceType === 'user'
+      ? await User.findById(audienceId, 'expoPushToken').lean()
+      : await Shelter.findById(audienceId, 'expoPushToken').lean();
+  const token = account?.expoPushToken;
+  if (!isExpoPushToken(token)) {
+    return {
+      ok: false,
+      message: 'This account has no phone registered for push yet. Reopen the app and allow notifications.',
+    };
+  }
+  const outcome = await sendPushNotifications([
+    {
+      token,
+      title: 'SaanPaw test notification',
+      body: 'Push notifications are working on this phone.',
+      data: { type: 'test' },
+    },
+  ]);
+  if (outcome.sent) return { ok: true, message: 'Sent. It should appear on this phone within a few seconds.' };
+  return { ok: false, message: outcome.errors[0] ?? 'Expo did not accept the notification.' };
 }

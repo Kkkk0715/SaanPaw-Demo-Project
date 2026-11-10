@@ -117,6 +117,14 @@ export function ShelterDetailPanel({
         <dd>{shelter.email}</dd>
         <dt>Capacity</dt>
         <dd>{shelter.capacity} animals</dd>
+        {shelter.approvalStatus === 'approved' ? (
+          <>
+            <dt>In care now</dt>
+            <dd>
+              {shelter.currentOccupancy} of {shelter.capacity} places used
+            </dd>
+          </>
+        ) : null}
         <dt>Operating radius</dt>
         <dd>{formatDistance(shelter.operatingRadiusMeters)}</dd>
         <dt>Coordinates</dt>

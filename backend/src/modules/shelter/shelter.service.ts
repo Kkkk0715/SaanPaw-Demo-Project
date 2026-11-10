@@ -11,7 +11,7 @@ import { ShelterProofDocument } from '../../models/ShelterProofDocument';
 import { deleteShelterAnimalCascade } from '../../services/cascadeDelete.service';
 import { findDuplicatePhotos } from '../../services/photoFingerprint.service';
 import { notify } from '../../services/pushNotification.service';
-import { findMatchingLostReports, type AnimalType } from '../../services/matching.service';
+import { alertOwnersOfNewMatches, findMatchingLostReports, type AnimalType } from '../../services/matching.service';
 import { moderationService } from '../../services/moderation.service';
 import { geolocationService } from '../../services/geolocation.service';
 import { geoPointToLatLng } from '../../utils/geoHelpers';
@@ -117,7 +117,7 @@ async function matchAnimalAgainstLostReports(animal: {
   imageUrls: string[];
 }): Promise<void> {
   try {
-    const shelter = await Shelter.findById(animal.shelterId, 'location').lean();
+    const shelter = await Shelter.findById(animal.shelterId, 'location name').lean();
     const location = geoPointToLatLng(shelter?.location as any);
     if (!location) return;
     const ranked = await findMatchingLostReports({
@@ -138,6 +138,10 @@ async function matchAnimalAgainstLostReports(animal: {
           reasons: m.reasons,
         })),
         { ordered: false },
+      );
+      await alertOwnersOfNewMatches(
+        ranked.map((m) => m.lostReportId),
+        `A ${animal.animalType} now in the care of ${shelter?.name ?? 'a shelter'}`,
       );
     }
   } catch (err) {

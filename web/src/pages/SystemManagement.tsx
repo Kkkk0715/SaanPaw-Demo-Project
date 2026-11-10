@@ -116,7 +116,8 @@ export function SystemManagementPage() {
     a.href = url;
     a.download = `saanpaw-system-report-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoking straight away can cancel the download in some browsers; give it a moment first.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   return (
@@ -216,9 +217,9 @@ export function SystemManagementPage() {
                 <dt>Environment</dt>
                 <dd>{deployment ? deployment.environment : 'Offline demo'}</dd>
                 <dt>Console version</dt>
-                <dd>0.1.0</dd>
+                <dd>{__APP_VERSIONS__.console}</dd>
                 <dt>Mobile app</dt>
-                <dd>0.1.0</dd>
+                <dd>{__APP_VERSIONS__.mobile}</dd>
                 <dt>Service area</dt>
                 <dd>San Jose Del Monte, Bulacan</dd>
                 <dt>Data source</dt>
@@ -229,6 +230,14 @@ export function SystemManagementPage() {
                     <dd>{deployment.nodeVersion}</dd>
                     <dt>Uptime</dt>
                     <dd>{formatUptime(deployment.uptimeSeconds)}</dd>
+                    {deployment.emailQueue ? (
+                      <>
+                        <dt>Email outbox</dt>
+                        <dd>
+                          {deployment.emailQueue.queued} waiting to retry · {deployment.emailQueue.failed} failed
+                        </dd>
+                      </>
+                    ) : null}
                   </>
                 )}
               </dl>

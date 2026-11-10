@@ -27,8 +27,13 @@ export function RecoveredAnimalsScreen({ navigation }: NativeStackScreenProps<an
   const { shelterAnimals, currentShelter, toggleAnimalPublic } = useApp();
   const [tab, setTab] = useState<'unposted' | 'posted'>('unposted');
 
+  // Adopted and inconclusive animals are never shown to the public, so they are not offered for posting.
   const recovered = shelterAnimals.filter(
-    (a) => a.shelterId === currentShelter.id && (a.intakeType === 'recovered' || a.intakeType === 'rescued'),
+    (a) =>
+      a.shelterId === currentShelter.id &&
+      (a.intakeType === 'recovered' || a.intakeType === 'rescued') &&
+      a.caseStatus !== 'adopted' &&
+      a.caseStatus !== 'inconclusive',
   );
   const unposted = recovered.filter((a) => !a.postedPublicly);
   const posted = recovered.filter((a) => a.postedPublicly);

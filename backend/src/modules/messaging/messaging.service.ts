@@ -3,9 +3,40 @@ import { Message } from '../../models/Message';
 import { Shelter } from '../../models/Shelter';
 import { User } from '../../models/User';
 import { ApiError } from '../../utils/ApiError';
+import { notify } from '../../services/pushNotification.service';
 import { combineName, serializeConversation, serializeMessage } from '../../utils/geoHelpers';
 
 type Side = 'user' | 'shelter';
+
+const preview = (body: string) => (body.length > 120 ? `${body.slice(0, 117)}...` : body);
+
+/**
+ * Tells the other side a message arrived: an entry in their alerts list plus a push to their phone.
+ * Messages used to be saved silently, so nobody knew a reply was waiting until they opened the chat.
+ */
+async function announce(conversation: { _id: unknown; userId: unknown; shelterId: unknown }, from: Side, body: string) {
+  if (from === 'user') {
+    const user = await User.findById(conversation.userId, 'firstName middleName lastName').lean();
+    await notify({
+      audienceType: 'shelter',
+      audienceId: conversation.shelterId,
+      type: 'message',
+      refId: conversation._id,
+      title: `New message from ${user ? combineName(user) : 'a pet owner'}`,
+      body: preview(body),
+    });
+  } else {
+    const shelter = await Shelter.findById(conversation.shelterId, 'name').lean();
+    await notify({
+      audienceType: 'user',
+      audienceId: conversation.userId,
+      type: 'message',
+      refId: conversation._id,
+      title: `${shelter?.name ?? 'A shelter'} replied`,
+      body: preview(body),
+    });
+  }
+}
 
 /** The thread must belong to the caller, whichever side of it they are on. */
 async function ownedConversation(side: Side, ownerId: string, conversationId: string) {
@@ -79,6 +110,7 @@ export const messagingService = {
       unreadForShelter: 1,
     });
     await Message.create({ conversationId: conversation._id, senderType: 'user', senderId: userId, body: input.body });
+    await announce(conversation, 'user', input.body);
     return present([conversation]);
   },
 
@@ -94,6 +126,7 @@ export const messagingService = {
       conversation.unreadForUser += 1;
     }
     await conversation.save();
+    await announce(conversation, side, body);
     return present([conversation]);
   },
 

@@ -1,8 +1,19 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const sharedSrc = path.resolve(__dirname, '../shared/src');
+
+/** A package's "version" field, read at build time so System Management shows the real release. */
+function versionOf(file: string, pick: (json: any) => unknown): string {
+  try {
+    const value = pick(JSON.parse(fs.readFileSync(path.resolve(__dirname, file), 'utf8')));
+    return typeof value === 'string' && value ? value : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 export default defineConfig(({ command, mode }) => {
   // The console is served from the domain root by default. A subpath host such as GitHub Pages
@@ -14,6 +25,12 @@ export default defineConfig(({ command, mode }) => {
   return {
     base,
     plugins: [react()],
+    define: {
+      __APP_VERSIONS__: JSON.stringify({
+        console: versionOf('package.json', (j) => j.version),
+        mobile: versionOf('../mobile/app.json', (j) => j.expo?.version),
+      }),
+    },
     resolve: {
       alias: {
         '@saanpaw/shared': path.join(sharedSrc, 'index.ts'),

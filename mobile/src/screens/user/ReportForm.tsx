@@ -42,7 +42,7 @@ export function ReportForm({
   kind: ReportKind;
   navigation: { navigate: (screen: string, params?: object) => void; goBack: () => void };
 }) {
-  const { createReport, currentUser, reportById, shelterById, matchesForReport, lookupAddress } = useApp();
+  const { createReport, currentUser, reportById, shelterById, shelterAnimals, matchesForReport, lookupAddress } = useApp();
   const style = reportKindStyle[kind];
 
   const [images, setImages] = useState<string[]>([]);
@@ -246,23 +246,22 @@ export function ReportForm({
             <SectionHeader title={`Possible matches (${matches.length})`} />
             {matches.length ? (
               matches.map((m) => {
-                const candidate = reportById(m.candidateId);
-                const shelter = candidate ? undefined : shelterById('s1');
+                const candidate = m.candidateSource === 'found_report' ? reportById(m.candidateId) : undefined;
+                // A shelter-animal match names the shelter that actually has the animal.
+                const animal =
+                  m.candidateSource === 'shelter_animal' ? shelterAnimals.find((a) => a.id === m.candidateId) : undefined;
+                const shelter = animal ? shelterById(animal.shelterId) : undefined;
                 return (
                   <MatchCard
                     key={m.id}
                     sourceLabel={m.candidateSource === 'found_report' ? 'Found report' : 'Shelter animal'}
-                    title={
-                      candidate
-                        ? describeAnimal(candidate)
-                        : 'Animal in shelter care'
-                    }
+                    title={candidate ? describeAnimal(candidate) : animal ? animal.name : 'Animal in shelter care'}
                     subtitle={
                       candidate
                         ? `${candidate.barangay} · reported by ${candidate.reporterName}`
                         : shelter?.name ?? 'Shelter record'
                     }
-                    imageUri={candidate?.imageUrls[0]}
+                    imageUri={candidate?.imageUrls[0] ?? animal?.imageUrls[0]}
                     score={m.score}
                     reasons={m.reasons}
                   />
@@ -279,20 +278,30 @@ export function ReportForm({
           </>
         ) : null}
 
-        <Button label="Back to dashboard" onPress={() => navigation.navigate('HomeTabs')} />
+        <Button
+          label="View report"
+          icon="document-text-outline"
+          onPress={() => navigation.navigate('ReportDetail', { reportId: submitted.id })}
+        />
+        <Button label="Back to dashboard" variant="secondary" onPress={() => navigation.navigate('HomeTabs')} />
         <Button
           label="Submit another report"
-          variant="secondary"
+          variant="ghost"
           onPress={() => {
+            // A clean form: every detail of the last animal is cleared (the pin stays where it was).
             setSubmitted(null);
             setFormKey((k) => k + 1);
             setImages([]);
             setName('');
+            setAnimalType('dog');
             setBreed('');
             setColor('');
+            setSex('unknown');
+            setSize('medium');
             setMarks('');
             setDescription('');
             setLandmark('');
+            setErrors({});
           }}
         />
       </Screen>

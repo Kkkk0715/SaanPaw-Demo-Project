@@ -50,6 +50,7 @@ router.patch('/password', asyncHandler(shelterController.changePassword));
 router.get('/notifications', asyncHandler(shelterController.listNotifications));
 router.patch('/notifications/:id/read', asyncHandler(shelterController.markNotificationRead));
 router.put('/push-token', asyncHandler(shelterController.updatePushToken));
+router.post('/push-test', asyncHandler(shelterController.testPush));
 
 // Message box
 router.get('/conversations', asyncHandler(shelterController.listConversations));

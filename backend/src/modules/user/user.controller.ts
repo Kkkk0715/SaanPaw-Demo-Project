@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { messagingService } from '../messaging/messaging.service';
 import { ApiError } from '../../utils/ApiError';
+import { sendTestPush } from '../../services/pushNotification.service';
 import {
   matchScanSchema,
   queryNumber,
@@ -52,7 +53,7 @@ export const userController = {
   matchSuggestions: async (req: Request, res: Response) =>
     res.json(await userService.matchSuggestions(req.params.id)),
   scanPhoto: async (req: Request, res: Response) =>
-    res.json(await userService.scanPhoto(matchScanSchema.parse(req.body))),
+    res.json(await userService.scanPhoto(uid(req), matchScanSchema.parse(req.body))),
 
   mapReports: async (req: Request, res: Response) => {
     const lng = queryNumber(req.query.lng);
@@ -84,6 +85,8 @@ export const userController = {
     if (typeof req.body?.token !== 'string' || !req.body.token) throw ApiError.badRequest('token is required');
     res.json(await userService.updatePushToken(uid(req), req.body.token));
   },
+  /** Profile's "Send a test notification": pushes to this account's phone and says what happened. */
+  testPush: async (req: Request, res: Response) => res.json(await sendTestPush('user', uid(req))),
 
   // ----- Message box -----
   listConversations: async (req: Request, res: Response) =>

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { theme, reportKindStyle } from '@/constants/theme';
 import { distanceMeters, formatDistance, isWithinSJDM, reportPlace, useApp, type LatLng } from '@saanpaw/shared';
-import { Badge, Caption, Card, Choice, Pager, Row, SectionHeader, usePagination } from '@/components/ui';
+import { Badge, Button, Caption, Card, Choice, Pager, Row, SectionHeader, usePagination } from '@/components/ui';
 import { MapCanvas, type MapMarker } from '@/components/map/MapCanvas';
 import { ReportCard, describeAnimal } from '@/components/domain';
 import { locationService } from '@/services/locationService';
@@ -15,6 +16,7 @@ type Filter = 'all' | 'lost' | 'found' | 'shelters';
  * Reports plotted across the city. The translucent circle is the alert radius.
  */
 export function MapViewScreen({ route }: { route?: { params?: { focusReportId?: string } } }) {
+  const navigation = useNavigation<any>();
   const { reports, shelters, currentUser } = useApp();
   const [filter, setFilter] = useState<Filter>('all');
   const [selected, setSelected] = useState<string | null>(null);
@@ -52,7 +54,8 @@ export function MapViewScreen({ route }: { route?: { params?: { focusReportId?: 
   const visibleReports = useMemo(
     () =>
       reports
-        .filter((r) => r.status !== 'closed')
+        // Only reports still open: a recovered pet or a closed report is no longer out there.
+        .filter((r) => r.status === 'active' || r.status === 'matched')
         .filter((r) => (filter === 'lost' || filter === 'found' ? r.kind === filter : filter !== 'shelters'))
         .map((r) => ({ ...r, distance: distanceMeters(me, r.location) }))
         // The alert radius is drawn around the registered spot, the same place alerts are sent for.
@@ -168,13 +171,23 @@ export function MapViewScreen({ route }: { route?: { params?: { focusReportId?: 
                 soft={theme.colors.infoSoft}
               />
             </Row>
+            <Button
+              label="View shelter"
+              variant="secondary"
+              icon="home-outline"
+              onPress={() => navigation.navigate('ShelterView', { tab: 'shelters' })}
+            />
           </Card>
         ) : null}
 
         {selectedReport ? (
           <>
             <SectionHeader title="Selected pin" />
-            <ReportCard report={selectedReport} distance={selectedReport.distance} />
+            <ReportCard
+              report={selectedReport}
+              distance={selectedReport.distance}
+              onPress={() => navigation.navigate('ReportDetail', { reportId: selectedReport.id })}
+            />
           </>
         ) : null}
 
