@@ -13,6 +13,7 @@ import {
 } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
 import { MapCanvas } from '@/components/map/MapCanvas';
+import { Button } from '@/components/ui';
 import { locationService } from '@/services/locationService';
 
 /** Rough travel time at city driving speed, so "how far" also reads as "how long". */
@@ -43,6 +44,49 @@ export function RecoveryTracker({
   /** Where the current route starts. Only moves after a real move, so small ones don't re-route. */
   const [routedFrom, setRoutedFrom] = useState<LatLng | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
+  /** Where the route starts: the staff member's phone (default) or the shelter's address. */
+  const [origin, setOrigin] = useState<'me' | 'shelter'>('me');
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+  const [focus, setFocus] = useState<{ center: LatLng; key: number } | null>(null);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+
+  /**
+   * "Use my current location": asks for location access if needed, takes a fresh GPS fix, routes
+   * from it straight away (no waiting for the next move) and centres the map on it.
+   */
+  const useCurrentLocation = async () => {
+    setLocating(true);
+    setLocateError(null);
+    try {
+      const p = await locationService.getCurrent();
+      if (!mounted.current) return;
+      if (!p) {
+        setLocateError('Location access is off for SaanPaw. Allow it in your phone settings, then try again.');
+        return;
+      }
+      setHere(p);
+      setOrigin('me');
+      setRoutedFrom(p);
+      setFocus({ center: p, key: Date.now() });
+      // Follow the phone from here on - restarted, since permission may only just have been granted.
+      stopRef.current?.();
+      const stop = await locationService.watch((next) => setHere(next)).catch(() => null);
+      // Closed while the watch was starting: stop it so GPS doesn't keep running.
+      if (!mounted.current) stop?.();
+      else stopRef.current = stop;
+    } catch (e) {
+      setLocateError(`Could not get your location: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      if (mounted.current) setLocating(false);
+    }
+  };
 
   // Follow the phone while the tracker is open: last known position at once, then live fixes.
   useEffect(() => {
@@ -66,8 +110,8 @@ export function RecoveryTracker({
     };
   }, []);
 
-  const start = here ?? shelter.location;
-  const fromYou = Boolean(here);
+  const fromYou = origin === 'me' && Boolean(here);
+  const start = fromYou && here ? here : shelter.location;
 
   // Move the route's start only when the person has moved far enough (or the phone's position
   // replaced the shelter's), so walking around a block doesn't ask the router every few seconds.
@@ -114,9 +158,37 @@ export function RecoveryTracker({
           <Text style={styles.statLabel}>by car</Text>
         </View>
       </View>
-      {!fromYou ? (
+      <View style={styles.actions}>
+        <Button
+          label={fromYou ? 'Update my location' : 'Use my current location'}
+          icon="locate"
+          variant={fromYou ? 'secondary' : 'primary'}
+          color={theme.colors.info}
+          loading={locating}
+          full={false}
+          style={{ flex: 1 }}
+          onPress={() => void useCurrentLocation()}
+        />
+        {fromYou ? (
+          <Button
+            label="From the shelter"
+            icon="home-outline"
+            variant="secondary"
+            full={false}
+            style={{ flex: 1 }}
+            onPress={() => {
+              setOrigin('shelter');
+              setFocus({ center: shelter.location, key: Date.now() });
+            }}
+          />
+        ) : null}
+      </View>
+      {locateError ? <Text style={[styles.hint, { color: theme.colors.danger }]}>{locateError}</Text> : null}
+      {!fromYou && !locateError ? (
         <Text style={styles.hint}>
-          Turn on location to route from where you are now. Until then the route starts at the shelter.
+          {origin === 'shelter'
+            ? `Routing from ${shelter.name}. Tap "Use my current location" to route from where you are.`
+            : 'Turn on location to route from where you are now. Until then the route starts at the shelter.'}
         </Text>
       ) : null}
       <View style={styles.place}>
@@ -134,6 +206,7 @@ export function RecoveryTracker({
           { id: 'report', coordinate: report.location, kind: report.kind, label: 'Report location' },
         ]}
         selectedMarkerId="report"
+        focus={focus}
         route={{
           from: routedFrom ?? start,
           to: report.location,
@@ -156,6 +229,7 @@ const styles = StyleSheet.create({
   statValue: { ...theme.type.h3, color: theme.colors.text },
   statLabel: { ...theme.type.caption, color: theme.colors.textSoft },
   hint: { ...theme.type.caption, color: theme.colors.textSoft },
+  actions: { flexDirection: 'row', gap: theme.spacing(1) },
   divider: { width: 1, alignSelf: 'stretch', backgroundColor: theme.colors.border, marginHorizontal: 10 },
   place: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   placeText: { ...theme.type.bodyMedium, color: theme.colors.text, flex: 1 },
