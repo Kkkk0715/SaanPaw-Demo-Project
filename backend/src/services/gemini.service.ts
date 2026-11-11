@@ -25,6 +25,36 @@ const restingUntil = new Map<number, number>();
 let nextKey = 0;
 
 /**
+ * What Gemini last did, shown in System Management: without it a failing screen (quota used up, a
+ * retired model name, a bad key) only shows as "screening unavailable" on the phone.
+ */
+const health: {
+  lastSuccessAt?: string;
+  lastError?: { at: string; status?: number; message: string };
+} = {};
+const noteError = (message: string, status?: number) => {
+  health.lastError = { at: new Date().toISOString(), message: message.slice(0, 300), ...(status ? { status } : {}) };
+};
+
+export function geminiHealth() {
+  const now = Date.now();
+  return {
+    configured,
+    model: env.gemini.model,
+    keys: keys.length,
+    restingKeys: keys.filter((_, i) => (restingUntil.get(i) ?? 0) > now).length,
+    ...health,
+  };
+}
+
+/** True while at least one key is usable (not resting after a rate limit). */
+export function geminiHasCapacity(): boolean {
+  if (!configured) return false;
+  const now = Date.now();
+  return keys.some((_, i) => (restingUntil.get(i) ?? 0) <= now);
+}
+
+/**
  * Keys to try for one call, round-robin so the load spreads evenly, leaving out any key still
  * resting after a rate limit. Empty when every key is resting: the call then gives up at once
  * instead of waiting, which is what kept report submissions hanging until Vercel killed them.
@@ -51,6 +81,7 @@ async function generateJson(
   const candidates = keysToTry();
   if (!candidates.length) {
     logger.warn('gemini: every key is resting after a rate limit, skipping this call');
+    noteError('Every API key is resting after hitting its rate limit or quota.', 429);
     return null;
   }
 
@@ -79,22 +110,33 @@ async function generateJson(
 
       if (res.status === 429 || res.status === 403) {
         restingUntil.set(index, Date.now() + KEY_REST_MS);
+        const detail = await res.text().catch(() => '');
         logger.warn(`gemini: key #${index + 1} hit its limit (${res.status}), resting it and trying the next key`);
+        noteError(`Key #${index + 1}: ${res.status === 429 ? 'rate limit or daily quota reached' : 'access refused'}. ${detail}`, res.status);
         continue;
       }
       if (!res.ok) {
-        logger.error(`gemini: request failed (${res.status})`);
+        // e.g. 404 when the model name no longer exists, 400 for a bad request - say which.
+        const detail = await res.text().catch(() => '');
+        logger.error(`gemini: request failed (${res.status}) ${detail.slice(0, 200)}`);
+        noteError(`Request failed: ${detail || res.statusText}`, res.status);
         return null;
       }
 
       const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) return null;
+      if (!text) {
+        noteError('Gemini answered without any text (the photo may have been blocked by its safety filter).');
+        return null;
+      }
       // Occasionally the JSON comes wrapped in a ```json fence despite the JSON response type.
       const json = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-      return JSON.parse(json) as Record<string, unknown>;
+      const parsed = JSON.parse(json) as Record<string, unknown>;
+      health.lastSuccessAt = new Date().toISOString();
+      return parsed;
     } catch (err) {
       logger.error('gemini: request failed', err);
+      noteError(err instanceof Error ? (err.name === 'TimeoutError' ? 'Timed out waiting for Gemini.' : err.message) : String(err));
       return null;
     }
   }

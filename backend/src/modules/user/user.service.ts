@@ -76,6 +76,12 @@ async function tellShelterAboutOwnerUpdate(
   }
 }
 
+/** When each lost report was last checked for new candidates (per server instance). */
+const lastMatchCheck = new Map<string, number>();
+const MATCH_RECHECK_MS = 2 * 60_000;
+/** A pair whose photo comparison could not run is tried again after this long. */
+const UNCHECKED_RETRY_MS = 6 * 60 * 60_000;
+
 export const userService = {
   // ----- Registration -----
   async register(input: {
@@ -381,11 +387,23 @@ export const userService = {
     if (!report) return [];
 
     const lastSeen = geoPointToLatLng(report.lastSeenLocation as any);
-    if ((report.status === 'active' || report.status === 'matched') && lastSeen) {
+    // The app reloads every 30 s; checking for new candidates once every couple of minutes per
+    // report is plenty, and keeps this from adding work (and Gemini calls) to every reload.
+    const due = Date.now() - (lastMatchCheck.get(lostReportId) ?? 0) > MATCH_RECHECK_MS;
+    if (due && (report.status === 'active' || report.status === 'matched') && lastSeen) {
+      lastMatchCheck.set(lostReportId, Date.now());
+      if (lastMatchCheck.size > 5000) lastMatchCheck.delete(lastMatchCheck.keys().next().value as string);
       try {
         // Every pair checked before (shown, hidden or ruled out) is skipped; only new found reports
-        // and shelter animals are checked, a couple of photo comparisons at a time.
-        const known = await MatchSuggestion.find({ lostReportId: report._id }, 'candidateId candidateSource').lean();
+        // and shelter animals are checked, one photo comparison at a time. A pair whose comparison
+        // could not run is retried once it is a few hours old.
+        const known = await MatchSuggestion.find(
+          {
+            lostReportId: report._id,
+            $or: [{ status: { $ne: 'unchecked' } }, { updatedAt: { $gt: new Date(Date.now() - UNCHECKED_RETRY_MS) } }],
+          },
+          'candidateId candidateSource',
+        ).lean();
         const evaluated = await evaluateNewCandidates(
           {
             animalType: report.animalType as any,
@@ -402,7 +420,7 @@ export const userService = {
             evaluated.map((m) => ({
               updateOne: {
                 filter: { lostReportId: report._id, candidateId: m.candidateId, candidateSource: m.candidateSource },
-                update: { $setOnInsert: { score: m.score, reasons: m.reasons, status: m.verdict } },
+                update: { $set: { score: m.score, reasons: m.reasons, status: m.verdict } },
                 upsert: true,
               },
             })),

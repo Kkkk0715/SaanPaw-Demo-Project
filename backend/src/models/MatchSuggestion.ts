@@ -11,10 +11,11 @@ const matchSuggestionSchema = new Schema(
     /**
      * suggested / confirmed: shown to the owner. dismissed: the owner hid it. rejected: the photos
      * were compared and it is not the same animal - kept only so the pair is not compared again.
+     * unchecked: the photo comparison could not run; hidden, and retried after a few hours.
      */
     status: {
       type: String,
-      enum: ['suggested', 'confirmed', 'dismissed', 'rejected'],
+      enum: ['suggested', 'confirmed', 'dismissed', 'rejected', 'unchecked'],
       default: 'suggested',
     },
   },

@@ -199,6 +199,15 @@ export interface DeploymentInfo {
   nodeVersion: string;
   /** Account emails (deletion, ban, approval) waiting to be retried, and ones given up on. */
   emailQueue?: { queued: number; failed: number };
+  /** Gemini photo screening: set up or not, and what it last did (on the server instance that answered). */
+  ai?: {
+    configured: boolean;
+    model: string;
+    keys: number;
+    restingKeys: number;
+    lastSuccessAt?: string;
+    lastError?: { at: string; status?: number; message: string };
+  };
 }
 
 export interface AppUser {

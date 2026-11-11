@@ -4,7 +4,7 @@ import { LostPetReport } from '../models/LostPetReport';
 import { Shelter } from '../models/Shelter';
 import { ShelterAnimal } from '../models/ShelterAnimal';
 import { geoPointToLatLng, type LatLng } from '../utils/geoHelpers';
-import { compareAnimalPhotos, geminiConfigured } from './gemini.service';
+import { compareAnimalPhotos, geminiConfigured, geminiHasCapacity } from './gemini.service';
 import { notify } from './pushNotification.service';
 import { logger } from '../utils/logger';
 
@@ -223,8 +223,29 @@ export async function findMatches(input: MatchInput, opts: MatchOptions = {}): P
 }
 
 export interface EvaluatedMatch extends RankedMatch {
-  /** suggested: show it to the owner. rejected: the photos say it is a different animal. */
-  verdict: 'suggested' | 'rejected';
+  /**
+   * suggested: show it to the owner. rejected: the photos say it is a different animal.
+   * unchecked: the photo comparison could not run (Gemini busy) - hidden, and retried later.
+   */
+  verdict: 'suggested' | 'rejected' | 'unchecked';
+}
+
+/**
+ * Photo comparisons made while loading matches are background work, so they get a small share of
+ * the Gemini free tier: at most this many per minute on one server, and none while a key is resting
+ * after a rate limit. Uploads are screened with the same keys, and a person waiting on an upload
+ * must never find the quota already spent on background checks - that is what made uploads fail
+ * with "Photo screening is unavailable".
+ */
+const BACKGROUND_COMPARES_PER_MINUTE = 4;
+const backgroundCalls: number[] = [];
+function takeBackgroundCompares(wanted: number): number {
+  if (wanted <= 0 || !geminiHasCapacity()) return 0;
+  const now = Date.now();
+  while (backgroundCalls.length && backgroundCalls[0] < now - 60_000) backgroundCalls.shift();
+  const granted = Math.max(0, Math.min(wanted, BACKGROUND_COMPARES_PER_MINUTE - backgroundCalls.length));
+  for (let i = 0; i < granted; i++) backgroundCalls.push(now);
+  return granted;
 }
 
 /**
@@ -240,7 +261,7 @@ export interface EvaluatedMatch extends RankedMatch {
 export async function evaluateNewCandidates(
   input: MatchInput,
   alreadyEvaluated: Set<string>,
-  photoBudget = 2,
+  photoBudget = 1,
 ): Promise<EvaluatedMatch[]> {
   const scored = (await gatherCandidates(input.animalType))
     .filter((c) => !alreadyEvaluated.has(`${c.source}:${c.id}`))
@@ -252,7 +273,8 @@ export async function evaluateNewCandidates(
         b.attr.score - a.attr.score,
     );
 
-  let budget = geminiConfigured && input.imageUrl ? photoBudget : 0;
+  const wantPhotos = scored.filter((x) => Boolean(x.candidate.imageUrls?.[0])).length;
+  let budget = geminiConfigured && input.imageUrl ? takeBackgroundCompares(Math.min(photoBudget, wantPhotos)) : 0;
   const plan = scored.map((x) => {
     const compare = budget > 0 && Boolean(x.candidate.imageUrls?.[0]);
     if (compare) budget -= 1;
@@ -273,6 +295,9 @@ export async function evaluateNewCandidates(
         };
       }
       if (keep(attr.score, null)) return { ...base, score: attr.score, reasons: attr.reasons, verdict: 'suggested' };
+      // The comparison was tried but Gemini gave no answer: remember that, so the same pair is not
+      // retried (spending quota) on every reload - it is tried again a few hours later.
+      if (compare) return { ...base, score: attr.score, reasons: attr.reasons, verdict: 'unchecked' };
       return null; // not decided yet: no photo comparison this time and the details alone are too thin
     }),
   );

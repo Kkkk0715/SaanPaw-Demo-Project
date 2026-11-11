@@ -16,6 +16,7 @@ import { Message } from '../../models/Message';
 import { Conversation } from '../../models/Conversation';
 import { moderationService } from '../../services/moderation.service';
 import { withLiveOccupancy } from '../../services/occupancy.service';
+import { geminiHealth } from '../../services/gemini.service';
 import { deleteReportCascade, deleteShelterCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import {
   accountActionEmail,
@@ -52,6 +53,8 @@ async function deploymentInfo() {
     uptimeSeconds: Math.round(process.uptime()),
     nodeVersion: process.version,
     emailQueue,
+    // Shows why photo screening fails (quota, rate limit, a retired model name) instead of guessing.
+    ai: geminiHealth(),
   };
 }
 
