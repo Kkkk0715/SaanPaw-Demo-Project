@@ -5,7 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadProofDocument } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
-import { Button, Row } from '@/components/ui';
+import { Button, ErrorText, Row } from '@/components/ui';
 import { API_BASE_URL } from '@/services/api';
 import { shrinkPhoto } from '@/services/photo';
 
@@ -133,7 +133,7 @@ export function ProofUploader({
           <Button label="Camera" icon="camera-outline" variant="secondary" full={false} onPress={() => void addPhoto('camera')} />
         )}
       </Row>
-      {pickError || error ? <Text style={styles.error}>{pickError ?? error}</Text> : null}
+      <ErrorText error={pickError ?? error} />
     </View>
   );
 }

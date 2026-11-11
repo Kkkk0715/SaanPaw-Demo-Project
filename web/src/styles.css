@@ -1361,6 +1361,10 @@ tbody tr[data-selected='true'] {
 }
 
 .landing-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   margin-top: auto;
   padding: 22px clamp(16px, 5vw, 56px);
   border-top: 1px solid var(--border);
@@ -1630,4 +1634,116 @@ tr.clickable-row:focus-visible {
   letter-spacing: 0.6px;
   color: var(--muted);
   margin-top: 4px;
+}
+
+/* ---------------------------------------------------------------- terms of use / privacy policy */
+
+.landing-legal {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.landing-legal a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.legal-page {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--text);
+  padding: 24px 16px 64px;
+}
+.legal-nav {
+  max-width: 820px;
+  margin: 0 auto 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.legal-nav a {
+  color: var(--primary);
+  font-weight: 600;
+}
+.legal-doc {
+  max-width: 820px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: clamp(20px, 4vw, 44px);
+  line-height: 1.6;
+  font-size: 15px;
+}
+.legal-doc h1 {
+  margin: 0 0 4px;
+  font-size: clamp(24px, 4vw, 32px);
+}
+.legal-effective {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.legal-doc h2 {
+  margin: 28px 0 8px;
+  font-size: 18px;
+  color: var(--primary-darker);
+}
+.legal-doc p {
+  margin: 0 0 10px;
+  color: var(--text-soft);
+}
+.legal-doc ul {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  color: var(--text-soft);
+}
+.legal-doc li {
+  margin-bottom: 4px;
+}
+.legal-doc a {
+  color: var(--primary);
+}
+.legal-table-wrap {
+  overflow-x: auto;
+  margin: 6px 0 14px;
+}
+.legal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.legal-table th,
+.legal-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+}
+.legal-table th {
+  background: var(--surface-alt);
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+}
+.legal-table td {
+  background: var(--surface);
+  color: var(--text-soft);
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.legal-table td:first-child {
+  font-weight: 600;
+  color: var(--text);
+  min-width: 120px;
+}
+/* On a phone the table keeps readable columns and scrolls sideways inside its box. */
+.legal-table {
+  min-width: 520px;
 }

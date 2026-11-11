@@ -1,8 +1,15 @@
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
-import { RADIUS_OPTIONS, SJDM_BARANGAYS, SJDM_BARANGAY_NAMES, passwordMeetsRules } from '@saanpaw/shared';
+import {
+  MIN_USER_AGE,
+  RADIUS_OPTIONS,
+  SJDM_BARANGAYS,
+  SJDM_BARANGAY_NAMES,
+  ageFromBirthDate,
+  passwordMeetsRules,
+} from '@saanpaw/shared';
 import {
   AuthHeader,
   Banner,
@@ -10,6 +17,7 @@ import {
   COLUMN,
   Choice,
   Field,
+  FormScrollView,
   PasswordRules,
   PhoneField,
   Select,
@@ -18,6 +26,8 @@ import {
 import { MapCanvas } from '@/components/map/MapCanvas';
 import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/services/api';
+import { EmailVerifier } from '@/components/domain/EmailVerifier';
+import { BirthdayField } from '@/components/domain/BirthdayField';
 
 /** Any provider - Gmail, Yahoo, Outlook, a school or work address. */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -36,12 +46,14 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [birthDate, setBirthDate] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [barangay, setBarangay] = useState<string | null>(null);
   const [radius, setRadius] = useState(3000);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [emailToken, setEmailToken] = useState<string | null>(null);
 
   const center =
     SJDM_BARANGAYS.find((b) => b.name === barangay)?.center ?? SJDM_BARANGAYS[4].center;
@@ -51,7 +63,12 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
     const next: Record<string, string> = {};
     if (!firstName.trim()) next.firstName = 'Enter your first name.';
     if (!lastName.trim()) next.lastName = 'Enter your last name.';
+    const age = birthDate ? ageFromBirthDate(birthDate) : null;
+    if (!birthDate) next.birthDate = 'Choose the month, day and year you were born.';
+    else if (age === null) next.birthDate = 'Enter a valid birthday.';
+    else if (age < MIN_USER_AGE) next.birthDate = `You must be at least ${MIN_USER_AGE} years old to register.`;
     if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Enter a valid email address.';
+    else if (!emailToken) next.emailCode = 'Verify your email: send the code and enter it here.';
     if (phone.length !== 13) next.phone = 'Enter a complete mobile number.';
     if (!passwordMeetsRules(password)) next.password = 'Your password does not meet all the requirements below yet.';
     if (!barangay) next.barangay = 'Select your barangay.';
@@ -69,9 +86,11 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           email: email.trim(),
           phone,
           password,
+          birthDate,
           barangay,
           alertRadiusMeters: radius,
           location: center,
+          emailVerificationToken: emailToken,
         }),
       });
       await signIn('user', email, password);
@@ -83,7 +102,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
   };
 
   return (
-    <ScrollView
+    <FormScrollView
       style={{ backgroundColor: theme.colors.background }}
       contentContainerStyle={{ paddingBottom: theme.spacing(4) + bottomInset }}
       keyboardShouldPersistTaps="handled"
@@ -123,6 +142,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           only="letters"
           error={errors.lastName}
         />
+        <BirthdayField onChange={setBirthDate} error={errors.birthDate} />
         <Field
           label="Email address"
           value={email}
@@ -130,8 +150,15 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           placeholder="you@example.com"
           keyboardType="email-address"
           icon="mail-outline"
-          hint="Any email provider works - Gmail, Yahoo, Outlook and others."
+          hint="Any email provider works - Gmail, Yahoo, Outlook and others. We send a code to check it is yours."
           error={errors.email}
+        />
+        <EmailVerifier
+          email={email}
+          purpose="register_user"
+          token={emailToken}
+          onVerified={setEmailToken}
+          error={errors.emailCode}
         />
         <PhoneField
           value={phone}
@@ -156,7 +183,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           options={SJDM_BARANGAY_NAMES}
           onChange={setBarangay}
           placeholder="Select your barangay"
-          hint={errors.barangay}
+          error={errors.barangay}
         />
 
         <Choice
@@ -186,6 +213,6 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
         <Button label="Create account" onPress={submit} loading={busy} icon="person-add-outline" />
         <Button label="I already have an account" variant="ghost" onPress={() => navigation.goBack()} />
       </View>
-    </ScrollView>
+    </FormScrollView>
   );
 }

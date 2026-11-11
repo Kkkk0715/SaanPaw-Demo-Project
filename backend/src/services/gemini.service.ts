@@ -20,6 +20,8 @@ const configured = keys.length > 0;
 const DEFAULT_TIMEOUT_MS = 10_000;
 /** How long a key that hit its rate limit (429) or quota (403) is skipped before it is tried again. */
 const KEY_REST_MS = 60_000;
+/** A key Google refuses as invalid is skipped for longer: it will not start working by itself. */
+const INVALID_KEY_REST_MS = 10 * 60_000;
 
 const restingUntil = new Map<number, number>();
 let nextKey = 0;
@@ -35,6 +37,23 @@ const health: {
 const noteError = (message: string, status?: number) => {
   health.lastError = { at: new Date().toISOString(), message: message.slice(0, 300), ...(status ? { status } : {}) };
 };
+/** Each key's own last refusal, so "every key is resting" can still show what Google said about each one. */
+const keyErrors = new Map<number, { at: string; status: number; message: string }>();
+/** Google's own one-line explanation out of its JSON error body (falls back to the raw text). */
+function googleMessage(detail: string): string {
+  try {
+    const parsed = JSON.parse(detail) as { error?: { message?: string; status?: string } };
+    if (parsed.error?.message) return `${parsed.error.status ? `${parsed.error.status}: ` : ''}${parsed.error.message}`;
+  } catch {
+    /* not JSON */
+  }
+  return detail;
+}
+const noteKeyError = (index: number, status: number, detail: string) => {
+  const message = googleMessage(detail).replace(/\s+/g, ' ').slice(0, 300);
+  keyErrors.set(index, { at: new Date().toISOString(), status, message });
+  noteError(`Key #${index + 1}: ${message}`, status);
+};
 
 export function geminiHealth() {
   const now = Date.now();
@@ -44,6 +63,9 @@ export function geminiHealth() {
     keys: keys.length,
     restingKeys: keys.filter((_, i) => (restingUntil.get(i) ?? 0) > now).length,
     ...health,
+    keyErrors: [...keyErrors.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([i, e]) => ({ key: i + 1, ...e, resting: (restingUntil.get(i) ?? 0) > now })),
   };
 }
 
@@ -81,7 +103,8 @@ async function generateJson(
   const candidates = keysToTry();
   if (!candidates.length) {
     logger.warn('gemini: every key is resting after a rate limit, skipping this call');
-    noteError('Every API key is resting after hitting its rate limit or quota.', 429);
+    // Keep each key's own reason (shown per key); only fill the summary line when there is none.
+    if (!keyErrors.size) noteError('Every API key is resting after hitting its rate limit or quota.', 429);
     return null;
   }
 
@@ -112,12 +135,21 @@ async function generateJson(
         restingUntil.set(index, Date.now() + KEY_REST_MS);
         const detail = await res.text().catch(() => '');
         logger.warn(`gemini: key #${index + 1} hit its limit (${res.status}), resting it and trying the next key`);
-        noteError(`Key #${index + 1}: ${res.status === 429 ? 'rate limit or daily quota reached' : 'access refused'}. ${detail}`, res.status);
+        noteKeyError(index, res.status, detail);
         continue;
       }
       if (!res.ok) {
-        // e.g. 404 when the model name no longer exists, 400 for a bad request - say which.
         const detail = await res.text().catch(() => '');
+        // A key Google does not accept (mistyped, deleted, wrong kind of key) is that key's
+        // problem, not the photo's: rest it for longer and go on with the next key, instead of
+        // failing the whole screen on the first bad key in the list.
+        if (res.status === 401 || (res.status === 400 && /API_KEY_INVALID|API key not valid/i.test(detail))) {
+          restingUntil.set(index, Date.now() + INVALID_KEY_REST_MS);
+          logger.warn(`gemini: key #${index + 1} was refused as invalid (${res.status}), trying the next key`);
+          noteKeyError(index, res.status, detail);
+          continue;
+        }
+        // e.g. 404 when the model name no longer exists, 400 for a bad request - say which.
         logger.error(`gemini: request failed (${res.status}) ${detail.slice(0, 200)}`);
         noteError(`Request failed: ${detail || res.statusText}`, res.status);
         return null;
@@ -133,6 +165,7 @@ async function generateJson(
       const json = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
       const parsed = JSON.parse(json) as Record<string, unknown>;
       health.lastSuccessAt = new Date().toISOString();
+      keyErrors.delete(index); // this key works again
       return parsed;
     } catch (err) {
       logger.error('gemini: request failed', err);

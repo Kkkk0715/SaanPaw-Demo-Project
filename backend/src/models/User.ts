@@ -16,6 +16,8 @@ const userSchema = new Schema(
     lastName: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     phone: { type: String, trim: true },
+    // "YYYY-MM-DD", checked 18+ at registration. Older accounts have none.
+    birthDate: { type: String, trim: true },
     photoUrl: { type: String, trim: true },
     passwordHash: { type: String, required: true },
     role: { type: String, default: 'user', immutable: true },
@@ -28,6 +30,11 @@ const userSchema = new Schema(
     // Forgot-password: a hashed one-time code, not the code itself, same as a real password.
     resetCodeHash: { type: String },
     resetCodeExpiresAt: { type: Date },
+    resetCodeSentAt: { type: Date },
+    resetAttempts: { type: Number, default: 0 },
+    // Issued once the code is verified; only it lets the new password be set (step 2 of 2).
+    resetTokenHash: { type: String },
+    resetTokenExpiresAt: { type: Date },
   },
   { timestamps: { createdAt: 'joinedAt', updatedAt: 'updatedAt' } },
 );

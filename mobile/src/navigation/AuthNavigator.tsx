@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ForgotPasswordScreen } from '@/screens/auth/ForgotPasswordScreen';
+import { LegalScreen } from '@/screens/common/LegalScreen';
 import { RolePickerScreen } from '@/screens/auth/RolePickerScreen';
 import { ShelterLoginScreen } from '@/screens/shelter/LoginScreen';
 import { ShelterRegisterScreen } from '@/screens/shelter/RegisterScreen';
@@ -18,6 +19,13 @@ export function AuthNavigator() {
       <Stack.Screen name="UserLogin" component={UserLoginScreen} options={{ title: 'Sign in' }} />
       <Stack.Screen name="UserRegister" component={UserRegisterScreen} options={{ title: 'Create Account' }} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Reset password' }} />
+      <Stack.Screen
+        name="Legal"
+        component={LegalScreen}
+        options={({ route }) => ({
+          title: (route.params as { doc?: string } | undefined)?.doc === 'privacy' ? 'Privacy Policy' : 'Terms of Use',
+        })}
+      />
     </Stack.Navigator>
   );
 }

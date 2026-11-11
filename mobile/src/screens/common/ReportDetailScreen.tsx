@@ -1,4 +1,5 @@
-import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -16,6 +17,7 @@ import { MapCanvas } from '@/components/map/MapCanvas';
 import { describeAnimal } from '@/components/domain';
 import { useAuth } from '@/context/AuthContext';
 import { confirmAsync } from '@/services/confirm';
+import { exportReportPdf } from '@/services/reportPdf';
 
 /**
  * Everything about one report on a single page - what tapping a notification opens, instead of
@@ -27,6 +29,7 @@ export function ReportDetailScreen({ route, navigation }: NativeStackScreenProps
   const { role } = useAuth();
   const { reportById, currentUser, currentShelter, caseForReport, shelterById, openCase } = useApp();
   const report = reportId ? reportById(reportId) : undefined;
+  const [exporting, setExporting] = useState(false);
 
   if (!report) {
     return (
@@ -61,6 +64,17 @@ export function ReportDetailScreen({ route, navigation }: NativeStackScreenProps
     ['Sex', report.sex !== 'unknown' ? report.sex : undefined],
     ['Distinct marks', report.distinctMarks],
   ].filter((row): row is [string, string] => Boolean(row[1]));
+
+  const exportPdf = async () => {
+    setExporting(true);
+    try {
+      await exportReportPdf(report, { caseStatus: animalCase?.status, caseShelterName: caseShelter?.name });
+    } catch (e) {
+      Alert.alert('Could not export the PDF', e instanceof Error ? e.message : 'Try again in a moment.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <Screen>
@@ -200,6 +214,14 @@ export function ReportDetailScreen({ route, navigation }: NativeStackScreenProps
           />
         ) : null
       ) : null}
+
+      <Button
+        label="Export as PDF"
+        icon="document-outline"
+        variant="secondary"
+        loading={exporting}
+        onPress={() => void exportPdf()}
+      />
     </Screen>
   );
 }

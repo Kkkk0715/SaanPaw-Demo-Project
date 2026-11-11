@@ -61,6 +61,7 @@ export function serializeUser(doc: any) {
     barangay: doc.barangay,
     location: geoPointToLatLng(doc.homeLocation),
     alertRadiusMeters: doc.alertRadiusMeters,
+    birthDate: doc.birthDate ?? undefined,
     joinedAt: doc.joinedAt?.toISOString?.(),
     flaggedReportCount: doc.flaggedReportCount,
     isBanned: doc.isBanned,

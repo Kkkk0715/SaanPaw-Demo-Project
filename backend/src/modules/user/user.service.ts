@@ -25,6 +25,7 @@ import { logger } from '../../utils/logger';
 import { barangayForPin } from '../../services/pinBarangay.service';
 import { withLiveOccupancy } from '../../services/occupancy.service';
 import { notify } from '../../services/pushNotification.service';
+import { emailVerificationService } from '../../services/emailVerification.service';
 import {
   combineName,
   serializeUser,
@@ -91,12 +92,16 @@ export const userService = {
     email: string;
     phone?: string;
     password: string;
+    birthDate: string;
     barangay: string;
     alertRadiusMeters: number;
     location: { latitude: number; longitude: number };
+    emailVerificationToken?: string;
   }) {
     const exists = await User.findOne({ email: input.email.toLowerCase().trim() });
     if (exists) throw ApiError.conflict('Email already registered');
+    // The address must be real and theirs: they entered the code we emailed to it.
+    await emailVerificationService.consumeToken(input.email, 'register_user', input.emailVerificationToken);
 
     const user = await User.create({
       firstName: input.firstName,
@@ -104,6 +109,7 @@ export const userService = {
       lastName: input.lastName,
       email: input.email.toLowerCase().trim(),
       phone: input.phone,
+      birthDate: input.birthDate,
       passwordHash: await authService.hashPassword(input.password),
       barangay: input.barangay,
       alertRadiusMeters: input.alertRadiusMeters,

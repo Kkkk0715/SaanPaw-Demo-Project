@@ -21,6 +21,7 @@ import {
   Card,
   Caption,
   Choice,
+  ErrorText,
   Field,
   Row,
   Screen,
@@ -362,7 +363,7 @@ export function ReportForm({
             </>
           ) : null}
         </ScrollView>
-        {errors.images ? <Text style={styles.error}>{errors.images}</Text> : null}
+        <ErrorText error={errors.images} />
       </Card>
 
       <SectionHeader title="Animal details" />
@@ -474,7 +475,7 @@ export function ReportForm({
               setMapFocus({ center: found.center, key: Date.now() });
             }
           }}
-          hint={errors.barangay}
+          error={errors.barangay}
         />
         <Caption>Tap the map to move the pin to the exact spot.</Caption>
         <MapCanvas

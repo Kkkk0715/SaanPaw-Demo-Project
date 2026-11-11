@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MIN_USER_AGE, ageFromBirthDate } from './age';
 import { ANIMAL_CASE_STATUSES, ANIMAL_TYPES, SHELTER_ANIMAL_STATUSES } from '../config/constants';
 
 /**
@@ -72,6 +73,19 @@ const personName = (label: string) =>
   text(60).min(1, `Enter ${label}`).regex(LETTERS_ONLY, `${label[0].toUpperCase()}${label.slice(1)} can only contain letters`);
 const optionalPersonName = z.union([z.literal(''), text(60).regex(LETTERS_ONLY, 'Names can only contain letters')]).optional();
 
+/** "YYYY-MM-DD", a real date, and the person is 18 or older today (Philippine date). */
+const adultBirthDate = z
+  .string({ required_error: 'Enter your birthday', invalid_type_error: 'Enter your birthday' })
+  .trim()
+  .min(1, 'Enter your birthday')
+  .superRefine((value, ctx) => {
+    const age = ageFromBirthDate(value);
+    if (age === null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a valid birthday' });
+    else if (age < MIN_USER_AGE)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `You must be at least ${MIN_USER_AGE} years old to register` });
+    else if (age > 120) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a valid birthday' });
+  });
+
 const objectIdList = (max: number) => z.array(z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id')).max(max);
 
 export const registerUserSchema = z.object({
@@ -81,9 +95,13 @@ export const registerUserSchema = z.object({
   email: emailAddress,
   phone: phMobile,
   password: strongPassword,
+  /** "YYYY-MM-DD"; registration is for adults only (18+). */
+  birthDate: adultBirthDate,
   barangay: text(100).min(1, 'Select your barangay'),
   alertRadiusMeters: z.coerce.number().positive().max(50_000).default(3000),
   location: latLngSchema,
+  /** From POST /auth/email-code/verify: proves the email address is real and theirs. */
+  emailVerificationToken: z.string().trim().max(200).optional(),
 });
 
 export const registerShelterSchema = z.object({
@@ -100,6 +118,8 @@ export const registerShelterSchema = z.object({
   capacity: z.coerce.number().int().min(0).max(100_000).optional(),
   /** Proof of credentials uploaded first via POST /shelter/register/proof (documents, photos). */
   proofDocumentIds: objectIdList(10).min(1, 'Attach at least one proof document (permit, registration, ID or photos)'),
+  /** From POST /auth/email-code/verify: proves the email address is real and theirs. */
+  emailVerificationToken: z.string().trim().max(200).optional(),
 });
 
 export const reportSchema = z.object({
@@ -169,12 +189,31 @@ export const forgotPasswordSchema = z.object({
   email: z.string().trim().toLowerCase().email('Enter a valid email address'),
 });
 
-export const resetPasswordSchema = z.object({
+const sixDigitCode = z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code');
+
+export const verifyResetCodeSchema = z.object({
   role: resettableRole,
   email: z.string().trim().toLowerCase().email('Enter a valid email address'),
-  code: z.string().trim().length(6, 'Enter the 6-digit code'),
-  newPassword: strongPassword,
+  code: sixDigitCode,
 });
+
+/** Step 3 of the reset: the token from a verified code (or, from older app builds, the code itself). */
+export const resetPasswordSchema = z
+  .object({
+    role: resettableRole,
+    email: z.string().trim().toLowerCase().email('Enter a valid email address'),
+    resetToken: z.string().trim().regex(/^[a-f0-9]{64}$/).optional(),
+    code: sixDigitCode.optional(),
+    newPassword: strongPassword,
+  })
+  .refine((v) => Boolean(v.resetToken || v.code), { message: 'Verify the code from your email first', path: ['code'] });
+
+export const emailCodeSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Enter a valid email address'),
+  purpose: z.enum(['register_user', 'register_shelter']),
+});
+
+export const verifyEmailCodeSchema = emailCodeSchema.extend({ code: sixDigitCode });
 
 const caseStatus = z.enum(ANIMAL_CASE_STATUSES);
 /** A shelter animal has no "recovered" status - it is already in the shelter's care. */

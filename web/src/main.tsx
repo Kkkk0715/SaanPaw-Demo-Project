@@ -14,6 +14,8 @@ import { ShelterApprovalsPage } from '@/pages/ShelterApprovals';
 import { ManageSheltersPage } from '@/pages/ManageShelters';
 import { ReportMonitoringPage } from '@/pages/ReportMonitoring';
 import { SystemManagementPage } from '@/pages/SystemManagement';
+import { LegalPage } from '@/pages/Legal';
+import { PRIVACY_POLICY, TERMS_OF_USE } from '@saanpaw/shared';
 import { applyTokens } from '@/tokens';
 import './styles.css';
 
@@ -29,6 +31,20 @@ function StoreProvider({ children }: { children: ReactNode }) {
   return <AppStoreProvider session={session}>{children}</AppStoreProvider>;
 }
 
+// Readable whether or not someone is signed in.
+const legalRoutes = [
+  <Route
+    key="terms"
+    path="/terms"
+    element={<LegalPage doc={TERMS_OF_USE} other={{ to: '/privacy', label: 'Privacy Policy' }} />}
+  />,
+  <Route
+    key="privacy"
+    path="/privacy"
+    element={<LegalPage doc={PRIVACY_POLICY} other={{ to: '/terms', label: 'Terms of Use' }} />}
+  />,
+];
+
 function Console() {
   const { signedIn, signOut } = useAuth();
   const { sync } = useApp();
@@ -36,6 +52,7 @@ function Console() {
     return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {legalRoutes}
         <Route path="*" element={<LandingPage />} />
       </Routes>
     );
@@ -77,6 +94,7 @@ function Console() {
         <Route path="/shelters/manage" element={<ManageSheltersPage />} />
         <Route path="/reports" element={<ReportMonitoringPage />} />
         <Route path="/system" element={<SystemManagementPage />} />
+        {legalRoutes}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

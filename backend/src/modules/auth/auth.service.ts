@@ -9,9 +9,15 @@ import { DeveloperAccount } from '../../models/DeveloperAccount';
 import { sendEmail, passwordResetEmail } from '../../services/email.service';
 import { getSystemConfig } from '../../services/systemConfig.service';
 import { ApiError } from '../../utils/ApiError';
+import { OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN_MS, OTP_TOKEN_TTL_MS, OTP_TTL_MS, otpSent, type OtpSent } from '../../services/otp';
 
-const RESET_CODE_TTL_MS = 15 * 60_000;
 const invalidResetCode = () => ApiError.badRequest('That code is invalid or has expired. Request a new one.');
+const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
+
+/** The account a password reset is for: a user by email, or a shelter by its login email. */
+async function findResettable(role: 'user' | 'shelter_admin', email: string) {
+  return role === 'user' ? User.findOne({ email }) : Shelter.findOne({ adminEmail: email });
+}
 
 function sign(payload: Express.UserPayload): string {
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as any);
@@ -66,56 +72,106 @@ export const authService = {
   },
 
   /**
-   * Always resolves the same way whether or not the email is registered, so the response can
-   * never be used to find out which emails have accounts. Emails a 6-digit code when it is.
+   * Forgot password, step 1: emails a 6-digit code (valid 10 minutes) when the email has an
+   * account. Always answers the same way, so it can never be used to find out which emails have
+   * accounts. The answer carries the expiry and resend wait the app counts down.
    */
-  async forgotPassword(role: 'user' | 'shelter_admin', email: string) {
+  async forgotPassword(role: 'user' | 'shelter_admin', email: string): Promise<OtpSent> {
     const normalized = email.toLowerCase().trim();
-    const code = crypto.randomInt(100_000, 1_000_000).toString();
-    const resetCodeHash = await bcrypt.hash(code, 10);
-    const resetCodeExpiresAt = new Date(Date.now() + RESET_CODE_TTL_MS);
+    const account = await findResettable(role, normalized);
+    const now = new Date();
+    if (!account) return otpSent(new Date(now.getTime() + OTP_TTL_MS), now);
 
-    if (role === 'user') {
-      const user = await User.findOne({ email: normalized });
-      if (!user) return;
-      user.resetCodeHash = resetCodeHash;
-      user.resetCodeExpiresAt = resetCodeExpiresAt;
-      await user.save();
-    } else {
-      const shelter = await Shelter.findOne({ adminEmail: normalized });
-      if (!shelter) return;
-      shelter.resetCodeHash = resetCodeHash;
-      shelter.resetCodeExpiresAt = resetCodeExpiresAt;
-      await shelter.save();
+    const lastSent = account.resetCodeSentAt as Date | undefined;
+    if (lastSent && account.resetCodeExpiresAt && lastSent.getTime() + OTP_RESEND_COOLDOWN_MS > now.getTime()) {
+      // Asked again within a minute: keep the code already sent (and its timer).
+      return otpSent(account.resetCodeExpiresAt as Date, lastSent);
     }
-    await sendEmail(passwordResetEmail({ email: normalized, code }));
+
+    const code = crypto.randomInt(100_000, 1_000_000).toString();
+    const expiresAt = new Date(now.getTime() + OTP_TTL_MS);
+    account.resetCodeHash = await bcrypt.hash(code, 10);
+    account.resetCodeExpiresAt = expiresAt;
+    account.resetCodeSentAt = now;
+    account.resetAttempts = 0;
+    account.resetTokenHash = undefined;
+    account.resetTokenExpiresAt = undefined;
+    await account.save();
+    await sendEmail(passwordResetEmail({ email: normalized, code, minutes: OTP_TTL_MS / 60_000 }));
+    return otpSent(expiresAt, now);
   },
 
-  async resetPassword(role: 'user' | 'shelter_admin', email: string, code: string, newPassword: string) {
-    const normalized = email.toLowerCase().trim();
-    const newHash = await bcrypt.hash(newPassword, 10);
+  /**
+   * Forgot password, step 2: checks the code only. A right code returns a reset token; the new
+   * password screen is shown only after this, and only that token can set the password.
+   */
+  async verifyResetCode(role: 'user' | 'shelter_admin', email: string, code: string): Promise<{ resetToken: string }> {
+    const account = await findResettable(role, email.toLowerCase().trim());
+    if (!account?.resetCodeHash || !account.resetCodeExpiresAt) throw invalidResetCode();
+    if ((account.resetCodeExpiresAt as Date) < new Date()) {
+      throw ApiError.badRequest('That code has expired. Request a new one.');
+    }
+    if ((account.resetAttempts ?? 0) >= OTP_MAX_ATTEMPTS) {
+      throw new ApiError(429, 'Too many wrong tries. Request a new code.');
+    }
+    if (!(await bcrypt.compare(code, account.resetCodeHash as string))) {
+      account.resetAttempts = (account.resetAttempts ?? 0) + 1;
+      await account.save();
+      const left = OTP_MAX_ATTEMPTS - (account.resetAttempts as number);
+      throw ApiError.badRequest(
+        left > 0 ? `Wrong code. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Too many wrong tries. Request a new code.',
+      );
+    }
+    const token = crypto.randomBytes(32).toString('hex');
+    account.resetCodeHash = undefined;
+    account.resetCodeExpiresAt = undefined;
+    account.resetTokenHash = sha256(token);
+    account.resetTokenExpiresAt = new Date(Date.now() + OTP_TOKEN_TTL_MS);
+    await account.save();
+    return { resetToken: token };
+  },
 
-    if (role === 'user') {
-      const user = await User.findOne({ email: normalized });
-      if (!user?.resetCodeHash || !user.resetCodeExpiresAt || user.resetCodeExpiresAt < new Date()) {
+  /**
+   * Forgot password, step 3: sets the new password with the token from a verified code. (Older
+   * app builds still send the code itself here; that keeps working for them.)
+   */
+  async resetPassword(
+    role: 'user' | 'shelter_admin',
+    email: string,
+    proof: { resetToken?: string; code?: string },
+    newPassword: string,
+  ) {
+    const account = await findResettable(role, email.toLowerCase().trim());
+    if (!account) throw invalidResetCode();
+
+    if (proof.resetToken) {
+      if (
+        !account.resetTokenHash ||
+        !account.resetTokenExpiresAt ||
+        (account.resetTokenExpiresAt as Date) < new Date() ||
+        account.resetTokenHash !== sha256(proof.resetToken)
+      ) {
+        throw ApiError.badRequest('This reset has expired. Start again and request a new code.');
+      }
+    } else {
+      if (!account.resetCodeHash || !account.resetCodeExpiresAt || (account.resetCodeExpiresAt as Date) < new Date()) {
         throw invalidResetCode();
       }
-      if (!(await bcrypt.compare(code, user.resetCodeHash))) throw invalidResetCode();
-      user.passwordHash = newHash;
-      user.resetCodeHash = undefined;
-      user.resetCodeExpiresAt = undefined;
-      await user.save();
-      return;
+      if ((account.resetAttempts ?? 0) >= OTP_MAX_ATTEMPTS || !(await bcrypt.compare(proof.code ?? '', account.resetCodeHash as string))) {
+        account.resetAttempts = (account.resetAttempts ?? 0) + 1;
+        await account.save();
+        throw invalidResetCode();
+      }
     }
 
-    const shelter = await Shelter.findOne({ adminEmail: normalized });
-    if (!shelter?.resetCodeHash || !shelter.resetCodeExpiresAt || shelter.resetCodeExpiresAt < new Date()) {
-      throw invalidResetCode();
-    }
-    if (!(await bcrypt.compare(code, shelter.resetCodeHash))) throw invalidResetCode();
-    shelter.adminPasswordHash = newHash;
-    shelter.resetCodeHash = undefined;
-    shelter.resetCodeExpiresAt = undefined;
-    await shelter.save();
+    const newHash = await bcrypt.hash(newPassword, 10);
+    if (role === 'user') (account as InstanceType<typeof User>).passwordHash = newHash;
+    else (account as InstanceType<typeof Shelter>).adminPasswordHash = newHash;
+    account.resetCodeHash = undefined;
+    account.resetCodeExpiresAt = undefined;
+    account.resetTokenHash = undefined;
+    account.resetTokenExpiresAt = undefined;
+    account.resetAttempts = 0;
+    await account.save();
   },
 };

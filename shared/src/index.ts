@@ -10,3 +10,5 @@ export * from './sjdmBoundary';
 export * from './store/AppStore';
 export * from './describe';
 export * from './api';
+export * from './legal';
+export * from './reportPdf';

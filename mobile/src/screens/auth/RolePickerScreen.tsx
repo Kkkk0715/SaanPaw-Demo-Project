@@ -96,6 +96,16 @@ export function RolePickerScreen({ navigation }: NativeStackScreenProps<any>) {
               </View>
             ))}
           </View>
+
+          <View style={styles.legal}>
+            <Text style={styles.legalLink} onPress={() => navigation.navigate('Legal', { doc: 'terms' })}>
+              Terms of Use
+            </Text>
+            <Text style={styles.legalDot}>{'\u00B7'}</Text>
+            <Text style={styles.legalLink} onPress={() => navigation.navigate('Legal', { doc: 'privacy' })}>
+              Privacy Policy
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -197,4 +207,20 @@ const styles = StyleSheet.create({
   notes: { gap: theme.spacing(1), marginTop: theme.spacing(1.5), paddingHorizontal: theme.spacing(0.5) },
   note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   noteText: { flex: 1, ...theme.type.caption, fontSize: 11.5, color: theme.colors.muted },
+
+  legal: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: theme.spacing(2),
+  },
+  legalLink: {
+    ...theme.type.caption,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    textDecorationLine: 'underline',
+    paddingVertical: 6,
+  },
+  legalDot: { ...theme.type.caption, color: theme.colors.muted },
 });

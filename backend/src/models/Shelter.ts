@@ -35,6 +35,11 @@ const shelterSchema = new Schema(
     // Forgot-password: a hashed one-time code, not the code itself, same as a real password.
     resetCodeHash: { type: String },
     resetCodeExpiresAt: { type: Date },
+    resetCodeSentAt: { type: Date },
+    resetAttempts: { type: Number, default: 0 },
+    // Issued once the code is verified; only it lets the new password be set (step 2 of 2).
+    resetTokenHash: { type: String },
+    resetTokenExpiresAt: { type: Date },
     expoPushToken: { type: String },
     /** Proof of credentials submitted with the application, reviewed by the Developer. */
     proofDocumentIds: [{ type: Schema.Types.ObjectId, ref: 'ShelterProofDocument' }],

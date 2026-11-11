@@ -1,4 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -30,6 +40,105 @@ export const COLUMN = 520;
 
 /* ------------------------------------------------------------------ layout */
 
+/* ------------------------------------------------------------- scroll to the first error */
+
+type ErrorTarget = { ref: { current: View | null }; hasError: boolean };
+interface FormScrollApi {
+  register(target: ErrorTarget): () => void;
+  /** Scrolls to the topmost field (or error banner) currently showing an error, if any. */
+  revealFirstError(): void;
+}
+const FormScrollContext = createContext<FormScrollApi | null>(null);
+
+/**
+ * Powers "take me to what's wrong": every field and error banner inside a scrolling screen, sheet
+ * or form registers here; when an error appears - or a submit button is pressed while one shows -
+ * the scroll view moves to the topmost one, so a missing input far up the form is never missed.
+ * Positions are measured against a marker at the top of the scroll content, so it works no matter
+ * how deep in cards the field sits.
+ */
+function useFormScroll() {
+  const scrollRef = useRef<ScrollView>(null);
+  const topRef = useRef<View>(null);
+  const targets = useRef(new Set<ErrorTarget>());
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const api = useMemo<FormScrollApi>(
+    () => ({
+      register(target) {
+        targets.current.add(target);
+        return () => {
+          targets.current.delete(target);
+        };
+      },
+      revealFirstError() {
+        if (timer.current) clearTimeout(timer.current);
+        // After the render that shows the new errors, so they can be measured.
+        timer.current = setTimeout(() => {
+          const top = topRef.current;
+          const erroring = [...targets.current].filter((t) => t.hasError && t.ref.current);
+          if (!top || !erroring.length) return;
+          top.measureInWindow((_x, topY) => {
+            let best = Infinity;
+            let pending = erroring.length;
+            erroring.forEach((t) =>
+              t.ref.current!.measureInWindow((_a, y) => {
+                if (Number.isFinite(y)) best = Math.min(best, y);
+                pending -= 1;
+                if (pending === 0 && Number.isFinite(best)) {
+                  scrollRef.current?.scrollTo({ y: Math.max(0, best - topY - 24), animated: true });
+                }
+              }),
+            );
+          });
+        }, 80);
+      },
+    }),
+    [],
+  );
+  return { scrollRef, topRef, api };
+}
+
+/**
+ * Marks a field or message as an error target: returns the ref to put on its outer View. The
+ * screen scrolls to it when the error first shows or changes.
+ */
+export function useErrorAnchor(error: unknown) {
+  const ctx = useContext(FormScrollContext);
+  const ref = useRef<View>(null);
+  const hasError = Boolean(error);
+  const target = useRef<ErrorTarget>({ ref, hasError });
+  target.current.hasError = hasError;
+  useEffect(() => ctx?.register(target.current), [ctx]);
+  useEffect(() => {
+    if (hasError) ctx?.revealFirstError();
+  }, [hasError, error, ctx]);
+  return ref;
+}
+
+/** A red error line for things that are not a Field (a photo picker, a list) - scrolled to like one. */
+export function ErrorText({ error }: { error?: string | null }) {
+  const anchor = useErrorAnchor(error);
+  if (!error) return null;
+  return (
+    <View ref={anchor} collapsable={false}>
+      <Text style={styles.fieldError}>{error}</Text>
+    </View>
+  );
+}
+
+/** A ScrollView with scroll-to-the-first-error built in, for screens that lay out their own scroller. */
+export function FormScrollView({ children, ...props }: ComponentProps<typeof ScrollView>) {
+  const { scrollRef, topRef, api } = useFormScroll();
+  return (
+    <FormScrollContext.Provider value={api}>
+      <ScrollView ref={scrollRef} {...props}>
+        <View ref={topRef} collapsable={false} />
+        {children}
+      </ScrollView>
+    </FormScrollContext.Provider>
+  );
+}
+
 /**
  * Lets something inside a scrolling screen (a map) stop the page from scrolling while a finger is
  * on it, so dragging the map pans the map instead of moving the whole page.
@@ -50,23 +159,27 @@ export function Screen({
   const bottomInset = useBottomInset();
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const lockScroll = useCallback((locked: boolean) => setScrollEnabled(!locked), []);
+  const form = useFormScroll();
   const body = [
     padded ? styles.screenBodyPadded : styles.screenBody,
     { paddingBottom: theme.spacing(4) + bottomInset },
   ];
   return (
     <ScrollLockContext.Provider value={lockScroll}>
+    <FormScrollContext.Provider value={form.api}>
     <KeyboardAvoidingView
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {scroll ? (
         <ScrollView
+          ref={form.scrollRef}
           scrollEnabled={scrollEnabled}
           contentContainerStyle={body}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <View ref={form.topRef} collapsable={false} />
           {children}
         </ScrollView>
       ) : (
@@ -76,6 +189,7 @@ export function Screen({
         <View style={[styles.screenFooter, { paddingBottom: theme.spacing(2) + bottomInset }]}>{footer}</View>
       ) : null}
     </KeyboardAvoidingView>
+    </FormScrollContext.Provider>
     </ScrollLockContext.Provider>
   );
 }
@@ -208,11 +322,18 @@ export function Button({
       : { bg: color, fg: theme.colors.onPrimary, border: color }
     : base;
   const isOff = disabled || loading;
+  const formScroll = useContext(FormScrollContext);
+  // A filled (submit-style) button: if the press leaves errors showing - even ones already shown
+  // before - take the person to the first of them.
+  const revealsErrors = variant !== 'secondary' && variant !== 'ghost';
   return (
     <Pressable
       accessibilityRole="button"
       disabled={isOff}
-      onPress={onPress}
+      onPress={() => {
+        onPress?.();
+        if (revealsErrors) formScroll?.revealFirstError();
+      }}
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: v.bg, borderColor: v.border },
@@ -303,10 +424,11 @@ export function Field({
   maxLength?: number;
 }) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
+  const anchor = useErrorAnchor(error);
   const accept = (text: string) =>
     onChangeText(only === 'digits' ? digitsOnly(text) : only === 'letters' ? lettersOnly(text) : text);
   return (
-    <View style={styles.field}>
+    <View style={styles.field} ref={anchor} collapsable={false}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View
         style={[
@@ -364,8 +486,9 @@ export function PhoneField({
   hint?: string;
 }) {
   const local = value.startsWith('+639') ? `0${value.slice(3)}` : '';
+  const anchor = useErrorAnchor(error);
   return (
-    <View style={styles.field}>
+    <View style={styles.field} ref={anchor} collapsable={false}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={[styles.inputWrap, Boolean(error) && styles.inputWrapError]}>
         <Ionicons name="call-outline" size={17} color={theme.colors.muted} />
@@ -482,6 +605,7 @@ export function Select({
   onChange,
   placeholder = 'Select...',
   hint,
+  error,
   icon = 'location-outline',
 }: {
   label: string;
@@ -490,20 +614,27 @@ export function Select({
   onChange: (v: string) => void;
   placeholder?: string;
   hint?: string;
+  /** Shown in red, outlines the box, and is scrolled to on submit. */
+  error?: string;
   icon?: IconName;
 }) {
   const [open, setOpen] = useState(false);
+  const anchor = useErrorAnchor(error);
   return (
-    <View style={styles.field}>
+    <View style={styles.field} ref={anchor} collapsable={false}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <Pressable style={styles.inputWrap} onPress={() => setOpen(true)}>
+      <Pressable style={[styles.inputWrap, Boolean(error) && styles.inputWrapError]} onPress={() => setOpen(true)}>
         <Ionicons name={icon} size={17} color={theme.colors.muted} />
         <Text style={[styles.input, !value && { color: theme.colors.muted }]}>
           {value ?? placeholder}
         </Text>
         <Ionicons name="chevron-down" size={17} color={theme.colors.muted} />
       </Pressable>
-      {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
+      {error ? (
+        <Text style={styles.fieldError}>{error}</Text>
+      ) : hint ? (
+        <Text style={styles.fieldHint}>{hint}</Text>
+      ) : null}
 
       {/* No scroll area of its own: the Sheet already scrolls, and two nested vertical scrollers
           fight over the gesture on Android. */}
@@ -566,7 +697,9 @@ export function Sheet({
 function SheetBody({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  const form = useFormScroll();
   return (
+    <FormScrollContext.Provider value={form.api}>
     <KeyboardAvoidingView style={styles.sheetRoot} behavior="padding">
       <Pressable style={styles.sheetBackdrop} onPress={onClose} />
       {/* Capped height + its own scroll: a tall form (add animal, edit profile) would otherwise
@@ -579,14 +712,17 @@ function SheetBody({ title, onClose, children }: { title: string; onClose: () =>
           <IconButton icon="close" onPress={onClose} />
         </View>
         <ScrollView
+          ref={form.scrollRef}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ gap: theme.spacing(1) }}
         >
+          <View ref={form.topRef} collapsable={false} />
           {children}
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
+    </FormScrollContext.Provider>
   );
 }
 
@@ -835,8 +971,10 @@ export function Banner({
     danger: { bg: theme.colors.dangerSoft, fg: theme.colors.danger },
   } as const;
   const t = tones[tone];
+  // A red banner is an error the person must see (e.g. "could not create account" at the top).
+  const anchor = useErrorAnchor(tone === 'danger' ? `${title}|${message}` : null);
   return (
-    <View style={[styles.banner, { backgroundColor: t.bg }]}>
+    <View style={[styles.banner, { backgroundColor: t.bg }]} ref={anchor} collapsable={false}>
       <Ionicons name={icon} size={19} color={t.fg} />
       <View style={{ flex: 1 }}>
         <Text style={[styles.bannerTitle, { color: t.fg }]}>{title}</Text>

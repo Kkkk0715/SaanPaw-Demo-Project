@@ -6,6 +6,7 @@ import { LostPetReport } from '../../models/LostPetReport';
 import { FoundAnimalReport } from '../../models/FoundAnimalReport';
 import { MatchSuggestion } from '../../models/MatchSuggestion';
 import { withLiveOccupancy } from '../../services/occupancy.service';
+import { emailVerificationService } from '../../services/emailVerification.service';
 import { Notification } from '../../models/Notification';
 import { ShelterProofDocument } from '../../models/ShelterProofDocument';
 import { deleteShelterAnimalCascade } from '../../services/cascadeDelete.service';
@@ -189,6 +190,7 @@ export const shelterService = {
     permitNumber?: string;
     capacity?: number;
     proofDocumentIds: string[];
+    emailVerificationToken?: string;
   }) {
     // One shelter account per email, the same rule as user sign-up. A rejected application does not
     // hold the email, so a shelter can fix its details and apply again.
@@ -209,6 +211,10 @@ export const shelterService = {
     if (!proofs.length) {
       throw ApiError.badRequest('Your proof documents expired or were not uploaded. Attach them again and resubmit.');
     }
+    // The approval and the sign-in details are emailed here, so the address must be real and
+    // theirs: they entered the code we sent to it. Checked last, so a fixable mistake above does
+    // not use up the verification.
+    if (email) await emailVerificationService.consumeToken(email, 'register_shelter', input.emailVerificationToken);
 
     const shelter = await Shelter.create({
       name: input.name,

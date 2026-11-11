@@ -207,6 +207,8 @@ export interface DeploymentInfo {
     restingKeys: number;
     lastSuccessAt?: string;
     lastError?: { at: string; status?: number; message: string };
+    /** What Google last said about each key that it refused (429 quota, 403, invalid key...). */
+    keyErrors?: { key: number; at: string; status: number; message: string; resting: boolean }[];
   };
 }
 
@@ -224,6 +226,8 @@ export interface AppUser {
   location: LatLng;
   /** Scope: user registration "select their radius to receive notifications". */
   alertRadiusMeters: number;
+  /** "YYYY-MM-DD". Accounts made before the 18+ check have none. */
+  birthDate?: string;
   joinedAt: string;
   /** Running count used by the developer module's ban decision. */
   flaggedReportCount: number;

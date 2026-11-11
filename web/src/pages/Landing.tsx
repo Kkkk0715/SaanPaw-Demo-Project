@@ -221,7 +221,12 @@ export function LandingPage() {
       </section>
 
       <footer className="landing-footer">
-        SaanPaw &middot; Capstone project, BS Information Technology, STI San Jose Del Monte
+        <div>SaanPaw &middot; Capstone project, BS Information Technology, STI San Jose Del Monte</div>
+        <div className="landing-legal">
+          <Link to="/terms">Terms of Use</Link>
+          <span aria-hidden>&middot;</span>
+          <Link to="/privacy">Privacy Policy</Link>
+        </div>
       </footer>
     </div>
   );

@@ -7,6 +7,7 @@ import {
   type AnimalReport,
 } from '@saanpaw/shared';
 import { Badge, Button, Modal, useConfirm } from './ui';
+import { printReportPdf } from '../lib/printReport';
 
 /** Photo, badges and every field of one report - shared by this modal and the flag detail. */
 export function ReportDetails({ report }: { report: AnimalReport }) {
@@ -107,7 +108,7 @@ export function ReportDetails({ report }: { report: AnimalReport }) {
 
 /** Full detail for one report, opened by clicking a row in Recent reports / All reports. */
 export function ReportDetailModal({ report, onClose }: { report: AnimalReport; onClose: () => void }) {
-  const { deleteReport } = useApp();
+  const { deleteReport, caseForReport, shelterById } = useApp();
   const { ask, dialog } = useConfirm();
 
   const kind = reportKindStyle[report.kind];
@@ -131,9 +132,23 @@ export function ReportDetailModal({ report, onClose }: { report: AnimalReport; o
       sub={`${kind.label} report · ${report.barangay}`}
       onClose={onClose}
       actions={
-        <Button variant="danger" onClick={confirmDelete}>
-          Delete report
-        </Button>
+        <>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const animalCase = caseForReport(report.id);
+              printReportPdf(report, {
+                caseStatus: animalCase?.status,
+                caseShelterName: animalCase ? shelterById(animalCase.shelterId)?.name : undefined,
+              });
+            }}
+          >
+            Export PDF
+          </Button>
+          <Button variant="danger" onClick={confirmDelete}>
+            Delete report
+          </Button>
+        </>
       }
     >
       <ReportDetails report={report} />

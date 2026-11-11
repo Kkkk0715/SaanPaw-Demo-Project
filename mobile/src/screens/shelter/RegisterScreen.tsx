@@ -13,10 +13,12 @@ import {
   PhoneField,
   Select,
   useBottomInset,
+  FormScrollView,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
 import { ProofUploader, type ProofFile } from '@/components/domain/ProofUploader';
 import { apiRequest } from '@/services/api';
+import { EmailVerifier } from '@/components/domain/EmailVerifier';
 
 /** Any provider - Gmail, Yahoo, Outlook, an organisation's own domain. */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -43,6 +45,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [emailToken, setEmailToken] = useState<string | null>(null);
 
   const center =
     SJDM_BARANGAYS.find((b) => b.name === barangay)?.center ?? SJDM_BARANGAYS[4].center;
@@ -53,6 +56,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
     if (!name.trim()) next.name = 'Enter the shelter name.';
     if (!permit.trim()) next.permit = 'The city permit number is required for verification.';
     if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Enter a valid email address.';
+    else if (!emailToken) next.emailCode = 'Verify the email: send the code and enter it here.';
     if (contact.length !== 13) next.contact = 'Enter a complete contact number.';
     if (!street.trim()) next.street = 'Enter the street.';
     if (!Number(capacity)) next.capacity = 'Enter the animal capacity.';
@@ -80,6 +84,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           permitNumber: permit,
           capacity: Number(capacity),
           proofDocumentIds: proofs.filter((p) => p.status === 'done' && p.id).map((p) => p.id),
+          emailVerificationToken: emailToken,
         }),
       });
       setSubmitted(true);
@@ -114,7 +119,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
   }
 
   return (
-    <ScrollView
+    <FormScrollView
       style={{ backgroundColor: theme.colors.background }}
       contentContainerStyle={{ paddingBottom: theme.spacing(4) + bottomInset }}
       keyboardShouldPersistTaps="handled"
@@ -148,13 +153,20 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           hint="Any email provider works. Login credentials are emailed here once approved."
           error={errors.email}
         />
+        <EmailVerifier
+          email={email}
+          purpose="register_shelter"
+          token={emailToken}
+          onVerified={setEmailToken}
+          error={errors.emailCode}
+        />
         <PhoneField label="Contact number" value={contact} onChangeText={setContact} error={errors.contact} />
         <Field label="House/Unit No. (optional)" value={houseUnitNo} onChangeText={setHouseUnitNo} placeholder="e.g. Blk 5 Lot 12" icon="location-outline" />
         <Field label="Street" value={street} onChangeText={setStreet} placeholder="e.g. Sampaguita St." icon="location-outline" error={errors.street} />
         <Field label="Subdivision/Village (optional)" value={subdivision} onChangeText={setSubdivision} placeholder="e.g. Greenfields Subdivision" icon="location-outline" />
         <Field label="Animal capacity" value={capacity} onChangeText={setCapacity} placeholder="e.g. 30" only="digits" maxLength={5} icon="albums-outline" error={errors.capacity} />
 
-        <Select label="Barangay" value={barangay} options={SJDM_BARANGAY_NAMES} onChange={setBarangay} placeholder="Select the barangay" hint={errors.barangay} />
+        <Select label="Barangay" value={barangay} options={SJDM_BARANGAY_NAMES} onChange={setBarangay} placeholder="Select the barangay" error={errors.barangay} />
 
         <Choice
           label="Operating radius"
@@ -178,6 +190,6 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
         <Button label="Submit for verification" onPress={submit} loading={busy} variant="accent" icon="send-outline" />
         <Button label="Back to login" variant="ghost" onPress={() => navigation.goBack()} />
       </View>
-    </ScrollView>
+    </FormScrollView>
   );
 }

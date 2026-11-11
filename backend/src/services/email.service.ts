@@ -166,21 +166,39 @@ export function shelterCredentialsEmail(params: { shelterName: string; email: st
   return { to: params.email, subject: 'Your SaanPaw shelter account is approved', text, html };
 }
 
-export function passwordResetEmail(params: { email: string; code: string }): EmailMessage {
+export function passwordResetEmail(params: { email: string; code: string; minutes?: number }): EmailMessage {
+  const minutes = params.minutes ?? 10;
   const text =
     `Someone requested a password reset for this SaanPaw account.\n\n` +
     `Your code: ${params.code}\n\n` +
-    `Enter this in the app within 15 minutes to set a new password. If you didn't request this, ` +
+    `Enter this in the app within ${minutes} minutes to set a new password. If you didn't request this, ` +
     `you can ignore this email - your password hasn't changed.\n\n` +
     `- SaanPaw, San Jose Del Monte, Bulacan`;
   const html = `
     <p>Someone requested a password reset for this SaanPaw account.</p>
     <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">${params.code}</p>
-    <p>Enter this in the app within 15 minutes to set a new password. If you didn't request this,
+    <p>Enter this in the app within ${minutes} minutes to set a new password. If you didn't request this,
     you can ignore this email - your password hasn't changed.</p>
     <p>- SaanPaw, San Jose Del Monte, Bulacan</p>
   `;
   return { to: params.email, subject: 'Your SaanPaw password reset code', text, html };
+}
+
+/** The code that proves an email address is real before an account is created with it. */
+export function emailVerificationEmail(params: { email: string; code: string; minutes: number }): EmailMessage {
+  const text =
+    `Your SaanPaw verification code: ${params.code}\n\n` +
+    `Enter it in the app within ${params.minutes} minutes to confirm this email address and finish signing up. ` +
+    `If you didn't try to sign up, you can ignore this email.\n\n` +
+    `- SaanPaw, San Jose Del Monte, Bulacan`;
+  const html = `
+    <p>Your SaanPaw verification code:</p>
+    <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">${params.code}</p>
+    <p>Enter it in the app within ${params.minutes} minutes to confirm this email address and finish signing up.
+    If you didn't try to sign up, you can ignore this email.</p>
+    <p>- SaanPaw, San Jose Del Monte, Bulacan</p>
+  `;
+  return { to: params.email, subject: 'Your SaanPaw verification code', text, html };
 }
 
 const escapeHtml = (s: string) =>

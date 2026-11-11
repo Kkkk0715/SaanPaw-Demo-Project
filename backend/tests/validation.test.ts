@@ -7,6 +7,8 @@ import {
   registerUserSchema,
   reportSchema,
   resetPasswordSchema,
+  verifyResetCodeSchema,
+  verifyEmailCodeSchema,
   shelterAnimalPatchSchema,
   shelterProfileSchema,
 } from '../src/utils/validation';
@@ -55,9 +57,27 @@ describe('registerUserSchema', () => {
     email: 'ana@gmail.com',
     phone: '+639171234567',
     password: 'Passw0rd!',
+    birthDate: '1999-05-14',
     barangay: 'Muzon',
     location,
   };
+
+  it('requires a birthday of someone 18 or older', () => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const now = new Date(Date.now() + 8 * 3600_000);
+    const ymd = (yearsAgo: number, dayShift = 0) => {
+      const d = new Date(Date.UTC(now.getUTCFullYear() - yearsAgo, now.getUTCMonth(), now.getUTCDate() + dayShift));
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    };
+    expect(registerUserSchema.safeParse({ ...user, birthDate: ymd(18) }).success).toBe(true); // 18th birthday today
+    const almost = registerUserSchema.safeParse({ ...user, birthDate: ymd(18, 1) }); // turns 18 tomorrow
+    expect(almost.success).toBe(false);
+    expect(JSON.stringify(almost.error?.issues)).toContain('at least 18');
+    expect(registerUserSchema.safeParse({ ...user, birthDate: '2005-02-30' }).success).toBe(false);
+    expect(registerUserSchema.safeParse({ ...user, birthDate: ymd(-1) }).success).toBe(false);
+    const { birthDate: _omit, ...noBirthday } = user;
+    expect(registerUserSchema.safeParse(noBirthday).success).toBe(false);
+  });
 
   it('applies the default alert radius', () => {
     expect(registerUserSchema.parse(user).alertRadiusMeters).toBe(3000);
@@ -217,6 +237,31 @@ describe('resetPasswordSchema', () => {
     expect(
       resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', code: '123456', newPassword: 'Passw0rd!' }).code,
     ).toBe('123456');
+  });
+});
+
+describe('password reset steps', () => {
+  it('checks the code on its own, digits only', () => {
+    expect(verifyResetCodeSchema.parse({ role: 'user', email: 'A@B.com ', code: '123456' }).email).toBe('a@b.com');
+    expect(() => verifyResetCodeSchema.parse({ role: 'user', email: 'a@b.com', code: '12a456' })).toThrow();
+  });
+
+  it('sets the password with the token from a verified code, and refuses neither token nor code', () => {
+    const token = 'a'.repeat(64);
+    expect(
+      resetPasswordSchema.parse({ role: 'shelter_admin', email: 'a@b.com', resetToken: token, newPassword: 'Passw0rd!' })
+        .resetToken,
+    ).toBe(token);
+    expect(() => resetPasswordSchema.parse({ role: 'user', email: 'a@b.com', newPassword: 'Passw0rd!' })).toThrow();
+  });
+});
+
+describe('verifyEmailCodeSchema', () => {
+  it('needs a sign-up purpose and a 6-digit code', () => {
+    expect(verifyEmailCodeSchema.parse({ email: 'x@y.ph', purpose: 'register_user', code: '000111' }).purpose).toBe(
+      'register_user',
+    );
+    expect(() => verifyEmailCodeSchema.parse({ email: 'x@y.ph', purpose: 'developer', code: '000111' })).toThrow();
   });
 });
 

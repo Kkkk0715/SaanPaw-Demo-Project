@@ -230,34 +230,6 @@ export function SystemManagementPage() {
                     <dd>{deployment.nodeVersion}</dd>
                     <dt>Uptime</dt>
                     <dd>{formatUptime(deployment.uptimeSeconds)}</dd>
-                    {deployment.ai ? (
-                      <>
-                        <dt>AI photo screening</dt>
-                        <dd>
-                          {deployment.ai.configured
-                            ? `${deployment.ai.model} · ${deployment.ai.keys} ${deployment.ai.keys === 1 ? 'key' : 'keys'}${
-                                deployment.ai.restingKeys ? ` (${deployment.ai.restingKeys} resting after a rate limit)` : ''
-                              }`
-                            : 'Not set up: no GEMINI_API_KEY on the server'}
-                        </dd>
-                        {deployment.ai.lastSuccessAt ? (
-                          <>
-                            <dt>Last screened OK</dt>
-                            <dd>{new Date(deployment.ai.lastSuccessAt).toLocaleString()}</dd>
-                          </>
-                        ) : null}
-                        {deployment.ai.lastError ? (
-                          <>
-                            <dt>Last AI error</dt>
-                            <dd style={{ color: 'var(--danger, #b42318)' }}>
-                              {new Date(deployment.ai.lastError.at).toLocaleString()}
-                              {deployment.ai.lastError.status ? ` · HTTP ${deployment.ai.lastError.status}` : ''} ·{' '}
-                              {deployment.ai.lastError.message}
-                            </dd>
-                          </>
-                        ) : null}
-                      </>
-                    ) : null}
                     {deployment.emailQueue ? (
                       <>
                         <dt>Email outbox</dt>
