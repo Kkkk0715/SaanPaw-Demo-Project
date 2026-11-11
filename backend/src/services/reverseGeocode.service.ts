@@ -19,6 +19,8 @@ export interface ReverseGeocodeResult {
   houseNumber?: string;
   /** Neighbourhood / subdivision / barangay as OpenStreetMap names it. */
   area?: string;
+  /** City or town ("Marilao"), used to name a pin outside San Jose Del Monte. */
+  city?: string;
   /**
    * Every place name OSM gave for the pin, most specific first (subdivision, then barangay...).
    * The apps match these against the city's barangay list, so the report is tagged with the
@@ -56,7 +58,14 @@ export function formatNominatimAddress(a: NominatimAddress | undefined, fallback
   const places = [a.neighbourhood, a.residential, a.quarter, a.suburb, a.village, a.hamlet].filter(
     (p, i, all): p is string => Boolean(p) && all.indexOf(p) === i,
   );
-  return { address: parts.join(', '), street, houseNumber: a.house_number, area, ...(places.length ? { places } : {}) };
+  return {
+    address: parts.join(', '),
+    street,
+    houseNumber: a.house_number,
+    area,
+    ...(city ? { city } : {}),
+    ...(places.length ? { places } : {}),
+  };
 }
 
 const cache = new Map<string, ReverseGeocodeResult | null>();

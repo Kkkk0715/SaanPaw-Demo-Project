@@ -28,6 +28,9 @@ import {
   Select,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
+
+/** The place label for a pin outside the city (only allowed while the geo-fence is off). */
+const OUTSIDE_SJDM = 'Outside San Jose Del Monte';
 import { AnimalTypeAndBreed, MatchCard, describeAnimal } from '@/components/domain';
 
 /**
@@ -42,7 +45,13 @@ export function ReportForm({
   kind: ReportKind;
   navigation: { navigate: (screen: string, params?: object) => void; goBack: () => void };
 }) {
-  const { createReport, currentUser, reportById, shelterById, shelterAnimals, matchesForReport, lookupAddress } = useApp();
+  const { createReport, currentUser, reportById, shelterById, shelterAnimals, matchesForReport, lookupAddress, systemConfig } =
+    useApp();
+  // Follows the San Jose Del Monte geo-fence switch in System Management. On by default, so an
+  // app that could not load the setting still keeps reports inside the city.
+  const geoFenceOn = systemConfig?.geoFence ?? true;
+  /** The pin's place: its nearest barangay inside the city; outside it, the server names the town. */
+  const placeFor = (p: LatLng) => (isWithinSJDM(p.latitude, p.longitude) ? nearestBarangay(p).name : OUTSIDE_SJDM);
   const style = reportKindStyle[kind];
 
   const [images, setImages] = useState<string[]>([]);
@@ -76,7 +85,9 @@ export function ReportForm({
     { state: 'idle' | 'locating' | 'tagged' | 'denied' | 'outside' | 'unavailable'; message?: string }
   >({ state: 'idle' });
 
-  const outOfArea = !isWithinSJDM(pin.latitude, pin.longitude);
+  const pinOutside = !isWithinSJDM(pin.latitude, pin.longitude);
+  /** Only blocks submitting while the geo-fence is on. */
+  const outOfArea = geoFenceOn && pinOutside;
 
   /**
    * Auto-tags the report with the device's location when the form opens.
@@ -96,7 +107,7 @@ export function ReportForm({
         });
         return;
       }
-      if (!isWithinSJDM(position.latitude, position.longitude)) {
+      if (geoFenceOn && !isWithinSJDM(position.latitude, position.longitude)) {
         setGeo({
           state: 'outside',
           message:
@@ -105,7 +116,7 @@ export function ReportForm({
         return;
       }
       setPin(position);
-      setBarangay(nearestBarangay(position).name);
+      setBarangay(placeFor(position));
       setMapFocus({ center: position, key: Date.now() });
       setGeo({ state: 'tagged' });
     } catch {
@@ -124,7 +135,7 @@ export function ReportForm({
   // Whenever the pin moves, look up the street address for the new spot (after a short pause, so
   // tapping around the map doesn't fire a lookup per tap). The reporter can still edit it.
   useEffect(() => {
-    if (!isWithinSJDM(pin.latitude, pin.longitude)) {
+    if (geoFenceOn && !isWithinSJDM(pin.latitude, pin.longitude)) {
       setAddressLookup('none');
       return;
     }
@@ -475,8 +486,9 @@ export function ReportForm({
           focus={mapFocus}
           onPickLocation={(point) => {
             setPin(point);
-            // The label follows the pin: the barangay whose centre is nearest the spot.
-            setBarangay(nearestBarangay(point).name);
+            // The label follows the pin: the barangay whose centre is nearest the spot - never a
+            // city barangay for a spot outside the city (a pin in Marilao is not in Muzon West).
+            setBarangay(placeFor(point));
           }}
         />
         <Field
@@ -521,6 +533,13 @@ export function ReportForm({
             icon="warning"
             title="Outside the service area"
             message="SaanPaw only accepts reports inside San Jose Del Monte, Bulacan. Move the pin back inside the city."
+          />
+        ) : pinOutside ? (
+          <Banner
+            tone="warning"
+            icon="information-circle"
+            title="Outside San Jose Del Monte"
+            message="The city geo-fence is switched off, so this report is accepted. Its place is named from the map pin when you submit."
           />
         ) : null}
       </Card>

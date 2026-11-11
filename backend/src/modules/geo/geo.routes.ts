@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { isWithinServiceArea } from '../../config/serviceArea';
 import { reverseGeocode } from '../../services/reverseGeocode.service';
+import { getSystemConfig } from '../../services/systemConfig.service';
 import { roadRoute } from '../../services/routing.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/ApiError';
@@ -19,8 +20,9 @@ router.get(
     if (lat === undefined || lng === undefined || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
       throw ApiError.badRequest('lat and lng are required');
     }
-    // Only pins inside the service area are looked up: nothing outside SJDM can be reported anyway.
-    if (!isWithinServiceArea([lng, lat])) return res.json({ address: null });
+    // Pins outside the service area are only looked up while the geo-fence is off - otherwise they
+    // cannot be reported anyway.
+    if (!isWithinServiceArea([lng, lat]) && (await getSystemConfig()).geoFence) return res.json({ address: null });
     const result = await reverseGeocode(lat, lng);
     res.json(result ?? { address: null });
   }),
@@ -39,10 +41,10 @@ router.get(
     if ([fromLat, fromLng, toLat, toLng].some((n) => n === undefined || Math.abs(n) > 180)) {
       throw ApiError.badRequest('fromLat, fromLng, toLat and toLng are required');
     }
-    // Both ends are in the city (a shelter and a report), so nothing else is routed.
-    if (!isWithinServiceArea([fromLng!, fromLat!]) || !isWithinServiceArea([toLng!, toLat!])) {
-      return res.json({ path: null });
-    }
+    // Both ends are normally in the city (a shelter and a report). With the geo-fence off a report
+    // can be outside it, so it is routed too.
+    const outside = !isWithinServiceArea([fromLng!, fromLat!]) || !isWithinServiceArea([toLng!, toLat!]);
+    if (outside && (await getSystemConfig()).geoFence) return res.json({ path: null });
     const route = await roadRoute(fromLat!, fromLng!, toLat!, toLng!);
     res.json(route ?? { path: null });
   }),

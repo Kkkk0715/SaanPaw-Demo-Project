@@ -9,6 +9,7 @@ describe('formatNominatimAddress', () => {
       street: 'Quirino Highway',
       houseNumber: '12',
       area: 'Muzon',
+      city: 'San Jose del Monte',
       places: ['Muzon'],
     });
   });

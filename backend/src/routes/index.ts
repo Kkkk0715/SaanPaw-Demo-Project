@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { blockWritesDuringMaintenance } from '../middleware/maintenance';
+import { getSystemConfig } from '../services/systemConfig.service';
 import authRoutes from '../modules/auth/auth.routes';
 import developerRoutes from '../modules/developer/developer.routes';
 import geoRoutes from '../modules/geo/geo.routes';
@@ -14,6 +15,23 @@ const api = Router();
 api.get('/health', (_req, res) => {
   const database = mongoose.connection.readyState === 1;
   res.status(database ? 200 : 503).json({ status: database ? 'ok' : 'degraded', service: 'saanpaw-api', database });
+});
+/**
+ * The switches the apps follow themselves (the geo-fence on the report map, maintenance), so the
+ * mobile app obeys System Management instead of its own built-in rules. Read-only, no secrets.
+ */
+api.get('/config', async (_req, res, next) => {
+  try {
+    const c = await getSystemConfig();
+    res.json({
+      aiModeration: c.aiModeration,
+      smartAlerts: c.smartAlerts,
+      geoFence: c.geoFence,
+      maintenanceMode: c.maintenanceMode,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 api.use('/auth', authRoutes);
 api.use('/developer', developerRoutes);

@@ -2,6 +2,7 @@
   "expo": {
     "name": "SaanPaw",
     "slug": "saanpaw",
+    "owner": "dirkls-team",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "saanpaw",
@@ -53,7 +54,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "170eadca-851e-4182-9d49-aa74de863adf"
+        "projectId": "156fcd50-df37-4746-93a4-cb8af961d241"
       }
     }
   }

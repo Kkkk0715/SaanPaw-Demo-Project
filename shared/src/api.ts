@@ -254,7 +254,7 @@ const emptySnapshot = (selfId: string): Snapshot => ({
 
 export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
   if (s.role === 'user') {
-    const [me, stats, shelters, mine, open, notifications, inbox, cases] = await Promise.all([
+    const [me, stats, shelters, mine, open, notifications, inbox, cases, systemConfig] = await Promise.all([
       call<AppUser>(s, '/user/me'),
       call<DashboardStats>(s, '/user/dashboard'),
       call<Shelter[]>(s, '/user/shelters'),
@@ -263,6 +263,8 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
       call<NotificationItem[]>(s, '/user/notifications'),
       optional(call<ConversationsEnvelope>(s, '/user/conversations'), noConversations),
       optional(call<AnimalCase[]>(s, '/user/cases'), []),
+      // The switches set in System Management (geo-fence...), so the app follows them too.
+      optional(call<SystemConfig>(s, '/config'), null),
     ]);
 
     const reports = new Map<string, AnimalReport>();
@@ -284,11 +286,12 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
       cases,
       ...withConversationHosts(s.baseUrl, inbox),
       stats,
+      systemConfig,
     };
   }
 
   if (s.role === 'shelter_admin') {
-    const [me, dash, reports, animals, cases, notifications, inbox] = await Promise.all([
+    const [me, dash, reports, animals, cases, notifications, inbox, systemConfig] = await Promise.all([
 
       call<Shelter>(s, '/shelter/me'),
       call<{ activeReports: number; reunited: number; underRescue: number }>(s, '/shelter/dashboard'),
@@ -297,6 +300,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
       call<AnimalCase[]>(s, '/shelter/cases'),
       call<NotificationItem[]>(s, '/shelter/notifications'),
       optional(call<ConversationsEnvelope>(s, '/shelter/conversations'), noConversations),
+      optional(call<SystemConfig>(s, '/config'), null),
     ]);
     return {
       ...emptySnapshot(me.id),
@@ -311,6 +315,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
         reunitedThisMonth: dash.reunited,
         underRescue: dash.underRescue,
       },
+      systemConfig,
     };
   }
 
