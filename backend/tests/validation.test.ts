@@ -92,6 +92,7 @@ describe('registerUserSchema', () => {
   it.each([
     ['short', 'Sh0rt!'],
     ['no number', 'Password!'],
+    ['no capital letter', 'passw0rd!'],
     ['no special character', 'Password1'],
   ])('rejects a password with %s', (_label, password) => {
     expect(() => registerUserSchema.parse({ ...user, password })).toThrow();
@@ -102,7 +103,12 @@ describe('registerUserSchema', () => {
     expect(result.success).toBe(false);
     const messages = result.success ? [] : result.error.issues.map((i) => i.message);
     expect(messages).toEqual(
-      expect.arrayContaining(['Use at least 8 characters', 'Include at least 1 number', expect.stringMatching(/special/)]),
+      expect.arrayContaining([
+        'Use at least 8 characters',
+        'Include at least 1 capital letter (A-Z)',
+        'Include at least 1 number (0-9)',
+        expect.stringMatching(/special/),
+      ]),
     );
   });
 
@@ -209,6 +215,7 @@ describe('changePasswordSchema', () => {
     expect(() => changePasswordSchema.parse({ currentPassword: '', newPassword: 'Passw0rd!' })).toThrow();
     expect(() => changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'short' })).toThrow();
     expect(() => changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'longenough' })).toThrow();
+    expect(() => changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'passw0rd!' })).toThrow();
     expect(changePasswordSchema.parse({ currentPassword: 'old', newPassword: 'Passw0rd!' }).newPassword).toBe(
       'Passw0rd!',
     );

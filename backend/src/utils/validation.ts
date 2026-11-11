@@ -49,12 +49,13 @@ const optionalEmailAddress = z.union([z.literal(''), emailAddress]).optional();
 
 /**
  * Password policy for every password a person chooses (registration, reset, change):
- * at least 8 characters, at least one number, and at least one special character.
+ * at least 8 characters, a capital letter, a number, and a special character.
  * PASSWORD_RULES is exported so the apps can show the same checklist the server enforces.
  */
 export const PASSWORD_RULES = [
   { test: (pw: string) => pw.length >= 8, message: 'Use at least 8 characters' },
-  { test: (pw: string) => /\d/.test(pw), message: 'Include at least 1 number' },
+  { test: (pw: string) => /[A-Z]/.test(pw), message: 'Include at least 1 capital letter (A-Z)' },
+  { test: (pw: string) => /\d/.test(pw), message: 'Include at least 1 number (0-9)' },
   { test: (pw: string) => /[^A-Za-z0-9\s]/.test(pw), message: 'Include at least 1 special character (e.g. ! @ # $ %)' },
 ] as const;
 

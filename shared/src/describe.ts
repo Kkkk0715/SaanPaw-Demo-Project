@@ -41,7 +41,8 @@ export function humanizeStatus(status: string): string {
 /** The password rules the server enforces. Shown as a live checklist under every new-password field. */
 export const PASSWORD_RULES: { label: string; test: (pw: string) => boolean }[] = [
   { label: 'At least 8 characters', test: (pw) => pw.length >= 8 },
-  { label: 'At least 1 number', test: (pw) => /\d/.test(pw) },
+  { label: 'At least 1 capital letter (A-Z)', test: (pw) => /[A-Z]/.test(pw) },
+  { label: 'At least 1 number (0-9)', test: (pw) => /\d/.test(pw) },
   { label: 'At least 1 special character (e.g. ! @ # $ %)', test: (pw) => /[^A-Za-z0-9\s]/.test(pw) },
 ];
 

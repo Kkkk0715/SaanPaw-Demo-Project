@@ -48,14 +48,15 @@ export function BirthdayField({
     <View style={styles.wrap}>
       <Text style={styles.label}>Birthday</Text>
       <View style={styles.row}>
-        <View style={{ flex: 1.4 }}>
+        <View style={{ flex: 1.2 }}>
           <Select
             label="Month"
             value={month ? MONTHS[month - 1] : null}
+            display={month ? MONTHS[month - 1].slice(0, 3) : undefined}
             options={MONTHS}
             onChange={(v) => setMonth(MONTHS.indexOf(v) + 1)}
             placeholder="Month"
-            icon="calendar-outline"
+            icon={null}
           />
         </View>
         <View style={{ flex: 1 }}>
@@ -65,17 +66,17 @@ export function BirthdayField({
             options={days}
             onChange={(v) => setDay(Number(v))}
             placeholder="Day"
-            icon="today-outline"
+            icon={null}
           />
         </View>
-        <View style={{ flex: 1.15 }}>
+        <View style={{ flex: 1.2 }}>
           <Select
             label="Year"
             value={year ? String(year) : null}
             options={years}
             onChange={(v) => setYear(Number(v))}
             placeholder="Year"
-            icon="calendar-number-outline"
+            icon={null}
           />
         </View>
       </View>

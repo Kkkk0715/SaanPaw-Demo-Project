@@ -607,16 +607,20 @@ export function Select({
   hint,
   error,
   icon = 'location-outline',
+  display,
 }: {
   label: string;
   value: string | null;
+  /** Shorter text for the closed box, e.g. "Sep" for "September"; the list still shows the full option. */
+  display?: string;
   options: string[];
   onChange: (v: string) => void;
   placeholder?: string;
   hint?: string;
   /** Shown in red, outlines the box, and is scrolled to on submit. */
   error?: string;
-  icon?: IconName;
+  /** null hides the icon, for narrow boxes such as the birthday's day picker. */
+  icon?: IconName | null;
 }) {
   const [open, setOpen] = useState(false);
   const anchor = useErrorAnchor(error);
@@ -624,9 +628,9 @@ export function Select({
     <View style={styles.field} ref={anchor} collapsable={false}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <Pressable style={[styles.inputWrap, Boolean(error) && styles.inputWrapError]} onPress={() => setOpen(true)}>
-        <Ionicons name={icon} size={17} color={theme.colors.muted} />
-        <Text style={[styles.input, !value && { color: theme.colors.muted }]}>
-          {value ?? placeholder}
+        {icon ? <Ionicons name={icon} size={17} color={theme.colors.muted} /> : null}
+        <Text style={[styles.input, !value && { color: theme.colors.muted }]} numberOfLines={1}>
+          {value ? (display ?? value) : placeholder}
         </Text>
         <Ionicons name="chevron-down" size={17} color={theme.colors.muted} />
       </Pressable>

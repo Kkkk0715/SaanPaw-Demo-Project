@@ -8,7 +8,7 @@ import { theme } from '@/constants/theme';
 
 /**
  * Live checklist under a new-password field: each rule turns green as it is met, so people know
- * what is still missing before they submit. The server enforces the same three rules.
+ * what is still missing before they submit. The server enforces the same rules.
  */
 export function PasswordRules({ password }: { password: string }) {
   const checks = passwordChecks(password);
@@ -22,7 +22,9 @@ export function PasswordRules({ password }: { password: string }) {
             size={15}
             color={c.met ? theme.colors.primary : theme.colors.muted}
           />
-          <Text style={[styles.ruleText, c.met && { color: theme.colors.primaryDark }]}>{c.label}</Text>
+          <Text textBreakStrategy="simple" style={[styles.ruleText, c.met && { color: theme.colors.primaryDark }]}>
+            {c.label}
+          </Text>
         </View>
       ))}
       {password.length > 0 && allMet ? (
@@ -175,7 +177,9 @@ export function BreakdownBars({ rows }: { rows: { label: string; value: number; 
 const styles = StyleSheet.create({
   rules: { gap: 4, marginTop: -4 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  ruleText: { ...theme.type.caption, color: theme.colors.muted },
+  // flexShrink + textBreakStrategy: some Android phones measured the row too narrow and cut the
+  // last word off ("At least 1" instead of "At least 1 number").
+  ruleText: { ...theme.type.caption, color: theme.colors.muted, flexShrink: 1 },
 
   pager: {
     flexDirection: 'row',
