@@ -17,6 +17,7 @@ import {
 } from '@/components/ui';
 import { ShelterAnimalCard, timeAgo } from '@/components/domain';
 import { useApp } from '@saanpaw/shared';
+import { confirmPublishToggle } from '@/services/confirm';
 
 /**
  * Shelter Admin Module - Post recovered animals publicly.
@@ -68,10 +69,15 @@ export function RecoveredAnimalsScreen({ navigation }: NativeStackScreenProps<an
             actions={
               <Button
                 label={a.postedPublicly ? 'Unpublish' : 'Post'}
-                variant={a.postedPublicly ? 'ghost' : 'accent'}
+                variant={a.postedPublicly ? 'secondary' : 'accent'}
+                color={a.postedPublicly ? theme.colors.danger : undefined}
                 icon={a.postedPublicly ? 'eye-off-outline' : 'megaphone-outline'}
                 full={false}
-                onPress={() => toggleAnimalPublic(a.id)}
+                onPress={() =>
+                  void confirmPublishToggle(a.name, a.postedPublicly).then((ok) => {
+                    if (ok) toggleAnimalPublic(a.id);
+                  })
+                }
               />
             }
           />

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
-import { formatDistance, reportPlace, useApp } from '@saanpaw/shared';
+import { caseStatusMeta, formatDistance, reportPlace, useApp } from '@saanpaw/shared';
 import type { AnimalReport, ReportKind } from '@saanpaw/shared';
 import {
   Banner,
@@ -104,6 +105,7 @@ export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>)
                       <Button
                         label="Track on map"
                         variant="secondary"
+                        color={theme.colors.info}
                         icon="navigate-outline"
                         full={false}
                         onPress={() => setTracking(r)}
@@ -116,10 +118,17 @@ export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>)
                         onPress={() => navigation.navigate('AnimalStatus')}
                       />
                     </Row>
+                  ) : r.caseId ? (
+                    // Another shelter already opened a case on this report.
+                    <Row gap={0.75}>
+                      <Ionicons name="people-outline" size={15} color={theme.colors.muted} />
+                      <Caption>Another shelter is already handling this report.</Caption>
+                    </Row>
                   ) : (
                     <Button
                       label="Respond and open a case"
                       icon="medkit-outline"
+                      color={caseStatusMeta.under_rescue.color}
                       onPress={() => setResponding(r)}
                     />
                   )}
@@ -158,7 +167,7 @@ export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>)
           placeholder="e.g. Recovery team dispatched to the location."
           multiline
         />
-        <Button label="Open recovery case" icon="medkit" onPress={respond} />
+        <Button label="Open recovery case" icon="medkit" color={caseStatusMeta.under_rescue.color} onPress={respond} />
       </Sheet>
 
       <Sheet open={Boolean(tracking)} onClose={() => setTracking(null)} title="Where the report came from">

@@ -73,8 +73,15 @@ export async function deleteShelterCascade(shelterId: string) {
     MatchSuggestion.deleteMany({ candidateId: { $in: animals.map((a) => a._id) }, candidateSource: 'shelter_animal' }),
     caseIds.length
       ? Promise.all([
-          LostPetReport.updateMany({ caseId: { $in: caseIds } }, { $unset: { caseId: 1 } }),
-          FoundAnimalReport.updateMany({ caseId: { $in: caseIds } }, { $unset: { caseId: 1 } }),
+          // A report this shelter was handling is open again for other shelters to take on.
+          LostPetReport.updateMany(
+            { caseId: { $in: caseIds } },
+            [{ $set: { status: { $cond: [{ $eq: ['$status', 'matched'] }, 'active', '$status'] } } }, { $unset: 'caseId' }],
+          ),
+          FoundAnimalReport.updateMany(
+            { caseId: { $in: caseIds } },
+            [{ $set: { status: { $cond: [{ $eq: ['$status', 'matched'] }, 'active', '$status'] } } }, { $unset: 'caseId' }],
+          ),
         ])
       : Promise.resolve(),
     ...animals.flatMap((a) => a.imageUrls.map((url) => removePhoto(url))),

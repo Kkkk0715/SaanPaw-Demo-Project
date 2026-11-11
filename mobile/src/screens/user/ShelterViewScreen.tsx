@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '@/constants/theme';
 import { distanceMeters, formatDistance, useApp } from '@saanpaw/shared';
 import type { AnimalType, Shelter, ShelterAnimal } from '@saanpaw/shared';
@@ -91,20 +92,23 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
   const viewAnimalShelter = viewAnimal ? shelters.find((s) => s.id === viewAnimal.shelterId) : undefined;
   const shelterPage = usePagination(approved, 8);
   const shelterCount = animalGroups.length;
-  // Threads render open (chat included), so fewer per page.
-  const threadPage = usePagination(myThreads, 5);
+  const threadPage = usePagination(myThreads, 8);
+  const unreadMessages = myThreads.reduce((n, c) => n + c.unreadForUser, 0);
 
-  // Threads render open on this tab, so they count as read the moment they are on screen.
-  const unreadKey = threadPage.items.map((c) => `${c.id}:${c.unreadForUser}`).join(',');
+  // A conversation is a row until tapped; only an opened thread counts as read, so the unread
+  // count stays true until the reply has actually been seen.
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+  const openThread = myThreads.find((c) => c.id === openThreadId);
+  const openThreadUnread = tab === 'messages' ? openThread?.unreadForUser ?? 0 : 0;
   useEffect(() => {
-    if (tab !== 'messages') return;
-    threadPage.items.filter((c) => c.unreadForUser).forEach((c) => markConversationRead(c.id));
+    if (openThread && openThreadUnread) markConversationRead(openThread.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, unreadKey]);
+  }, [openThread?.id, openThreadUnread]);
 
   const send = () => {
     if (!composeFor || !draft.trim()) return;
-    startConversation(composeFor.id, `Enquiry for ${composeFor.name}`, draft.trim());
+    const id = startConversation(composeFor.id, `Enquiry for ${composeFor.name}`, draft.trim());
+    setOpenThreadId(id);
     setDraft('');
     setComposeFor(null);
     setTab('messages');
@@ -116,7 +120,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
         options={[
           { label: 'Shelters', value: 'shelters' },
           { label: 'Recovered animals', value: 'animals' },
-          { label: `Messages${myThreads.length ? ` (${myThreads.length})` : ''}`, value: 'messages' },
+          { label: unreadMessages ? `Messages (${unreadMessages} new)` : 'Messages', value: 'messages' },
         ]}
         value={tab}
         onChange={(v) => setTab(v as typeof tab)}
@@ -292,23 +296,42 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
               const thread = messagesIn(c.id);
               const shelterName = shelter?.name ?? c.shelterName ?? 'Shelter';
               const shelterPhoto = shelter?.photoUrl ?? c.shelterPhotoUrl;
+              const last = thread[thread.length - 1];
+              const isOpen = c.id === openThreadId;
               return (
                 <Card key={c.id}>
-                  <Row gap={1} align="flex-start">
-                    <Avatar
-                      name={shelterName}
-                      uri={shelterPhoto}
-                      color={shelter?.logoColor ?? theme.colors.primary}
-                      icon="home"
-                      size={44}
-                    />
-                    <View style={{ flex: 1, gap: 3 }}>
-                      <Text style={styles.threadTitle}>{shelterName}</Text>
-                      <Caption>{c.subject}</Caption>
-                      <Caption>{timeAgo(c.lastMessageAt)}</Caption>
-                    </View>
-                  </Row>
+                  <Pressable onPress={() => setOpenThreadId(isOpen ? null : c.id)} hitSlop={4}>
+                    <Row gap={1} align="flex-start">
+                      <Avatar
+                        name={shelterName}
+                        uri={shelterPhoto}
+                        color={shelter?.logoColor ?? theme.colors.primary}
+                        icon="home"
+                        size={44}
+                      />
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Row gap={0.75}>
+                          <Text style={[styles.threadTitle, { flexShrink: 1 }]} numberOfLines={1}>
+                            {shelterName}
+                          </Text>
+                          {c.unreadForUser ? (
+                            <Badge label={`${c.unreadForUser} new`} color={theme.colors.danger} soft={theme.colors.dangerSoft} />
+                          ) : null}
+                        </Row>
+                        <Caption>{c.subject}</Caption>
+                        {last ? (
+                          <Text style={styles.threadPreview} numberOfLines={isOpen ? undefined : 1}>
+                            {last.senderRole === 'user' ? 'You: ' : ''}
+                            {last.body}
+                          </Text>
+                        ) : null}
+                        <Caption>{timeAgo(c.lastMessageAt)}</Caption>
+                      </View>
+                      <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.muted} />
+                    </Row>
+                  </Pressable>
 
+                  {isOpen ? (
                   <ChatThread
                     messages={thread}
                     myRole="user"
@@ -320,6 +343,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
                     }}
                     onSend={(body) => sendMessage(c.id, 'user', body)}
                   />
+                  ) : null}
                 </Card>
               );
             })
@@ -466,6 +490,7 @@ export function ShelterViewScreen({ route }: { route?: { params?: { tab?: 'shelt
 const styles = StyleSheet.create({
   animalName: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
   threadTitle: { fontSize: 14.5, fontWeight: '700', color: theme.colors.text },
+  threadPreview: { fontSize: 13, lineHeight: 18, color: theme.colors.textSoft },
   statRow: { alignItems: 'stretch' },
   stat: {
     flex: 1,

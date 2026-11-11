@@ -19,8 +19,8 @@ import {
   Sheet,
   usePagination,
 } from '@/components/ui';
-import { confirmAsync, confirmDelete } from '@/services/confirm';
-import { AnimalTypeAndBreed, ShelterAnimalCard } from '@/components/domain';
+import { confirmAsync, confirmDelete, confirmPublishToggle } from '@/services/confirm';
+import { AnimalTypeAndBreed, CASE_ICONS, ShelterAnimalCard, caseStatusOptions } from '@/components/domain';
 import { shrinkPhoto } from '@/services/photo';
 import { caseStatusMeta, nextAnimalStatuses, useApp } from '@saanpaw/shared';
 import type { AnimalCaseStatus, AnimalType, ShelterAnimal } from '@saanpaw/shared';
@@ -170,10 +170,15 @@ export function ShelterAnimalsScreen() {
                 ) : null}
                 <Button
                   label={a.postedPublicly ? 'Unpublish' : 'Publish'}
-                  variant={a.postedPublicly ? 'ghost' : 'secondary'}
+                  variant="secondary"
+                  color={a.postedPublicly ? theme.colors.danger : theme.colors.found}
                   icon={a.postedPublicly ? 'eye-off-outline' : 'eye-outline'}
                   full={false}
-                  onPress={() => toggleAnimalPublic(a.id)}
+                  onPress={() =>
+                    void confirmPublishToggle(a.name, a.postedPublicly).then((ok) => {
+                      if (ok) toggleAnimalPublic(a.id);
+                    })
+                  }
                 />
                 <Button label="Delete" variant="ghost" icon="trash-outline" full={false} onPress={() => void remove(a.id, a.name)} />
               </>
@@ -201,11 +206,16 @@ export function ShelterAnimalsScreen() {
             </Caption>
             <Choice
               label="Outcome"
-              options={nextAnimalStatuses(updating.caseStatus).map((value) => ({ label: caseStatusMeta[value].label, value }))}
+              options={caseStatusOptions(nextAnimalStatuses(updating.caseStatus))}
               value={outcome}
               onChange={(v) => setOutcome(v as AnimalCaseStatus)}
             />
-            <Button label="Save status" icon="checkmark-circle-outline" onPress={() => void saveOutcome()} />
+            <Button
+              label={`Mark as ${caseStatusMeta[outcome].label}`}
+              icon={CASE_ICONS[outcome]}
+              color={caseStatusMeta[outcome].color}
+              onPress={() => void saveOutcome()}
+            />
           </View>
         ) : null}
       </Sheet>

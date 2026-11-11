@@ -24,6 +24,7 @@ import { ApiError } from '../../utils/ApiError';
 import { logger } from '../../utils/logger';
 import { barangayForPin } from '../../services/pinBarangay.service';
 import { withLiveOccupancy } from '../../services/occupancy.service';
+import { notify } from '../../services/pushNotification.service';
 import {
   combineName,
   serializeUser,
@@ -37,6 +38,43 @@ import {
   latLngToGeoPoint,
   geoPointToLatLng,
 } from '../../utils/geoHelpers';
+
+/**
+ * When the reporter marks a report Recovered (or Closed) while a shelter still has an open recovery
+ * case on it, that shelter is told - an alert and a push - so it can close the case instead of
+ * still heading out for an animal that is already home. The app always said this happened; it didn't.
+ */
+async function tellShelterAboutOwnerUpdate(
+  kind: 'lost' | 'found',
+  report: { _id: unknown; name?: string | null; animalType: string; barangay?: string | null },
+  status: string,
+): Promise<void> {
+  if (status !== 'recovered' && status !== 'closed') return;
+  try {
+    const openCase = await AnimalCase.findOne(
+      { [kind === 'lost' ? 'lostReportId' : 'foundReportId']: report._id, status: 'under_rescue' },
+      'shelterId',
+    ).lean();
+    if (!openCase) return;
+    const what = report.name || `the ${report.animalType}`;
+    const done =
+      status === 'recovered'
+        ? kind === 'lost'
+          ? `The owner marked ${what} as recovered`
+          : `The finder marked ${what} as returned to its owner`
+        : `The reporter closed the report for ${what}`;
+    await notify({
+      audienceType: 'shelter',
+      audienceId: openCase.shelterId,
+      type: 'status_update',
+      refId: report._id,
+      title: 'Update on a case you are handling',
+      body: `${done} (Brgy. ${report.barangay ?? 'San Jose Del Monte'}). Set the case outcome in Case Status.`,
+    });
+  } catch (err) {
+    logger.error('status: failed to tell the shelter about an owner update', err);
+  }
+}
 
 export const userService = {
   // ----- Registration -----
@@ -200,19 +238,23 @@ export const userService = {
   // ----- Reported Lost Pet Status Update -----
   async updateLostReportStatus(reporterId: string, id: string, status: string) {
     if (!REPORT_STATUSES.includes(status as never)) throw ApiError.badRequest('Invalid status');
+    const before = await LostPetReport.findOne({ _id: id, reporterId }, 'status').lean();
     const report = await LostPetReport.findOneAndUpdate(
       { _id: id, reporterId },
       { status },
       { new: true },
     );
     if (!report) throw ApiError.notFound('Report not found');
+    if (before?.status !== status) await tellShelterAboutOwnerUpdate('lost', report, status);
     return serializeLostReport(report);
   },
 
   async updateFoundReportStatus(reporterId: string, id: string, status: string) {
     if (!REPORT_STATUSES.includes(status as never)) throw ApiError.badRequest('Invalid status');
+    const before = await FoundAnimalReport.findOne({ _id: id, reporterId }, 'status').lean();
     const report = await FoundAnimalReport.findOneAndUpdate({ _id: id, reporterId }, { status }, { new: true });
     if (!report) throw ApiError.notFound('Report not found');
+    if (before?.status !== status) await tellShelterAboutOwnerUpdate('found', report, status);
     return serializeFoundReport(report);
   },
 

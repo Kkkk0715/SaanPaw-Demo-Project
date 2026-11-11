@@ -17,10 +17,23 @@ import {
   Sheet,
   usePagination,
 } from '@/components/ui';
-import { confirmDelete } from '@/services/confirm';
+import { confirmAsync, confirmDelete } from '@/services/confirm';
 import { ReportCard, timeAgo } from '@/components/domain';
-import { caseStatusMeta, useApp } from '@saanpaw/shared';
+import { caseStatusMeta, reportStatusMeta, useApp } from '@saanpaw/shared';
 import type { AnimalReport, ReportStatus } from '@saanpaw/shared';
+
+/** A found-animal report is not "missing" - its wording follows the report kind. */
+const statusLabel = (kind: AnimalReport['kind'], status: ReportStatus) =>
+  kind === 'found'
+    ? { active: 'Still unclaimed', matched: 'Possible owner', recovered: 'Returned to owner', closed: 'Closed' }[status]
+    : { active: 'Still missing', matched: 'Possible match', recovered: 'Recovered', closed: 'Closed' }[status];
+
+const STATUS_ICON = {
+  active: 'search',
+  matched: 'sparkles',
+  recovered: 'heart',
+  closed: 'close-circle',
+} as const;
 
 /**
  * User Module - Update the status of your own reports.
@@ -50,8 +63,28 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
     setDraftStatus(report.status);
   };
 
-  const apply = () => {
-    if (editing) setReportStatus(editing.id, draftStatus);
+  const apply = async () => {
+    const target = editing;
+    if (!target) return;
+    if (draftStatus === target.status) {
+      setEditing(null);
+      return;
+    }
+    const label = statusLabel(target.kind, draftStatus);
+    const effect: Record<ReportStatus, string> = {
+      active: 'It shows as open again on the map and in nearby alerts.',
+      matched: 'It stays open while you check the possible match.',
+      recovered: 'It leaves the map and nearby alerts, and any shelter handling it is told.',
+      closed: 'It leaves the map and nearby alerts, and any shelter handling it is told.',
+    };
+    const ok = await confirmAsync({
+      title: `Mark this report as "${label}"?`,
+      message: effect[draftStatus],
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    });
+    if (!ok) return;
+    setReportStatus(target.id, draftStatus);
     setEditing(null);
   };
 
@@ -75,7 +108,7 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
         tone="info"
         icon="information-circle"
         title="Keep your reports up to date"
-        message="Marking a pet as recovered removes it from nearby alerts and closes the shelter's case, keeping the map accurate for everyone."
+        message="Marking a pet as recovered removes it from nearby alerts and tells any shelter handling it, keeping the map accurate for everyone."
       />
 
       <SectionHeader title={`My reports (${myReports.length})`} />
@@ -160,21 +193,13 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
         </Caption>
         {/* A found-animal report is not "missing" - its wording follows the report kind. */}
         <Choice
-          options={
-            editing?.kind === 'found'
-              ? [
-                  { label: 'Still unclaimed', value: 'active' },
-                  { label: 'Possible owner', value: 'matched' },
-                  { label: 'Returned to owner', value: 'recovered' },
-                  { label: 'Closed', value: 'closed' },
-                ]
-              : [
-                  { label: 'Still missing', value: 'active' },
-                  { label: 'Possible match', value: 'matched' },
-                  { label: 'Recovered', value: 'recovered' },
-                  { label: 'Closed', value: 'closed' },
-                ]
-          }
+          options={(['active', 'matched', 'recovered', 'closed'] as ReportStatus[]).map((value) => ({
+            label: statusLabel(editing?.kind ?? 'lost', value),
+            value,
+            icon: STATUS_ICON[value],
+            color: reportStatusMeta[value].color,
+            soft: reportStatusMeta[value].soft,
+          }))}
           value={draftStatus}
           onChange={(v) => setDraftStatus(v as ReportStatus)}
           hint={
@@ -183,7 +208,12 @@ export function LostPetStatusScreen({ navigation }: NativeStackScreenProps<any>)
               : 'Recovered notifies the shelters that responded and clears the report from nearby alerts.'
           }
         />
-        <Button label="Save status" onPress={apply} icon="checkmark" />
+        <Button
+          label="Save status"
+          onPress={() => void apply()}
+          icon="checkmark"
+          color={reportStatusMeta[draftStatus].color}
+        />
         <Button
           label="Delete this report"
           variant="danger"

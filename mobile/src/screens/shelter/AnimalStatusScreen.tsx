@@ -19,16 +19,15 @@ import {
   Sheet,
   usePagination,
 } from '@/components/ui';
-import { CASE_ICONS, CaseStatusPill, ShelterAnimalCard, describeAnimal, timeAgo } from '@/components/domain';
+import { CASE_ICONS, CaseStatusPill, ShelterAnimalCard, caseStatusOptions, describeAnimal, timeAgo } from '@/components/domain';
 import { RecoveryTracker } from '@/components/domain/RecoveryTracker';
 import { caseStatusMeta, isCaseClosed, nextAnimalStatuses, nextCaseStatuses, reportPlace, useApp } from '@saanpaw/shared';
 import type { AnimalCase, AnimalCaseStatus, AnimalReport, ShelterAnimal } from '@saanpaw/shared';
 import { confirmAsync } from '@/services/confirm';
 
-const statusOptions = (from: AnimalCaseStatus) =>
-  nextCaseStatuses(from).map((value) => ({ label: caseStatusMeta[value].label, value }));
-const animalStatusOptions = (from: AnimalCaseStatus) =>
-  nextAnimalStatuses(from).map((value) => ({ label: caseStatusMeta[value].label, value }));
+// Each outcome in its own status colour (the same as its badge), so a choice reads at a glance.
+const statusOptions = (from: AnimalCaseStatus) => caseStatusOptions(nextCaseStatuses(from));
+const animalStatusOptions = (from: AnimalCaseStatus) => caseStatusOptions(nextAnimalStatuses(from));
 
 /** What each outcome does, shown before it is confirmed. */
 const OUTCOME_EFFECT: Partial<Record<AnimalCaseStatus, string>> = {
@@ -150,7 +149,7 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
               ) : (
                 <Row gap={1} style={{ flexWrap: 'wrap' }}>
                   {report ? (
-                    <Button label="Track on map" icon="navigate-outline" variant="secondary" full={false} onPress={() => setTracking(report)} />
+                    <Button label="Track on map" icon="navigate-outline" variant="secondary" color={theme.colors.info} full={false} onPress={() => setTracking(report)} />
                   ) : null}
                   <Button label="Update case status" icon="create-outline" full={false} onPress={() => open(c)} />
                 </Row>
@@ -249,7 +248,12 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
           placeholder="e.g. Owner verified via image match. Released to the family."
           multiline
         />
-        <Button label="Save and notify reporter" icon="send-outline" onPress={() => void save()} />
+        <Button
+          label={`Mark as ${caseStatusMeta[status].label} and notify`}
+          icon={CASE_ICONS[status]}
+          color={caseStatusMeta[status].color}
+          onPress={() => void save()}
+        />
       </Sheet>
 
       <Sheet open={Boolean(tracking)} onClose={() => setTracking(null)} title="Where the report came from">

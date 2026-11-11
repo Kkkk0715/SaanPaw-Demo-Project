@@ -5,6 +5,7 @@ import { theme } from '@/constants/theme';
 import { Banner, Button, Card, EmptyState, Pager, Screen, SectionHeader, usePagination } from '@/components/ui';
 import { NotificationRow } from '@/components/domain';
 import { notificationTarget } from '@/navigation/notificationTarget';
+import { confirmMarkAllRead } from '@/services/confirm';
 
 /**
  * User Module - Smart Notifications.
@@ -38,7 +39,11 @@ export function UserNotificationsScreen({ navigation }: BottomTabScreenProps<any
           label="Mark all as read"
           variant="ghost"
           icon="checkmark-done-outline"
-          onPress={() => markAllNotificationsRead('user')}
+          onPress={() =>
+            void confirmMarkAllRead(unread).then((ok) => {
+              if (ok) markAllNotificationsRead('user');
+            })
+          }
         />
       ) : null}
 

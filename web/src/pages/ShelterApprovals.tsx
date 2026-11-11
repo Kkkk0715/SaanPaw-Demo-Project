@@ -9,7 +9,7 @@ import {
   type Shelter,
   type ShelterApprovalStatus,
 } from '@saanpaw/shared';
-import { Banner, Button, Card, CardHead, EmptyState, Pagination, Tabs, usePagination } from '@/components/ui';
+import { Banner, Button, Card, CardHead, EmptyState, Pagination, Tabs, useConfirm, usePagination } from '@/components/ui';
 
 /** How long the "credentials emailed" banner stays before fading out. */
 const ISSUED_BANNER_MS = 8000;
@@ -23,6 +23,7 @@ import { ShelterDetailPanel } from '@/components/ShelterDetailPanel';
  */
 export function ShelterApprovalsPage() {
   const { shelters, issuedLogin, clearIssuedLogin } = useApp();
+  const { ask, dialog } = useConfirm();
   const navigate = useNavigate();
   const [tab, setTab] = useState<ShelterApprovalStatus>('pending');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -72,7 +73,21 @@ export function ShelterApprovalsPage() {
               yourself: <strong>{issuedLogin.email}</strong> / <strong>{issuedLogin.password}</strong>.{' '}
             </>
           )}
-          <Button variant="ghost" small onClick={clearIssuedLogin}>
+          <Button
+            variant="ghost"
+            small
+            onClick={() =>
+              // The password is only shown here, once - make sure it was copied before it goes.
+              ask(
+                <>
+                  The temporary password is shown only here. Make sure it was copied or emailed before you dismiss
+                  it.
+                </>,
+                clearIssuedLogin,
+                { title: 'Dismiss these sign-in details?', confirmLabel: 'Dismiss', tone: 'primary' },
+              )
+            }
+          >
             Dismiss
           </Button>
         </Banner>
@@ -178,6 +193,7 @@ export function ShelterApprovalsPage() {
           </Card>
         ) : null}
       </div>
+      {dialog}
     </>
   );
 }

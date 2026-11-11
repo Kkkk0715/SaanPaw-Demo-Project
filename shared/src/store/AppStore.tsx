@@ -288,6 +288,10 @@ interface AppState {
   updateShelterProfile: (patch: Partial<Shelter>) => Promise<void>;
   updateUserProfile: (patch: Partial<AppUser>) => Promise<void>;
   sendMessage: (conversationId: string, senderRole: Role, body: string) => void;
+  /**
+   * Messages a shelter. Continues the conversation already open with that shelter (about the same
+   * report, if one is given) instead of starting a new thread every time. Returns the thread id.
+   */
   startConversation: (shelterId: string, subject: string, body: string, reportId?: string) => string;
   /** Clears the unread count for the signed-in side of a thread. */
   markConversationRead: (conversationId: string) => void;
@@ -1120,6 +1124,13 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
 
   const startConversation = useCallback<AppState['startConversation']>(
     (shelterId, subject, body, reportId) => {
+      const existing = conversations
+        .filter((c) => c.shelterId === shelterId && c.userId === currentUser.id && (c.reportId ?? null) === (reportId ?? null))
+        .sort((a, b) => +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt))[0];
+      if (existing) {
+        sendMessage(existing.id, 'user', body);
+        return existing.id;
+      }
       const session = sessionRef.current;
       // The server keeps this id, so the thread can open before the request finishes.
       const id = session
@@ -1150,7 +1161,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       if (session) send(apiActions.startConversation(session, { id, shelterId, subject, body, reportId }));
       return id;
     },
-    [currentUser, shelters, send],
+    [conversations, currentUser, shelters, send, sendMessage],
   );
 
   const markConversationRead = useCallback<AppState['markConversationRead']>(

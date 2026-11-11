@@ -15,6 +15,7 @@ import { AnimalPhoto, Badge, Button, Caption, Card, EmptyState, Row, Screen, Sec
 import { MapCanvas } from '@/components/map/MapCanvas';
 import { describeAnimal } from '@/components/domain';
 import { useAuth } from '@/context/AuthContext';
+import { confirmAsync } from '@/services/confirm';
 
 /**
  * Everything about one report on a single page - what tapping a notification opens, instead of
@@ -24,7 +25,7 @@ import { useAuth } from '@/context/AuthContext';
 export function ReportDetailScreen({ route, navigation }: NativeStackScreenProps<any>) {
   const reportId = (route.params as { reportId?: string } | undefined)?.reportId;
   const { role } = useAuth();
-  const { reportById, currentUser, currentShelter, caseForReport, shelterById } = useApp();
+  const { reportById, currentUser, currentShelter, caseForReport, shelterById, openCase } = useApp();
   const report = reportId ? reportById(reportId) : undefined;
 
   if (!report) {
@@ -174,11 +175,30 @@ export function ReportDetailScreen({ route, navigation }: NativeStackScreenProps
       ) : null}
 
       {isShelter ? (
-        <Button
-          label={animalCase ? 'Open in Animal Reports' : 'Respond to this report'}
-          icon="documents-outline"
-          onPress={() => navigation.navigate('AnimalReports')}
-        />
+        animalCase ? (
+          <Button label="View case status" icon="pulse-outline" onPress={() => navigation.navigate('AnimalStatus')} />
+        ) : report.caseId ? (
+          <Caption>Another shelter is already handling this report.</Caption>
+        ) : report.status === 'active' || report.status === 'matched' ? (
+          // Respond straight from the report instead of hunting for it again in Animal Reports.
+          <Button
+            label="Respond and open a case"
+            icon="medkit-outline"
+            color={caseStatusMeta.under_rescue.color}
+            onPress={() =>
+              void confirmAsync({
+                title: 'Open a recovery case?',
+                message: `The reporter is told that ${currentShelter.name} responded, and the case appears in Case Status.`,
+                confirmLabel: 'Open case',
+                cancelLabel: 'Cancel',
+              }).then((ok) => {
+                if (!ok) return;
+                openCase(report.id, 'Recovery team dispatched.');
+                navigation.navigate('AnimalStatus');
+              })
+            }
+          />
+        ) : null
       ) : null}
     </Screen>
   );

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui';
 import { NotificationRow } from '@/components/domain';
 import { notificationTarget } from '@/navigation/notificationTarget';
+import { confirmMarkAllRead } from '@/services/confirm';
 
 /** Shelter Admin Module - Alerts for reports inside the operating radius. */
 export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProps<any>) {
@@ -43,7 +44,11 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
           label="Mark all as read"
           variant="ghost"
           icon="checkmark-done-outline"
-          onPress={() => markAllNotificationsRead('shelter_admin')}
+          onPress={() =>
+            void confirmMarkAllRead(unread).then((ok) => {
+              if (ok) markAllNotificationsRead('shelter_admin');
+            })
+          }
         />
       ) : null}
 

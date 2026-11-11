@@ -185,6 +185,7 @@ export function Button({
   loading,
   full = true,
   style,
+  color,
 }: {
   label: string;
   onPress?: () => void;
@@ -194,8 +195,18 @@ export function Button({
   loading?: boolean;
   full?: boolean;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Colour-codes the button (e.g. a case outcome in its status colour). Filled for the solid
+   * variants; outlined in that colour for `secondary`.
+   */
+  color?: string;
 }) {
-  const v = buttonVariants[variant];
+  const base = buttonVariants[variant];
+  const v = color
+    ? variant === 'secondary' || variant === 'ghost'
+      ? { bg: base.bg, fg: color, border: variant === 'ghost' ? base.border : color }
+      : { bg: color, fg: theme.colors.onPrimary, border: color }
+    : base;
   const isOff = disabled || loading;
   return (
     <Pressable
@@ -390,7 +401,11 @@ export function Choice<T extends string | number>({
   hint,
 }: {
   label?: string;
-  options: { label: string; value: T; icon?: IconName }[];
+  /**
+   * `color` / `soft` colour-code an option (e.g. each case outcome in its status colour): tinted
+   * while not picked, filled with the colour once picked.
+   */
+  options: { label: string; value: T; icon?: IconName; color?: string; soft?: string }[];
   value: T | null;
   onChange: (v: T) => void;
   hint?: string;
@@ -401,20 +416,24 @@ export function Choice<T extends string | number>({
       <View style={styles.choiceWrap}>
         {options.map((o) => {
           const active = o.value === value;
+          const tint = o.color
+            ? active
+              ? { backgroundColor: o.color, borderColor: o.color }
+              : { backgroundColor: o.soft ?? theme.colors.surface, borderColor: o.color }
+            : null;
+          const fg = active ? theme.colors.onPrimary : o.color ?? theme.colors.textSoft;
           return (
             <Pressable
               key={String(o.value)}
               onPress={() => onChange(o.value)}
-              style={[styles.choice, active && styles.choiceActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              style={[styles.choice, active && styles.choiceActive, tint]}
             >
-              {o.icon ? (
-                <Ionicons
-                  name={o.icon}
-                  size={15}
-                  color={active ? theme.colors.onPrimary : theme.colors.textSoft}
-                />
-              ) : null}
-              <Text style={[styles.choiceText, active && styles.choiceTextActive]}>{o.label}</Text>
+              {o.icon ? <Ionicons name={o.icon} size={15} color={fg} /> : null}
+              <Text style={[styles.choiceText, active && styles.choiceTextActive, o.color ? { color: fg } : null]}>
+                {o.label}
+              </Text>
             </Pressable>
           );
         })}

@@ -31,6 +31,21 @@ export const CASE_ICONS: Record<AnimalCaseStatus, keyof typeof Ionicons.glyphMap
   inconclusive: 'help-circle',
 };
 
+/**
+ * Case outcomes as colour-coded choices, each in its status colour with its icon (Under recovery
+ * blue, Recovered green, Reunited deep green, Adopted amber, Inconclusive grey) - the same colours
+ * as the status pills, so a choice looks like the badge it turns into.
+ */
+export function caseStatusOptions(statuses: AnimalCaseStatus[]) {
+  return statuses.map((value) => ({
+    label: caseStatusMeta[value].label,
+    value,
+    icon: CASE_ICONS[value],
+    color: caseStatusMeta[value].color,
+    soft: caseStatusMeta[value].soft,
+  }));
+}
+
 export function CaseStatusPill({ status }: { status: AnimalCaseStatus }) {
   const m = caseStatusMeta[status];
   return <Badge label={m.label} color={m.color} soft={m.soft} icon={CASE_ICONS[status]} />;

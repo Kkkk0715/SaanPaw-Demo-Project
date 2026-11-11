@@ -366,8 +366,19 @@ export const shelterService = {
     const report = lost ?? (await FoundAnimalReport.findById(reportId));
     if (!report) throw ApiError.notFound('Report not found');
 
-    const existing = await AnimalCase.findOne({ shelterId, [lost ? 'lostReportId' : 'foundReportId']: report._id });
+    if (report.isHiddenByModeration || (report.status !== 'active' && report.status !== 'matched')) {
+      throw ApiError.conflict('This report is already resolved or closed, so a case cannot be opened on it.');
+    }
+    const reportField = lost ? 'lostReportId' : 'foundReportId';
+    const existing = await AnimalCase.findOne({ shelterId, [reportField]: report._id });
     if (existing) throw ApiError.conflict('This shelter already has a case for that report');
+    // One shelter at a time: two shelters heading out for the same animal wastes a trip, and the
+    // report can only point to one case.
+    const other = await AnimalCase.findOne({ [reportField]: report._id, status: 'under_rescue' }, 'shelterId').lean();
+    if (other) {
+      const handler = await Shelter.findById(other.shelterId, 'name').lean();
+      throw ApiError.conflict(`${handler?.name ?? 'Another shelter'} is already handling this report.`);
+    }
 
     const doc = await AnimalCase.create({
       shelterId,

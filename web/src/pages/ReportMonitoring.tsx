@@ -68,13 +68,24 @@ export function ReportMonitoringPage() {
 
   const pending = flags.filter((f) => f.resolution === 'pending');
   const resolved = flags.filter((f) => f.resolution !== 'pending');
-  const accountRows = [...users].sort((a, b) => b.flaggedReportCount - a.flaggedReportCount);
-  const allReports = [...reports].sort((a, b) => +new Date(b.reportedAt) - +new Date(a.reportedAt));
-
+  // Search boxes for the long lists: a report by animal, reference, place or reporter; an account
+  // by name, email or barangay.
+  const [reportQuery, setReportQuery] = useState('');
+  const [accountQuery, setAccountQuery] = useState('');
+  const matches = (q: string, fields: (string | undefined)[]) =>
+    !q.trim() || fields.filter(Boolean).join(' ').toLowerCase().includes(q.trim().toLowerCase());
+  const accountRows = [...users]
+    .filter((u) => matches(accountQuery, [u.fullName, u.email, u.barangay]))
+    .sort((a, b) => b.flaggedReportCount - a.flaggedReportCount);
+  const allReports = [...reports]
+    .filter((r) =>
+      matches(reportQuery, [describeAnimal(r), r.id, r.name, r.breed, r.color, r.barangay, r.address, r.reporterName]),
+    )
+    .sort((a, b) => +new Date(b.reportedAt) - +new Date(a.reportedAt));
   const pendingPage = usePagination(pending, 10, tab);
   const resolvedPage = usePagination(resolved, 10, tab);
-  const reportsPage = usePagination(allReports, 10, tab);
-  const accountsPage = usePagination(accountRows, 10, tab);
+  const reportsPage = usePagination(allReports, 10, `${tab}|${reportQuery}`);
+  const accountsPage = usePagination(accountRows, 10, `${tab}|${accountQuery}`);
 
   /** A flag's target: a citizen's lost/found report, or a shelter's own animal posting. */
   const flaggedItem = (f: ModerationFlag): AnimalReport | ShelterAnimal | undefined =>
@@ -329,7 +340,20 @@ export function ReportMonitoringPage() {
 
       {tab === 'all' ? (
         <Card>
-          <CardHead title={`All submissions (${reports.length})`} sub="Every lost and found report in the system, newest first" />
+          <CardHead
+            title={`All submissions (${allReports.length}${reportQuery.trim() ? ` of ${reports.length}` : ''})`}
+            sub="Every lost and found report in the system, newest first"
+            actions={
+              <input
+                type="search"
+                placeholder="Search animal, place, reporter, reference..."
+                value={reportQuery}
+                onChange={(e) => setReportQuery(e.target.value)}
+                className="table-search"
+                aria-label="Search reports"
+              />
+            }
+          />
           <table>
             <thead>
               <tr>
@@ -387,6 +411,16 @@ export function ReportMonitoringPage() {
           <CardHead
             title="Accounts"
             sub={`Every registered user, sorted by upheld flags. At ${BAN_THRESHOLD} upheld flags an account is deleted automatically and the person is emailed why`}
+            actions={
+              <input
+                type="search"
+                placeholder="Search name, email, barangay..."
+                value={accountQuery}
+                onChange={(e) => setAccountQuery(e.target.value)}
+                className="table-search"
+                aria-label="Search accounts"
+              />
+            }
           />
           {accountRows.length ? (
             <table>

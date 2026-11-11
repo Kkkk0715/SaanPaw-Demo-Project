@@ -116,7 +116,7 @@ export function RescuedAnimalsScreen({ navigation }: NativeStackScreenProps<any>
                     <CaseStatusPill status={e.case.status} />
                     <Caption>Case updated {timeAgo(e.case.updatedAt)}</Caption>
                   </View>
-                  <Button label="Track on map" icon="navigate-outline" variant="secondary" onPress={() => setTracking(e.report)} />
+                  <Button label="Track on map" icon="navigate-outline" variant="secondary" color={theme.colors.info} onPress={() => setTracking(e.report)} />
                 </View>
               }
             />

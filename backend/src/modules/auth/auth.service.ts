@@ -37,10 +37,14 @@ export const authService = {
     if (role === 'shelter_admin') {
       const shelter = await Shelter.findOne({ adminEmail: normalized });
       if (!shelter?.adminPasswordHash || !(await bcrypt.compare(password, shelter.adminPasswordHash))) {
-        throw ApiError.unauthorized('Invalid shelter credentials');
+        throw ApiError.unauthorized('Incorrect email or password for a shelter account.');
       }
       if (shelter.approvalStatus !== 'approved') {
-        throw ApiError.forbidden(`Shelter account is ${shelter.approvalStatus}`);
+        throw ApiError.forbidden(
+          shelter.approvalStatus === 'pending'
+            ? 'Your shelter is still waiting for approval. You will get an email once it is reviewed.'
+            : 'Your shelter application was not approved or its access was revoked. Check your email for the reason.',
+        );
       }
       return {
         token: sign({ id: String(shelter._id), role: 'shelter_admin', shelterId: String(shelter._id) }),
@@ -49,9 +53,11 @@ export const authService = {
 
     const user = await User.findOne({ email: normalized });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-      throw ApiError.unauthorized('Invalid credentials');
+      throw ApiError.unauthorized('Incorrect email or password.');
     }
-    if (user.isBanned) throw ApiError.forbidden('Account is banned');
+    if (user.isBanned) {
+      throw ApiError.forbidden('This account has been banned. Check your email for the reason.');
+    }
     return { token: sign({ id: String(user._id), role: 'user' }) };
   },
 

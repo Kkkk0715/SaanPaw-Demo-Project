@@ -19,6 +19,7 @@ import {
 } from '@/components/ui';
 import { MatchCard, describeAnimal, timeAgo } from '@/components/domain';
 import { useApp } from '@saanpaw/shared';
+import { confirmAsync } from '@/services/confirm';
 import type { AnimalReport, AnimalType } from '@saanpaw/shared';
 
 /**
@@ -121,12 +122,18 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
                 full={false}
                 style={{ flex: 1 }}
                 onPress={() => {
-                  startConversation(
-                    d.shelterId!,
-                    `Possible match: ${d.title}`,
-                    `Hello po, I think this animal might be my pet. Reference match confidence ${Math.round(m.score * 100)}%.`,
-                  );
-                  navigation.navigate('ShelterView', { tab: 'messages' });
+                  const body = `Hello po, I think this animal might be my pet (${d.title}). Reference match confidence ${Math.round(m.score * 100)}%.`;
+                  // This sends a message for you, so say what goes out before it does.
+                  void confirmAsync({
+                    title: 'Message this shelter?',
+                    message: `This message will be sent:\n\n"${body}"`,
+                    confirmLabel: 'Send',
+                    cancelLabel: 'Cancel',
+                  }).then((ok) => {
+                    if (!ok) return;
+                    startConversation(d.shelterId!, `Possible match: ${d.title}`, body);
+                    navigation.navigate('ShelterView', { tab: 'messages' });
+                  });
                 }}
               />
             ) : (
