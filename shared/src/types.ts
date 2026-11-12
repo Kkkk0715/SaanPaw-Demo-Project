@@ -113,6 +113,11 @@ export interface ShelterAnimal extends AnimalDescriptor {
   /** Set when this animal came from a case on a resident's report; status changes follow back to it. */
   caseId?: string;
   sourceReportId?: string;
+  /**
+   * Set when the report it came from was deleted or its reporter deleted their account: the owner's
+   * details and the link to the report and case are gone, and an animal in care is now a stray.
+   */
+  ownerRemoved?: { reason: 'account_deleted' | 'report_deleted'; at: string };
 }
 
 export interface AnimalCase {

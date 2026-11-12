@@ -158,6 +158,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           purpose="register_user"
           token={emailToken}
           onVerified={setEmailToken}
+          onCodeSent={() => setErrors(({ email: _email, emailCode: _code, ...rest }) => rest)}
           error={errors.emailCode}
         />
         <PhoneField

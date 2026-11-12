@@ -78,8 +78,12 @@ const optionalPersonName = z.union([z.literal(''), text(60).regex(LETTERS_ONLY, 
 const adultBirthDate = z
   .string({ required_error: 'Enter your birthday', invalid_type_error: 'Enter your birthday' })
   .trim()
-  .min(1, 'Enter your birthday')
+  // One message per problem: a blank birthday is only "Enter your birthday", not also "valid birthday".
   .superRefine((value, ctx) => {
+    if (!value) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter your birthday' });
+      return;
+    }
     const age = ageFromBirthDate(value);
     if (age === null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a valid birthday' });
     else if (age < MIN_USER_AGE)
@@ -176,6 +180,11 @@ export const shelterProfileSchema = z.object({
   email: optionalEmailAddress,
   capacity: z.coerce.number().int().min(0).max(100_000).optional(),
   currentOccupancy: z.coerce.number().int().min(0).max(100_000).optional(),
+});
+
+/** The signed-in user deleting their own account: their password, typed again, confirms it. */
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, 'Enter your password to confirm'),
 });
 
 export const changePasswordSchema = z.object({

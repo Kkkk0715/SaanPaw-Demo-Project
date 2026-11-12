@@ -14,6 +14,7 @@ router.use(authenticate, authorize('user'), blockBannedUser);
 
 router.get('/me', asyncHandler(userController.me));
 router.patch('/profile', geoFence, asyncHandler(userController.updateProfile));
+router.post('/account/delete', asyncHandler(userController.deleteAccount));
 router.get('/reports/mine', asyncHandler(userController.myReports));
 router.get('/cases', asyncHandler(userController.myCases));
 

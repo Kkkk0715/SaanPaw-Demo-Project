@@ -180,6 +180,14 @@ export function ShelterAnimalCard({
             ) : (
               <CaseStatusPill status={animal.caseStatus} />
             )}
+            {animal.ownerRemoved ? (
+              <Badge
+                label={animal.ownerRemoved.reason === 'account_deleted' ? 'Owner account deleted' : 'Report deleted'}
+                color={theme.colors.accent}
+                soft={theme.colors.accentSoft}
+                icon="person-remove"
+              />
+            ) : null}
             {animal.postedPublicly ? (
               <Badge label="Public" color={theme.colors.info} soft={theme.colors.infoSoft} icon="eye" />
             ) : (

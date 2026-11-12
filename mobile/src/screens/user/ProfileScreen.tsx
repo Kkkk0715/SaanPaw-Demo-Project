@@ -7,6 +7,7 @@ import { RADIUS_OPTIONS, SJDM_BARANGAY_NAMES, barangayCenter, formatDistance, us
 import { theme } from '@/constants/theme';
 import {
   Avatar,
+  Banner,
   Button,
   Card,
   Caption,
@@ -27,7 +28,7 @@ import { PushStatusCard } from '@/components/domain/PushStatusCard';
 
 /** User Module - Account details, alert radius, and sign out. */
 export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
-  const { currentUser, updateUserProfile, myReports, notificationsFor } = useApp();
+  const { currentUser, updateUserProfile, myReports, notificationsFor, deleteOwnAccount } = useApp();
   const { signOut } = useAuth();
 
   const [editing, setEditing] = useState(false);
@@ -40,6 +41,42 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [radiusError, setRadiusError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState<string | undefined>();
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  const openDelete = () => {
+    setDeletePassword('');
+    setDeleteError(undefined);
+    setDeleting(true);
+  };
+
+  /** Password first (checked by the server), then one last "are you sure", then the account is gone. */
+  const confirmDelete = async () => {
+    if (!deletePassword) {
+      setDeleteError('Enter your password to confirm.');
+      return;
+    }
+    const sure = await confirmAsync({
+      title: 'Delete your account?',
+      message: 'This permanently deletes your account, reports, photos and messages. It cannot be undone.',
+      confirmLabel: 'Delete account',
+      destructive: true,
+    });
+    if (!sure) return;
+    setDeleteBusy(true);
+    setDeleteError(undefined);
+    try {
+      await deleteOwnAccount(deletePassword);
+      setDeleting(false);
+      await signOut();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Your account was not deleted. Try again.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   const openEditor = () => {
     setPhoto(currentUser.photoUrl);
@@ -156,6 +193,21 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
           <Row gap={1.25}>
             <Ionicons name="calendar" size={17} color={theme.colors.primary} />
             <View style={{ flex: 1 }}>
+              <Text style={styles.rowLabel}>Birthday</Text>
+              <Caption>
+                {currentUser.birthDate
+                  ? new Date(`${currentUser.birthDate}T00:00:00`).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })
+                  : 'Not set'}
+              </Caption>
+            </View>
+          </Row>
+          <Row gap={1.25}>
+            <Ionicons name="time" size={17} color={theme.colors.primary} />
+            <View style={{ flex: 1 }}>
               <Text style={styles.rowLabel}>Member since</Text>
               <Caption>{new Date(currentUser.joinedAt).toLocaleDateString()}</Caption>
             </View>
@@ -205,6 +257,7 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
 
         <View style={{ height: theme.spacing(1) }} />
         <Button label="Sign out" variant="danger" icon="log-out-outline" onPress={handleSignOut} />
+        <Button label="Delete account" variant="ghost" icon="trash-outline" onPress={openDelete} />
 
       </View>
 
@@ -228,6 +281,41 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
             disabled={saving}
             onPress={() => void save()}
           />
+        </View>
+      </Sheet>
+
+      <Sheet open={deleting} onClose={() => setDeleting(false)} title="Delete account">
+        <View style={{ gap: theme.spacing(1.5) }}>
+          <Banner
+            tone="danger"
+            icon="warning"
+            title="This cannot be undone"
+            message={
+              'Your account, reports, photos, messages and notifications are deleted for good, as described in the ' +
+              'Privacy Policy (RA 10173). An animal a shelter took in from one of your reports stays in its care, ' +
+              'without your name or number.'
+            }
+          />
+          <Field
+            label="Password"
+            value={deletePassword}
+            onChangeText={(t) => {
+              setDeletePassword(t);
+              setDeleteError(undefined);
+            }}
+            placeholder="Enter your password to confirm"
+            secureTextEntry
+            icon="lock-closed-outline"
+            error={deleteError}
+          />
+          <Button
+            label="Delete my account"
+            variant="danger"
+            icon="trash-outline"
+            loading={deleteBusy}
+            onPress={() => void confirmDelete()}
+          />
+          <Button label="Cancel" variant="ghost" onPress={() => setDeleting(false)} />
         </View>
       </Sheet>
     </Screen>

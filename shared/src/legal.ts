@@ -35,7 +35,7 @@ export function legalInline(text: string): LegalInline[] {
 
 export const TERMS_OF_USE: LegalDocument = {
   "title": "SaanPaw Terms of Use",
-  "effective": "November 11, 2026",
+  "effective": "November 12, 2026",
   "sections": [
     {
       "title": "1. Acceptance and Eligibility",
@@ -51,7 +51,7 @@ export const TERMS_OF_USE: LegalDocument = {
         {
           "type": "ul",
           "items": [
-            "You must be at least 18 years old, or have permission from a parent or legal guardian who agrees to these terms for you.",
+            "You must be at least 18 years old to create a user account. You give your birthday when you register, and accounts are not created for anyone under 18.",
             "You must give true and accurate information when you register.",
             "Reports are accepted only for locations inside SaanPaw’s service area."
           ]
@@ -173,7 +173,7 @@ export const TERMS_OF_USE: LegalDocument = {
             "If you break these terms, SaanPaw may remove your content, give you a warning, suspend your account, or ban you permanently.",
             "Banned users may not create new accounts.",
             "A shelter’s approval may be revoked for false documents, misuse of owner information or mistreatment of animals.",
-            "You may stop using SaanPaw and delete your account at any time. Deleting your account also deletes its reports, photos and messages, as described in the Privacy Policy.",
+            "You may stop using SaanPaw and delete your account at any time from your Profile, after confirming your password. Deleting your account also deletes its reports, photos and messages, as described in the Privacy Policy.",
             "If you think your content or account was removed by mistake, contact us using the details in Section 9."
           ]
         }
@@ -251,7 +251,7 @@ export const TERMS_OF_USE: LegalDocument = {
 
 export const PRIVACY_POLICY: LegalDocument = {
   "title": "SaanPaw Privacy Policy",
-  "effective": "November 11, 2026",
+  "effective": "November 12, 2026",
   "sections": [
     {
       "title": "1. Introduction",
@@ -463,6 +463,7 @@ export const PRIVACY_POLICY: LegalDocument = {
           "items": [
             "Reports stay visible until they are resolved, removed by you, or removed by an administrator.",
             "When an account or report is deleted, its linked photos, messages, notifications and match suggestions are deleted with it.",
+            "If a shelter is caring for an animal that came from a deleted user's report, the animal stays in the shelter's care as a stray. Its link to the deleted account, report and case is removed, along with the owner's name and contact number.",
             "Records needed for legal, security or moderation reasons (for example, a ban record) may be kept for a limited time after deletion."
           ]
         },
@@ -526,7 +527,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       "blocks": [
         {
           "type": "p",
-          "text": "**Children.** SaanPaw is meant for users 18 and older. Users under 18 should use the app only with a parent’s or guardian’s consent. If we learn that we hold a minor’s data without that consent, we will delete it."
+          "text": "**Age requirement.** SaanPaw user accounts are for people 18 years old and above only. We ask for your birthday at registration and do not create an account for anyone under 18. If we learn that an account belongs to someone under 18, we will delete it and its data."
         },
         {
           "type": "p",

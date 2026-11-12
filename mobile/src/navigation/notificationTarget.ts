@@ -12,6 +12,8 @@ export type NotificationTarget = { screen: string; params?: Record<string, unkno
 export function notificationTarget(role: MobileRole, type: string | undefined, reportId: string | undefined): NotificationTarget {
   if (role === 'shelter_admin') {
     if (type === 'message') return { screen: 'Messages' };
+    // An animal in care whose owner deleted their report or account - now listed as a stray.
+    if ((type === 'case_update' || type === 'status_update') && !reportId) return { screen: 'RescuedAnimals' };
     if (reportId) return { screen: 'ReportDetail', params: { reportId } };
     return { screen: 'ShelterNotifications' };
   }

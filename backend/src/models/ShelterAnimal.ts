@@ -30,6 +30,13 @@ const shelterAnimalSchema = new Schema(
     caseId: { type: Schema.Types.ObjectId, ref: 'AnimalCase' },
     sourceReportId: { type: Schema.Types.ObjectId },
     sourceReportKind: { type: String, enum: ['lost', 'found'] },
+    /**
+     * Set when the report this animal came from was deleted, or its reporter deleted their account
+     * (RA 10173): the link to the report, case and owner is removed, and an animal still in care
+     * becomes a stray (intake "rescued"). Shown as an "Owner account deleted" tag.
+     */
+    ownerRemovedAt: { type: Date },
+    ownerRemovedReason: { type: String, enum: ['account_deleted', 'report_deleted'] },
     moderationFlagId: { type: Schema.Types.ObjectId, ref: 'ModerationFlag' },
   },
   { timestamps: true },

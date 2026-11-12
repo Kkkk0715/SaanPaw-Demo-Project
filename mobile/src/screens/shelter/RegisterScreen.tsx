@@ -158,6 +158,7 @@ export function ShelterRegisterScreen({ navigation }: NativeStackScreenProps<any
           purpose="register_shelter"
           token={emailToken}
           onVerified={setEmailToken}
+          onCodeSent={() => setErrors(({ email: _email, emailCode: _code, ...rest }) => rest)}
           error={errors.emailCode}
         />
         <PhoneField label="Contact number" value={contact} onChangeText={setContact} error={errors.contact} />

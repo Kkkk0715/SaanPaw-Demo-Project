@@ -452,8 +452,13 @@ export function Field({
           autoCorrect={false}
         />
         {secureTextEntry ? (
-          <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8}>
-            <Ionicons name={hidden ? 'eye-outline' : 'eye-off-outline'} size={18} color={theme.colors.muted} />
+          <Pressable
+            onPress={() => setHidden((h) => !h)}
+            hitSlop={8}
+            accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+          >
+            {/* The icon shows the password's current state: crossed-out eye while it is hidden. */}
+            <Ionicons name={hidden ? 'eye-off-outline' : 'eye-outline'} size={18} color={theme.colors.muted} />
           </Pressable>
         ) : null}
       </View>

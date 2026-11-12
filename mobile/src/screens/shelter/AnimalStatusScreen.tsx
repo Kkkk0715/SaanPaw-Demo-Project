@@ -201,8 +201,15 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
                 </Caption>
                 <CaseStatusPill status={viewingAnimal.caseStatus} />
                 <Caption>
-                  {viewingAnimal.intakeType} · intake {timeAgo(viewingAnimal.intakeDate)}
+                  {viewingAnimal.ownerRemoved && viewingAnimal.intakeType === 'rescued' ? 'stray' : viewingAnimal.intakeType} ·
+                  intake {timeAgo(viewingAnimal.intakeDate)}
                 </Caption>
+                {viewingAnimal.ownerRemoved ? (
+                  <Caption style={{ color: theme.colors.accent }}>
+                    {viewingAnimal.ownerRemoved.reason === 'account_deleted' ? 'Owner account deleted' : 'Report deleted'} ·{' '}
+                    {new Date(viewingAnimal.ownerRemoved.at).toLocaleDateString()}
+                  </Caption>
+                ) : null}
               </View>
             </Row>
             {viewingAnimal.notes ? <Caption>{viewingAnimal.notes}</Caption> : null}

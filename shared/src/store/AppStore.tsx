@@ -306,6 +306,8 @@ interface AppState {
   deleteShelterAccount: (shelterId: string, reason?: string) => void;
   /** Rejects with the server's message (e.g. "Current password is incorrect") on failure. */
   changeShelterPassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /** User-only: deletes the signed-in account after the server checks the password. Rejects with the reason. */
+  deleteOwnAccount: (password: string) => Promise<void>;
   /** Developer-only: enforced server-side, not just stored for display. Local-only (unenforced) in offline demo mode. */
   updateSystemConfig: (patch: Partial<SystemConfig>) => void;
 }
@@ -1311,6 +1313,12 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
     await apiActions.changeShelterPassword(session, currentPassword, newPassword);
   }, []);
 
+  const deleteOwnAccount = useCallback<AppState['deleteOwnAccount']>(async (password) => {
+    const session = sessionRef.current;
+    if (!session) return;
+    await apiActions.deleteOwnAccount(session, password);
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
   const clearIssuedLogin = useCallback(() => setIssuedLogin(null), []);
   const sync = useMemo<SyncState>(
@@ -1376,6 +1384,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       deleteUserAccount,
       deleteShelterAccount,
       changeShelterPassword,
+      deleteOwnAccount,
       updateSystemConfig,
     }),
     [
@@ -1388,7 +1397,7 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
       deleteShelterAnimal, lookupAddress, lookupRoute, listShelterProofs, openProofDocument,
       toggleAnimalPublic, updateShelterProfile, updateUserProfile, sendMessage,
       startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, resolveFlag, banUser,
-      deleteUserAccount, deleteShelterAccount, changeShelterPassword, updateSystemConfig,
+      deleteUserAccount, deleteShelterAccount, changeShelterPassword, deleteOwnAccount, updateSystemConfig,
     ],
   );
 

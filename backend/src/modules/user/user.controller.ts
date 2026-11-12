@@ -3,6 +3,7 @@ import { messagingService } from '../messaging/messaging.service';
 import { ApiError } from '../../utils/ApiError';
 import { sendTestPush } from '../../services/pushNotification.service';
 import {
+  deleteAccountSchema,
   matchScanSchema,
   queryNumber,
   registerUserSchema,
@@ -20,6 +21,8 @@ export const userController = {
     res.status(201).json(await userService.register(registerUserSchema.parse(req.body))),
 
   me: async (req: Request, res: Response) => res.json(await userService.getMe(uid(req))),
+  deleteAccount: async (req: Request, res: Response) =>
+    res.json(await userService.deleteOwnAccount(uid(req), deleteAccountSchema.parse(req.body).password)),
   updateProfile: async (req: Request, res: Response) =>
     res.json(await userService.updateProfile(uid(req), userProfileSchema.parse(req.body))),
   myReports: async (req: Request, res: Response) =>

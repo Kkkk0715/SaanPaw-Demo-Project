@@ -77,6 +77,8 @@ describe('registerUserSchema', () => {
     expect(registerUserSchema.safeParse({ ...user, birthDate: ymd(-1) }).success).toBe(false);
     const { birthDate: _omit, ...noBirthday } = user;
     expect(registerUserSchema.safeParse(noBirthday).success).toBe(false);
+    const blank = registerUserSchema.safeParse({ ...user, birthDate: '' });
+    expect(blank.success ? [] : blank.error.issues.map((i) => i.message)).toEqual(['Enter your birthday']);
   });
 
   it('applies the default alert radius', () => {

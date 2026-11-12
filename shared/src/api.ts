@@ -572,4 +572,8 @@ export const apiActions = {
 
   changeShelterPassword: (s: ApiSession, currentPassword: string, newPassword: string) =>
     call<{ ok: boolean }>(s, '/shelter/password', { method: 'PATCH', body: { currentPassword, newPassword } }),
+
+  /** The signed-in user deletes their own account; the server checks the password first. */
+  deleteOwnAccount: (s: ApiSession, password: string) =>
+    call<{ deleted: boolean }>(s, '/user/account/delete', { method: 'POST', body: { password } }),
 };

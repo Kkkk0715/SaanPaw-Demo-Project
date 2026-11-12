@@ -18,12 +18,15 @@ export function EmailVerifier({
   purpose,
   token,
   onVerified,
+  onCodeSent,
   error,
 }: {
   email: string;
   purpose: 'register_user' | 'register_shelter';
   token: string | null;
   onVerified: (token: string | null) => void;
+  /** Called once a code is sent, so the form can clear an old "Enter a valid email" error. */
+  onCodeSent?: () => void;
   /** Set by the form on submit when the email is not verified yet; scrolled to like any error. */
   error?: string;
 }) {
@@ -60,6 +63,7 @@ export function EmailVerifier({
       });
       setSent({ ...res, at: Date.now(), email: normalized });
       setCode('');
+      onCodeSent?.();
     } catch (e) {
       setProblem(e instanceof Error ? e.message : 'Could not send the code. Try again.');
     } finally {

@@ -12,6 +12,7 @@ import { ShelterProofDocument } from '../models/ShelterProofDocument';
 import { User } from '../models/User';
 import { deleteStoredPhoto } from './storage.service';
 import { forgetPhoto } from './photoFingerprint.service';
+import { notify } from './pushNotification.service';
 
 /** Removes the stored file and its duplicate-check fingerprint together. */
 const removePhoto = (url: string) => Promise.all([deleteStoredPhoto(url), forgetPhoto(url)]);
@@ -30,13 +31,72 @@ async function deleteConversationsCascade(filter: Record<string, unknown>): Prom
   await Promise.all([Message.deleteMany({ conversationId: { $in: ids } }), Conversation.deleteMany({ _id: { $in: ids } })]);
 }
 
-/** Deletes one report and everything that referenced it. Returns the deleted doc, or null if it never existed. */
-export async function deleteReportCascade(kind: 'lost' | 'found', reportId: string) {
+export type DeletionReason = 'account_deleted' | 'report_deleted';
+
+/** "November 12, 2026" on the Philippine calendar. */
+const manilaDate = (d: Date) =>
+  d.toLocaleDateString('en-US', { timeZone: 'Asia/Manila', year: 'numeric', month: 'long', day: 'numeric' });
+
+/**
+ * A shelter animal that came from a now-deleted report stays in the shelter's records, but nothing
+ * of the reporter stays with it (RA 10173): the link to the report and case goes (that is how the
+ * owner's name and number were shown), as does the reporter's description. One still in care is
+ * now a stray (intake "rescued", so it can go up for adoption), gets a note saying what happened,
+ * and the shelter is told. Its photos are kept - the caller must not delete them.
+ */
+async function detachShelterAnimalsFromReport(reportId: string, reason: DeletionReason) {
+  const animals = await ShelterAnimal.find({ sourceReportId: reportId });
+  if (!animals.length) return;
+  const now = new Date();
+  await Promise.all(
+    animals.map(async (animal) => {
+      const shelter = await Shelter.findById(animal.shelterId, 'name').lean();
+      const shelterName = shelter?.name ?? 'the shelter';
+      const inCare = animal.caseStatus === 'under_rescue';
+      // A lost report was filed by the owner; a found report by whoever spotted the stray.
+      const who = animal.sourceReportKind === 'lost' ? `The owner of ${animal.name}` : `The person who reported ${animal.name}`;
+      const what = reason === 'account_deleted' ? 'deleted their account' : 'deleted their report';
+      const note = inCare
+        ? `The reporter ${what} on ${manilaDate(now)}. This animal is now a stray in ${shelterName}'s care.`
+        : `The reporter ${what} on ${manilaDate(now)}. The link to their report and case was removed.`;
+
+      animal.set({ notes: note, ownerRemovedAt: now, ownerRemovedReason: reason, ...(inCare ? { intakeType: 'rescued' } : {}) });
+      animal.set('caseId', undefined);
+      animal.set('sourceReportId', undefined);
+      animal.set('sourceReportKind', undefined);
+      animal.set('description', undefined);
+      await animal.save();
+
+      await notify({
+        audienceType: 'shelter',
+        audienceId: animal.shelterId,
+        // No refId: for a shelter that would open it as a report. Tapping it opens Rescued Pets & Strays.
+        type: 'status_update',
+        title: reason === 'account_deleted' ? 'Owner account deleted' : 'Report deleted',
+        body: inCare
+          ? `${who} ${what}. ${animal.name} is now listed as a stray in your care.`
+          : `${who} ${what}. Their details were removed from ${animal.name}'s record.`,
+      });
+    }),
+  );
+}
+
+/**
+ * Deletes one report and everything that referenced it. Returns the deleted doc, or null if it never existed.
+ * A shelter animal made from it is kept and detached (see above), so photos it still uses are not deleted.
+ */
+export async function deleteReportCascade(kind: 'lost' | 'found', reportId: string, reason: DeletionReason = 'report_deleted') {
   const report =
     kind === 'lost'
       ? await LostPetReport.findByIdAndDelete(reportId).lean()
       : await FoundAnimalReport.findByIdAndDelete(reportId).lean();
   if (!report) return null;
+
+  await detachShelterAnimalsFromReport(reportId, reason);
+  const photos = (report as { imageUrls?: string[] }).imageUrls ?? [];
+  const stillUsed = photos.length
+    ? new Set((await ShelterAnimal.find({ imageUrls: { $in: photos } }, 'imageUrls').lean()).flatMap((a) => a.imageUrls))
+    : new Set<string>();
 
   await Promise.all([
     ModerationFlag.deleteMany({ reportId }),
@@ -48,7 +108,7 @@ export async function deleteReportCascade(kind: 'lost' | 'found', reportId: stri
     kind === 'lost'
       ? FoundAnimalReport.updateMany({ matchedLostReportId: reportId }, { $unset: { matchedLostReportId: 1 } })
       : LostPetReport.updateMany({ matchedFoundReportId: reportId }, { $unset: { matchedFoundReportId: 1 } }),
-    ...((report as { imageUrls?: string[] }).imageUrls ?? []).map((url) => removePhoto(url)),
+    ...photos.filter((url) => !stillUsed.has(url)).map((url) => removePhoto(url)),
   ]);
 
   return report;
@@ -102,8 +162,8 @@ export async function deleteUserCascade(userId: string) {
   ]);
 
   await Promise.all([
-    ...lostReports.map((r) => deleteReportCascade('lost', String(r._id))),
-    ...foundReports.map((r) => deleteReportCascade('found', String(r._id))),
+    ...lostReports.map((r) => deleteReportCascade('lost', String(r._id), 'account_deleted')),
+    ...foundReports.map((r) => deleteReportCascade('found', String(r._id), 'account_deleted')),
     deleteConversationsCascade({ userId }),
     Notification.deleteMany({ audienceType: 'user', audienceId: userId }),
     user.photoUrl ? deleteStoredPhoto(user.photoUrl) : Promise.resolve(),

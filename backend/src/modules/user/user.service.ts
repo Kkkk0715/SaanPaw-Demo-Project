@@ -15,11 +15,12 @@ import {
   findMatchingLostReports,
 } from '../../services/matching.service';
 import { statsService } from '../../services/stats.service';
-import { deleteReportCascade } from '../../services/cascadeDelete.service';
+import { deleteReportCascade, deleteUserCascade } from '../../services/cascadeDelete.service';
 import { findDuplicatePhotos } from '../../services/photoFingerprint.service';
 import { geolocationService } from '../../services/geolocation.service';
 import { authService } from '../auth/auth.service';
 import { REPORT_STATUSES } from '../../config/constants';
+import bcrypt from 'bcryptjs';
 import { ApiError } from '../../utils/ApiError';
 import { logger } from '../../utils/logger';
 import { barangayForPin } from '../../services/pinBarangay.service';
@@ -274,6 +275,21 @@ export const userService = {
    * Same full cleanup as a Developer delete (cases, flags, matches, photos, conversations), so a
    * deleted report can't resurface through a shelter case or match suggestion that still points to it.
    */
+  /**
+   * The user's own "Delete account" (Profile), confirmed with their password. Same full cleanup as
+   * a Developer delete: reports, cases, photos, conversations and notifications go; animals a
+   * shelter took in from their reports stay with the shelter as strays, without the owner's details.
+   */
+  async deleteOwnAccount(userId: string, password: string) {
+    const user = await User.findById(userId, 'passwordHash').lean();
+    if (!user) throw ApiError.notFound('Account not found');
+    if (!(await bcrypt.compare(password, user.passwordHash))) {
+      throw new ApiError(400, 'That password is not correct.', { password: 'That password is not correct.' });
+    }
+    await deleteUserCascade(userId);
+    return { deleted: true };
+  },
+
   async deleteReport(reporterId: string, kind: 'lost' | 'found', id: string) {
     const owned =
       kind === 'lost'

@@ -114,7 +114,9 @@ export function BarChart({ categories, series, height = 130 }: { categories: str
   const area = height + VALUE_SPACE;
   return (
     <View style={styles.chart}>
-      <View style={[styles.chartArea, { height: area }]}>
+      {/* No fixed height here: each column is the bar area plus its day label, and a box only as
+          tall as the bars clipped the numbers off the top of the chart. */}
+      <View style={styles.chartArea}>
         {categories.map((c, ci) => (
           <View key={c + ci} style={styles.chartGroup}>
             <View style={[styles.chartBars, { height: area }]}>
@@ -203,7 +205,7 @@ const styles = StyleSheet.create({
   pagerBtnText: { ...theme.type.label, color: theme.colors.primary },
 
   chart: { marginTop: theme.spacing(1.5) },
-  chartArea: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, overflow: 'hidden' },
+  chartArea: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   chartGroup: { flex: 1, alignItems: 'center' },
   chartBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, width: '100%', justifyContent: 'center' },
   chartBarCol: { flex: 1, maxWidth: 16, alignItems: 'center', justifyContent: 'flex-end' },

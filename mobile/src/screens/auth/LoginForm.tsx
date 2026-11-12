@@ -56,7 +56,9 @@ export function LoginForm({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // Android draws edge-to-edge, so the window no longer shrinks for the keyboard by itself:
+      // without 'height' here the keyboard covered the password box.
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: bottomInset }} keyboardShouldPersistTaps="handled">
         <AuthHeader title={title} subtitle={subtitle} />

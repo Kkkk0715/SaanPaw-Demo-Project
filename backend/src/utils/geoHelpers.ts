@@ -175,6 +175,9 @@ export function serializeShelterAnimal(doc: any) {
     notes: doc.notes,
     caseId: doc.caseId ? String(doc.caseId) : undefined,
     sourceReportId: doc.sourceReportId ? String(doc.sourceReportId) : undefined,
+    ownerRemoved: doc.ownerRemovedAt
+      ? { reason: doc.ownerRemovedReason ?? 'report_deleted', at: doc.ownerRemovedAt.toISOString?.() }
+      : undefined,
   };
 }
 
