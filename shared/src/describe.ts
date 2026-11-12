@@ -50,6 +50,16 @@ export const passwordChecks = (pw: string) => PASSWORD_RULES.map((r) => ({ label
 
 export const passwordMeetsRules = (pw: string) => PASSWORD_RULES.every((r) => r.test(pw));
 
+// ------------------------------------------------------------------- contact
+
+/** How to reach the SaanPaw developers - shown on the landing pages of the app and the console. */
+export const DEVELOPER_CONTACT = {
+  phone: '0947 826 9817',
+  /** For tel: links (Philippine number in international form). */
+  phoneHref: 'tel:+639478269817',
+  email: 'dirk.louisse0715@gmail.com',
+} as const;
+
 // ------------------------------------------------------------------- birthday
 
 /** Users must be at least this old to register (Terms of Use). */

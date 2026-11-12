@@ -1,9 +1,10 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
 import { useBottomInset } from '@/components/ui';
+import { DEVELOPER_CONTACT } from '@saanpaw/shared';
 
 /** Entry screen. Each module has its own login, so ask which one first. */
 export function RolePickerScreen({ navigation }: NativeStackScreenProps<any>) {
@@ -95,6 +96,32 @@ export function RolePickerScreen({ navigation }: NativeStackScreenProps<any>) {
                 <Text style={styles.noteText}>{n.text}</Text>
               </View>
             ))}
+          </View>
+
+          <View style={styles.contact}>
+            <Text style={styles.contactTitle}>Contact the developers</Text>
+            <View style={styles.contactRow}>
+              <Pressable
+                style={styles.contactItem}
+                onPress={() => void Linking.openURL(DEVELOPER_CONTACT.phoneHref)}
+                accessibilityRole="link"
+                accessibilityLabel={`Call ${DEVELOPER_CONTACT.phone}`}
+                hitSlop={6}
+              >
+                <Ionicons name="call-outline" size={14} color={theme.colors.primary} />
+                <Text style={styles.legalLink}>{DEVELOPER_CONTACT.phone}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.contactItem}
+                onPress={() => void Linking.openURL(`mailto:${DEVELOPER_CONTACT.email}?subject=SaanPaw`)}
+                accessibilityRole="link"
+                accessibilityLabel={`Email ${DEVELOPER_CONTACT.email}`}
+                hitSlop={6}
+              >
+                <Ionicons name="mail-outline" size={14} color={theme.colors.primary} />
+                <Text style={styles.legalLink}>{DEVELOPER_CONTACT.email}</Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.legal}>
@@ -223,4 +250,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   legalDot: { ...theme.type.caption, color: theme.colors.muted },
+  contact: { alignItems: 'center', gap: 6, marginTop: theme.spacing(1) },
+  contactTitle: { ...theme.type.caption, color: theme.colors.muted },
+  contactRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 16, rowGap: 6 },
+  contactItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });

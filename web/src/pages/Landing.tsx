@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { DEVELOPER_CONTACT } from '@saanpaw/shared';
 
 /**
  * Public landing page for the Developer Console - what SaanPaw is and how it works, shown before
@@ -222,6 +223,11 @@ export function LandingPage() {
 
       <footer className="landing-footer">
         <div>SaanPaw &middot; Capstone project, BS Information Technology, STI San Jose Del Monte</div>
+        <div className="landing-contact">
+          <span>Contact the developers:</span>
+          <a href={DEVELOPER_CONTACT.phoneHref}>{DEVELOPER_CONTACT.phone}</a>
+          <a href={`mailto:${DEVELOPER_CONTACT.email}?subject=SaanPaw`}>{DEVELOPER_CONTACT.email}</a>
+        </div>
         <div className="landing-legal">
           <Link to="/terms">Terms of Use</Link>
           <span aria-hidden>&middot;</span>
