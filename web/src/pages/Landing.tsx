@@ -89,6 +89,15 @@ const FEATURES = [
   { title: 'Photo-based identity', body: 'No collars, tags or microchips needed - a clear photo is enough to start a match.' },
 ];
 
+/**
+ * Where "Download the app" points. By default the APK attached to the newest GitHub Release, under
+ * the file name SaanPaw.apk - publishing a new release updates the button with no code change. Set
+ * VITE_APP_DOWNLOAD_URL (e.g. an EAS build link or a Google Drive link) to point it elsewhere.
+ */
+const APP_DOWNLOAD_URL =
+  import.meta.env.VITE_APP_DOWNLOAD_URL ||
+  'https://github.com/Kkkk0715/saanpaw-demo-project/releases/latest/download/SaanPaw.apk';
+
 /** How long each slide stays up before crossfading to the next. */
 const SLIDE_MS = 5000;
 
@@ -153,10 +162,22 @@ export function LandingPage() {
             smart alerts and a shared map of every lost and found report in the city. This console is
             where the system is administered.
           </p>
-          <div className="row row-wrap">
-            <Link className="btn btn-on-dark" to="/login">
+          <div className="row row-wrap landing-actions">
+            <a className="btn btn-on-dark btn-download" href={APP_DOWNLOAD_URL} rel="noopener">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1Z"
+                />
+              </svg>
+              Download the app
+            </a>
+            <Link className="btn btn-outline-on-dark" to="/login">
               Sign in
             </Link>
+          </div>
+          <div className="landing-download-note">
+            For Android phones (APK). If your phone asks, allow installing apps from your browser.
           </div>
         </div>
       </header>

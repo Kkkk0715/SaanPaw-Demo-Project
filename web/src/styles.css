@@ -1300,6 +1300,35 @@ tbody tr[data-selected='true'] {
   border: none;
 }
 
+/* Hero buttons: the app download leads, sign-in (for administrators) sits beside it. */
+.landing-actions {
+  gap: 12px;
+  margin-top: 4px;
+}
+.landing-actions .btn {
+  padding: 11px 20px;
+  font-size: 15px;
+  border-radius: var(--radius-sm);
+}
+.btn-download {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+.btn-outline-on-dark {
+  background: transparent;
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+}
+.landing-hero .landing-download-note {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.78);
+}
+@media (max-width: 600px) {
+  .landing-actions .btn {
+    flex: 1 1 100%;
+  }
+}
+
 .landing-section {
   padding: clamp(32px, 6vw, 64px) clamp(16px, 5vw, 56px);
   display: flex;
