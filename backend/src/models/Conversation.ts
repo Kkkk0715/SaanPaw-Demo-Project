@@ -1,6 +1,6 @@
 import { Schema, model, InferSchemaType } from 'mongoose';
 
-/** Message Box: 1:1 thread between a User and a Shelter about a recovered pet. */
+/** Message Box: the one thread between a User and a Shelter (one per pair - see the index below). */
 const conversationSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -13,6 +13,9 @@ const conversationSchema = new Schema(
   },
   { timestamps: true },
 );
+
+// One thread per user and shelter. The unique index for that is created by messagingService once
+// older duplicates are merged - declared here, it would fail to build while duplicates exist.
 
 export type ConversationDoc = InferSchemaType<typeof conversationSchema>;
 export const Conversation = model('Conversation', conversationSchema);

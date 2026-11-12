@@ -1126,8 +1126,9 @@ export function AppStoreProvider({ children, session }: { children: ReactNode; s
 
   const startConversation = useCallback<AppState['startConversation']>(
     (shelterId, subject, body, reportId) => {
+      // One thread per user and shelter (the server enforces it too), whichever screen it started from.
       const existing = conversations
-        .filter((c) => c.shelterId === shelterId && c.userId === currentUser.id && (c.reportId ?? null) === (reportId ?? null))
+        .filter((c) => c.shelterId === shelterId && c.userId === currentUser.id)
         .sort((a, b) => +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt))[0];
       if (existing) {
         sendMessage(existing.id, 'user', body);

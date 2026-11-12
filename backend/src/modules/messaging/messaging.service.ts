@@ -1,10 +1,12 @@
 import { Conversation } from '../../models/Conversation';
 import { Message } from '../../models/Message';
+import { Notification } from '../../models/Notification';
 import { Shelter } from '../../models/Shelter';
 import { User } from '../../models/User';
 import { ApiError } from '../../utils/ApiError';
 import { notify } from '../../services/pushNotification.service';
 import { combineName, serializeConversation, serializeMessage } from '../../utils/geoHelpers';
+import { logger } from '../../utils/logger';
 
 type Side = 'user' | 'shelter';
 
@@ -88,8 +90,69 @@ async function present(conversations: InstanceType<typeof Conversation>[]) {
   };
 }
 
+/**
+ * Folds duplicate threads (same user and shelter - made before one-thread-per-pair) into the
+ * oldest one: its messages keep their order, unread counts add up, the newest activity time and
+ * report link carry over, and message notifications point at the kept thread. Nothing is lost.
+ * Runs whenever either side loads its messages; a no-op once there are no duplicates.
+ */
+async function mergeDuplicateConversations(side: Side, ownerId: string) {
+  const ownerField = side === 'user' ? 'userId' : 'shelterId';
+  const ownerValue = (await Conversation.findOne({ [ownerField]: ownerId }, ownerField).lean())?.[ownerField];
+  if (!ownerValue) return;
+  const groups: { ids: unknown[] }[] = await Conversation.aggregate([
+    { $match: { [ownerField]: ownerValue } },
+    { $sort: { createdAt: 1 } },
+    { $group: { _id: { userId: '$userId', shelterId: '$shelterId' }, ids: { $push: '$_id' }, n: { $sum: 1 } } },
+    { $match: { n: { $gt: 1 } } },
+  ]);
+  for (const group of groups) {
+    try {
+      const [keepId, ...dropIds] = group.ids;
+      const all = await Conversation.find({ _id: { $in: group.ids } }).lean();
+      const keep = all.find((c) => String(c._id) === String(keepId));
+      if (!keep) continue;
+      const latest = [...all].sort((a, b) => +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt))[0];
+      await Message.updateMany({ conversationId: { $in: dropIds } }, { $set: { conversationId: keepId } });
+      await Notification.updateMany({ type: 'message', refId: { $in: dropIds } }, { $set: { refId: keepId } });
+      await Conversation.updateOne(
+        { _id: keepId },
+        {
+          $set: {
+            lastMessageAt: latest.lastMessageAt,
+            unreadForUser: all.reduce((n, c) => n + (c.unreadForUser ?? 0), 0),
+            unreadForShelter: all.reduce((n, c) => n + (c.unreadForShelter ?? 0), 0),
+            relatedReportId: latest.relatedReportId ?? all.find((c) => c.relatedReportId)?.relatedReportId,
+          },
+        },
+      );
+      await Conversation.deleteMany({ _id: { $in: dropIds } });
+    } catch (err) {
+      logger.error('messaging: could not merge duplicate conversations', err);
+    }
+  }
+}
+
+/**
+ * The database rule behind one-thread-per-pair, so two sends at the same moment can't both create
+ * a thread. It can only be built once no duplicates are left, so it is retried (cheaply) after
+ * each merge until it succeeds, then never again in this server instance.
+ */
+let pairIndexReady = false;
+async function ensurePairIndex() {
+  if (pairIndexReady) return;
+  try {
+    await Conversation.collection.createIndex({ userId: 1, shelterId: 1 }, { unique: true, name: 'one_thread_per_pair' });
+    pairIndexReady = true;
+  } catch {
+    // Duplicates for some other user or shelter still exist; they are merged when that side loads its messages.
+  }
+}
+
 export const messagingService = {
   async list(side: Side, ownerId: string) {
+    await mergeDuplicateConversations(side, ownerId);
+    await ensurePairIndex();
     const conversations = await Conversation.find({ [side === 'user' ? 'userId' : 'shelterId']: ownerId })
       .sort({ lastMessageAt: -1 })
       .limit(100);
@@ -99,16 +162,32 @@ export const messagingService = {
   async start(userId: string, input: { id?: string; shelterId: string; subject: string; body: string; reportId?: string }) {
     const shelter = await Shelter.findOne({ _id: input.shelterId, approvalStatus: 'approved' }).lean();
     if (!shelter) throw ApiError.notFound('Shelter not found');
+    // Already talking to this shelter: add to that thread (whatever screen the message came from).
+    const existing = await Conversation.findOne({ userId, shelterId: input.shelterId }).sort({ createdAt: 1 });
+    if (existing) {
+      if (input.reportId) existing.relatedReportId = input.reportId as never;
+      await existing.save();
+      return this.send('user', userId, String(existing._id), input.body);
+    }
     const now = new Date();
-    const conversation = await Conversation.create({
-      ...(input.id ? { _id: input.id } : {}),
-      userId,
-      shelterId: input.shelterId,
-      subject: input.subject,
-      relatedReportId: input.reportId,
-      lastMessageAt: now,
-      unreadForShelter: 1,
-    });
+    let conversation;
+    try {
+      conversation = await Conversation.create({
+        ...(input.id ? { _id: input.id } : {}),
+        userId,
+        shelterId: input.shelterId,
+        subject: input.subject,
+        relatedReportId: input.reportId,
+        lastMessageAt: now,
+        unreadForShelter: 1,
+      });
+    } catch (err) {
+      // Two sends at the same moment: the other one created the thread first, so use it.
+      if ((err as { code?: number }).code !== 11000) throw err;
+      const raced = await Conversation.findOne({ userId, shelterId: input.shelterId });
+      if (!raced) throw err;
+      return this.send('user', userId, String(raced._id), input.body);
+    }
     await Message.create({ conversationId: conversation._id, senderType: 'user', senderId: userId, body: input.body });
     await announce(conversation, 'user', input.body);
     return present([conversation]);
