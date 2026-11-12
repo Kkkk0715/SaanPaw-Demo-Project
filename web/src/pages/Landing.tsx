@@ -90,13 +90,14 @@ const FEATURES = [
 ];
 
 /**
- * Where "Download the app" points. By default the APK attached to the newest GitHub Release, under
- * the file name SaanPaw.apk - publishing a new release updates the button with no code change. Set
- * VITE_APP_DOWNLOAD_URL (e.g. an EAS build link or a Google Drive link) to point it elsewhere.
+ * Where "Download the app" points: the APK on Google Drive (shared "Anyone with the link"), as a
+ * direct download. To ship a new build, upload it as a new version of that same Drive file
+ * (right-click > File information > Manage versions) - the link stays the same.
+ * VITE_APP_DOWNLOAD_URL (set in Vercel) overrides it if ever needed.
  */
 const APP_DOWNLOAD_URL =
   import.meta.env.VITE_APP_DOWNLOAD_URL ||
-  'https://github.com/Kkkk0715/saanpaw-demo-project/releases/latest/download/SaanPaw.apk';
+  'https://drive.google.com/uc?export=download&id=1zEcA9s2kjkHx6VlOSI12_jwKydOuEudD';
 
 /** How long each slide stays up before crossfading to the next. */
 const SLIDE_MS = 5000;
@@ -163,7 +164,7 @@ export function LandingPage() {
             where the system is administered.
           </p>
           <div className="row row-wrap landing-actions">
-            <a className="btn btn-on-dark btn-download" href={APP_DOWNLOAD_URL} rel="noopener">
+            <a className="btn btn-on-dark btn-download" href={APP_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden focusable="false">
                 <path
                   fill="currentColor"
