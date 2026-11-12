@@ -1,0 +1,15 @@
+# gitleaks settings for the CI secret scan (.github/workflows/ci.yml).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known public values, not secrets"
+paths = [
+  # The Android app's Firebase config: its API key is public by design and ships inside the APK.
+  # It is restricted to the ph.sjdm.saanpaw app in Google Cloud instead of being kept secret.
+  '''mobile/google-services\.json''',
+]
+regexes = [
+  # The shortened example token in the backend guide ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...").
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.\.\.''',
+]

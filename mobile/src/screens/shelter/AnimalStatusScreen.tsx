@@ -164,7 +164,7 @@ export function AnimalStatusScreen({ navigation }: NativeStackScreenProps<any>) 
             title="No open cases"
             message="Respond to a report from Animal Reports to open a recovery case here."
             action="Animal reports"
-            onAction={() => navigation.navigate('AnimalReports')}
+            onAction={() => navigation.navigate('ShelterTabs', { screen: 'AnimalReports' })}
           />
         </Card>
       )}

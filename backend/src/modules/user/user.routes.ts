@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { objectIdParam } from '../../middleware/security';
 import { authenticate, authorize } from '../../middleware/auth';
 import { blockBannedUser } from '../../middleware/blockBanned';
 import { geoFence } from '../../middleware/geoFence';
@@ -6,6 +7,8 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { userController } from './user.controller';
 
 const router = Router();
+// Every :id must look like a database id before it reaches a query.
+router.param('id', objectIdParam);
 
 // Registration (public)
 router.post('/register', geoFence, asyncHandler(userController.register));

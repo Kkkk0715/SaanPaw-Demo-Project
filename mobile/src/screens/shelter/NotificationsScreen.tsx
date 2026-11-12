@@ -36,7 +36,7 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
       <SectionHeader
         title={unread ? `${unread} unread` : 'All caught up'}
         action="Change radius"
-        onAction={() => navigation.navigate('ShelterProfile')}
+        onAction={() => navigation.navigate('ShelterTabs', { screen: 'ShelterProfile' })}
       />
 
       {unread ? (
@@ -72,7 +72,7 @@ export function ShelterNotificationsScreen({ navigation }: NativeStackScreenProp
               title="No alerts"
               message={`Nothing has been reported within ${formatDistance(currentShelter.operatingRadiusMeters)} of the shelter. Widen the operating radius to cover more of the city.`}
               action="Shelter profile"
-              onAction={() => navigation.navigate('ShelterProfile')}
+              onAction={() => navigation.navigate('ShelterTabs', { screen: 'ShelterProfile' })}
             />
           </Card>
         )}

@@ -53,7 +53,14 @@ const isLanIpv4 = (host: string) => /^\d{1,3}(\.\d{1,3}){3}$/.test(host) && !hos
  * Any other configured address is used as given.
  */
 export function resolveApiBase(configured: string, appHost?: string): string {
-  const base = configured.replace(/\/+$/, '');
+  let base = configured.replace(/\/+$/, '');
+  // HTTPS everywhere: plain http:// is only allowed for a server on this machine or the local
+  // network (development). A public address given as http:// is upgraded, so a sign-in or token
+  // is never sent unencrypted over the internet.
+  const host = base.match(/^http:\/\/([^/:]+)/)?.[1];
+  if (host && host !== 'localhost' && !host.startsWith('127.') && !isLanIpv4(host) && !host.endsWith('.local')) {
+    base = base.replace(/^http:/, 'https:');
+  }
   const local = base.match(/^(https?:\/\/)(localhost|127\.0\.0\.1)(?=[:/]|$)/);
   return local && appHost && isLanIpv4(appHost) ? base.replace(local[0], `${local[1]}${appHost}`) : base;
 }

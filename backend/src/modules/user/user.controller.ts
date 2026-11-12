@@ -5,6 +5,8 @@ import { sendTestPush } from '../../services/pushNotification.service';
 import {
   deleteAccountSchema,
   matchScanSchema,
+  pushTokenSchema,
+  reportStatusSchema,
   queryNumber,
   registerUserSchema,
   reportSchema,
@@ -36,10 +38,10 @@ export const userController = {
   createLostReport: async (req: Request, res: Response) =>
     res.status(201).json(await userService.createLostReport(uid(req), reportSchema.parse(req.body))),
   updateLostReportStatus: async (req: Request, res: Response) =>
-    res.json(await userService.updateLostReportStatus(uid(req), req.params.id, req.body?.status)),
+    res.json(await userService.updateLostReportStatus(uid(req), req.params.id, reportStatusSchema.parse(req.body).status)),
 
   updateFoundReportStatus: async (req: Request, res: Response) =>
-    res.json(await userService.updateFoundReportStatus(uid(req), req.params.id, req.body?.status)),
+    res.json(await userService.updateFoundReportStatus(uid(req), req.params.id, reportStatusSchema.parse(req.body).status)),
   deleteReport: async (req: Request, res: Response) => {
     const kind = req.params.kind === 'found' ? 'found' : 'lost';
     res.json(await userService.deleteReport(uid(req), kind, req.params.id));
@@ -85,8 +87,7 @@ export const userController = {
   markNotificationRead: async (req: Request, res: Response) =>
     res.json(await userService.markNotificationRead(uid(req), req.params.id)),
   updatePushToken: async (req: Request, res: Response) => {
-    if (typeof req.body?.token !== 'string' || !req.body.token) throw ApiError.badRequest('token is required');
-    res.json(await userService.updatePushToken(uid(req), req.body.token));
+    res.json(await userService.updatePushToken(uid(req), pushTokenSchema.parse(req.body).token));
   },
   /** Profile's "Send a test notification": pushes to this account's phone and says what happened. */
   testPush: async (req: Request, res: Response) => res.json(await sendTestPush('user', uid(req))),

@@ -1,9 +1,12 @@
 import { Router } from 'express';
+import { objectIdParam } from '../../middleware/security';
 import { authenticate, authorize } from '../../middleware/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { developerController } from './developer.controller';
 
 const router = Router();
+// Every :id must look like a database id before it reaches a query.
+router.param('id', objectIdParam);
 router.use(authenticate, authorize('developer'));
 
 router.get('/me', asyncHandler(developerController.me));

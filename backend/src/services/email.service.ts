@@ -148,6 +148,10 @@ export async function emailQueueCounts() {
   return { queued, failed };
 }
 
+/** Every value a person typed (names, reasons) is escaped before it goes into an email's HTML. */
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
 export function shelterCredentialsEmail(params: { shelterName: string; email: string; password: string }): EmailMessage {
   const text =
     `Hi ${params.shelterName},\n\n` +
@@ -157,9 +161,9 @@ export function shelterCredentialsEmail(params: { shelterName: string; email: st
     `Change this password after you sign in (Shelter Profile > Change password).\n\n` +
     `- SaanPaw, San Jose Del Monte, Bulacan`;
   const html = `
-    <p>Hi ${params.shelterName},</p>
+    <p>Hi ${escapeHtml(params.shelterName)},</p>
     <p>Your shelter has been approved on SaanPaw. Open the SaanPaw mobile app, choose <b>Shelter Admin</b> and sign in with:</p>
-    <p><b>Email:</b> ${params.email}<br/><b>Password:</b> ${params.password}</p>
+    <p><b>Email:</b> ${escapeHtml(params.email)}<br/><b>Password:</b> ${escapeHtml(params.password)}</p>
     <p>Change this password after you sign in (Shelter Profile &gt; Change password).</p>
     <p>- SaanPaw, San Jose Del Monte, Bulacan</p>
   `;
@@ -201,8 +205,6 @@ export function emailVerificationEmail(params: { email: string; code: string; mi
   return { to: params.email, subject: 'Your SaanPaw verification code', text, html };
 }
 
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**
  * Sent just before an account is deleted for reaching the upheld-flag limit, listing each upheld

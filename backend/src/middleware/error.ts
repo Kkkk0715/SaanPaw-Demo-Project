@@ -26,7 +26,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   if (err instanceof multer.MulterError) {
     const tooBig = err.code === 'LIMIT_FILE_SIZE';
     res.status(tooBig ? 413 : 400).json({
-      error: tooBig ? 'That photo is too large. The limit is 8 MB.' : 'The photo upload was rejected.',
+      error: tooBig ? 'That file is too large. The limit is 8 MB.' : 'The upload was rejected: send one photo or document.',
       details: null,
     });
     return;

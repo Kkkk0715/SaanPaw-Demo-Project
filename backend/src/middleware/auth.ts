@@ -10,7 +10,8 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     throw ApiError.unauthorized('Missing bearer token');
   }
   try {
-    const decoded = jwt.verify(header.slice(7), env.jwtSecret) as Express.UserPayload;
+    // Only the algorithm SaanPaw signs with is accepted (no "none", no algorithm switching).
+    const decoded = jwt.verify(header.slice(7), env.jwtSecret, { algorithms: ['HS256'] }) as Express.UserPayload;
     req.auth = decoded;
     next();
   } catch {

@@ -6,6 +6,7 @@ import {
   caseStatusSchema,
   changePasswordSchema,
   openCaseSchema,
+  pushTokenSchema,
   registerShelterSchema,
   sendMessageSchema,
   shelterAnimalPatchSchema,
@@ -78,8 +79,7 @@ export const shelterController = {
   markNotificationRead: async (req: Request, res: Response) =>
     res.json(await shelterService.markNotificationRead(sid(req), req.params.id)),
   updatePushToken: async (req: Request, res: Response) => {
-    if (typeof req.body?.token !== 'string' || !req.body.token) throw ApiError.badRequest('token is required');
-    res.json(await shelterService.updatePushToken(sid(req), req.body.token));
+    res.json(await shelterService.updatePushToken(sid(req), pushTokenSchema.parse(req.body).token));
   },
   /** Profile's "Send a test notification": pushes to this account's phone and says what happened. */
   testPush: async (req: Request, res: Response) => res.json(await sendTestPush('shelter', sid(req))),

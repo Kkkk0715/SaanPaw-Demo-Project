@@ -19,8 +19,13 @@ async function findResettable(role: 'user' | 'shelter_admin', email: string) {
   return role === 'user' ? User.findOne({ email }) : Shelter.findOne({ adminEmail: email });
 }
 
+/**
+ * Session tokens. A Developer Console session can delete accounts, so it lasts 12 hours (sign in
+ * again each day); the mobile apps keep JWT_EXPIRES_IN (7 days by default) so phones stay signed in.
+ */
 function sign(payload: Express.UserPayload): string {
-  return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as any);
+  const expiresIn = payload.role === 'developer' ? '12h' : env.jwtExpiresIn;
+  return jwt.sign(payload, env.jwtSecret, { expiresIn, algorithm: 'HS256' } as any);
 }
 
 export const authService = {

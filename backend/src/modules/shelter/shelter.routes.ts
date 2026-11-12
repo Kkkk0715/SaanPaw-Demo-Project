@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { objectIdParam } from '../../middleware/security';
 import rateLimit from 'express-rate-limit';
 import { receiveProofDocument } from '../../middleware/upload';
 import { authenticate, authorize } from '../../middleware/auth';
@@ -7,6 +8,8 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { shelterController } from './shelter.controller';
 
 const router = Router();
+// Every :id must look like a database id before it reaches a query.
+router.param('id', objectIdParam);
 
 // Register is public (account is created in `pending` state, Developer approves).
 router.post('/register', geoFence, asyncHandler(shelterController.register));

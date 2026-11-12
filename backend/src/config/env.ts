@@ -56,7 +56,9 @@ export const env = {
    */
   corsOrigins: list(process.env.CORS_ORIGINS),
   /** Hops of reverse proxy in front of the API (0 = none), so rate limits see the real client address. */
-  trustProxy: optionalNumber('TRUST_PROXY', 0),
+  // On Vercel the request always passes one Vercel proxy; trusting it makes rate limits count each
+  // visitor's own address instead of lumping everyone together under Vercel's.
+  trustProxy: optionalNumber('TRUST_PROXY', process.env.VERCEL ? 1 : 0),
   uploadDir: optional('UPLOAD_DIR', 'uploads'),
   publicBaseUrl: optional('PUBLIC_BASE_URL', 'http://localhost:4000'),
   alerts: {

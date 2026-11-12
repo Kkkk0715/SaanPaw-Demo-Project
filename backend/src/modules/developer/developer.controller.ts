@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { developerService } from './developer.service';
+import { flagStatusQuerySchema, resolveFlagSchema, reviewShelterSchema, systemConfigPatchSchema } from '../../utils/validation';
 
 /** The administrator's reason for a ban or deletion (request body or ?reason=), trimmed and capped. */
 const reasonFrom = (req: Request): string | undefined => {
@@ -24,9 +25,10 @@ export const developerController = {
   reviewShelter: async (req: Request, res: Response) =>
     res.json(
       await developerService.reviewShelter({
+        // The body is validated first and spread first, so it can never replace the ids below.
+        ...reviewShelterSchema.parse(req.body),
         shelterId: req.params.id,
         developerId: req.auth!.id,
-        ...req.body,
       }),
     ),
 
@@ -45,23 +47,18 @@ export const developerController = {
   systemConfig: async (_req: Request, res: Response) =>
     res.json(await developerService.systemConfig()),
 
-  updateSystemConfig: async (req: Request, res: Response) => {
-    const patch: Record<string, boolean> = {};
-    for (const key of ['aiModeration', 'smartAlerts', 'geoFence', 'maintenanceMode'] as const) {
-      if (typeof req.body?.[key] === 'boolean') patch[key] = req.body[key];
-    }
-    res.json(await developerService.updateSystemConfig(patch));
-  },
+  updateSystemConfig: async (req: Request, res: Response) =>
+    res.json(await developerService.updateSystemConfig(systemConfigPatchSchema.parse(req.body ?? {}))),
 
   listFlags: async (req: Request, res: Response) =>
-    res.json(await developerService.listFlags(req.query.status as never)),
+    res.json(await developerService.listFlags(flagStatusQuerySchema.parse(req.query).status)),
 
   resolveFlag: async (req: Request, res: Response) =>
     res.json(
       await developerService.resolveFlag({
+        ...resolveFlagSchema.parse(req.body),
         flagId: req.params.id,
         developerId: req.auth!.id,
-        ...req.body,
       }),
     ),
 

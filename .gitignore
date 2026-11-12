@@ -42,3 +42,13 @@ Thumbs.db
 # uploads / local storage
 backend/uploads/
 coverage/
+
+# secrets - never commit these (google-services.json is the Android app's public Firebase
+# config and is meant to ship; restrict its key in Google Cloud instead)
+.env.*
+!.env.example
+*firebase-adminsdk*.json
+*service-account*.json
+*.pem
+mobile/android/
+mobile/ios/

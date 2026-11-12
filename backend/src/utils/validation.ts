@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MIN_USER_AGE, ageFromBirthDate } from './age';
-import { ANIMAL_CASE_STATUSES, ANIMAL_TYPES, SHELTER_ANIMAL_STATUSES } from '../config/constants';
+import { ANIMAL_CASE_STATUSES, ANIMAL_TYPES, REPORT_STATUSES, SHELTER_ANIMAL_STATUSES } from '../config/constants';
 
 /**
  * Request bodies are parsed with these schemas, which both reject bad input with a 400 and drop
@@ -254,6 +254,47 @@ export const shelterAnimalPatchSchema = z.object({
 export const openCaseSchema = z.object({ reportId: objectId, note: optionalText(1000) });
 
 export const caseStatusSchema = z.object({ status: caseStatus, notes: optionalText(1000) });
+
+// ----- small inputs that used to be checked by hand in the controllers -----
+
+/** An Expo push token ("ExponentPushToken[...]"), the only kind the apps register. */
+export const pushTokenSchema = z.object({
+  token: z
+    .string({ required_error: 'token is required' })
+    .trim()
+    .min(1, 'token is required')
+    .max(200)
+    .regex(/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/, 'Invalid push token'),
+});
+
+export const reportStatusSchema = z.object({ status: z.enum(REPORT_STATUSES) });
+
+/** Developer: approve or reject a shelter application. Only these fields are read from the request. */
+export const reviewShelterSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  reason: z.string().trim().max(1000).optional(),
+  adminEmail: z.string().trim().toLowerCase().email().max(254).optional(),
+  temporaryPassword: z.string().max(128).optional(),
+});
+
+/** Developer: close a moderation flag. */
+export const resolveFlagSchema = z.object({
+  action: z.enum(['dismiss', 'remove_report']),
+  note: z.string().trim().max(1000).optional(),
+});
+
+export const flagStatusQuerySchema = z.object({
+  status: z.enum(['open', 'dismissed', 'actioned']).optional(),
+});
+
+export const systemConfigPatchSchema = z
+  .object({
+    aiModeration: z.boolean(),
+    smartAlerts: z.boolean(),
+    geoFence: z.boolean(),
+    maintenanceMode: z.boolean(),
+  })
+  .partial();
 
 export const startConversationSchema = z.object({
   /** Chosen by the app so it can open the thread before the server answers. */

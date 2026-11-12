@@ -93,7 +93,7 @@ export function RecoveredAnimalsScreen({ navigation }: NativeStackScreenProps<an
                 : 'Every animal you recovered is already publicly visible. Add new intakes from Shelter Animals.'
             }
             action="Shelter animals"
-            onAction={() => navigation.navigate('ShelterAnimals')}
+            onAction={() => navigation.navigate('ShelterTabs', { screen: 'ShelterAnimals' })}
           />
         </Card>
       )}

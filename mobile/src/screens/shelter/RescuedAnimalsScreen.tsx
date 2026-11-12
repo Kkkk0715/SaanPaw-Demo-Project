@@ -129,7 +129,7 @@ export function RescuedAnimalsScreen({ navigation }: NativeStackScreenProps<any>
             title={status === 'recovering' ? 'Nothing being recovered' : 'No animals yet'}
             message="Respond to a report from Animal Reports, or add an animal to your shelter database, and it shows up here."
             action="Animal reports"
-            onAction={() => navigation.navigate('AnimalReports')}
+            onAction={() => navigation.navigate('ShelterTabs', { screen: 'AnimalReports' })}
           />
         </Card>
       )}
