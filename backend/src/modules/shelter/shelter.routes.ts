@@ -6,6 +6,7 @@ import { authenticate, authorize } from '../../middleware/auth';
 import { geoFence } from '../../middleware/geoFence';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { shelterController } from './shelter.controller';
+import { requesterTicketRoutes } from '../support/ticket.routes';
 
 const router = Router();
 // Every :id must look like a database id before it reaches a query.
@@ -28,6 +29,8 @@ router.post(
 );
 
 router.use(authenticate, authorize('shelter_admin'));
+// Help & support tickets to the SaanPaw team.
+router.use('/tickets', requesterTicketRoutes('shelter', (req) => req.auth!.shelterId ?? req.auth!.id));
 
 router.get('/me', asyncHandler(shelterController.me));
 router.get('/dashboard', asyncHandler(shelterController.dashboard));

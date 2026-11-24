@@ -62,6 +62,9 @@ export function LoginPage() {
         </div>
 
         <Button type="submit">Sign in</Button>
+        <button type="button" className="link-btn" onClick={() => navigate('/forgot-password')}>
+          Forgot password?
+        </button>
 
         {DEMO_MODE ? (
           <Banner tone="info" title="Demo credentials pre-filled">

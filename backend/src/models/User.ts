@@ -25,6 +25,14 @@ const userSchema = new Schema(
     homeLocation: { type: pointSchema, required: true },
     barangay: { type: String, required: true, trim: true },
     expoPushToken: { type: String },
+    /** Connected Facebook account (Facebook Login), shown on the profile; used for nothing else. */
+    facebook: {
+      id: { type: String },
+      name: { type: String },
+      connectedAt: { type: Date },
+    },
+    /** The one built-in account that owns reports made without an account (guest mode). */
+    isGuest: { type: Boolean, default: false, index: true },
     flaggedReportCount: { type: Number, default: 0 },
     isBanned: { type: Boolean, default: false },
     // Forgot-password: a hashed one-time code, not the code itself, same as a real password.

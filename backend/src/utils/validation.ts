@@ -107,6 +107,8 @@ export const registerUserSchema = z.object({
   location: latLngSchema,
   /** From POST /auth/email-code/verify: proves the email address is real and theirs. */
   emailVerificationToken: z.string().trim().max(200).optional(),
+  /** From "Connect Facebook" on the registration form. */
+  facebookToken: z.string().trim().max(1000).optional(),
 });
 
 export const registerShelterSchema = z.object({
@@ -135,6 +137,8 @@ export const reportSchema = z.object({
   sex: sex.optional(),
   size: size.optional(),
   distinctMarks: optionalText(500),
+  /** Feature tags from the AI photo autofill; the server adds the basics. */
+  aiTags: z.array(z.string().trim().max(30)).max(12).optional(),
   description: optionalText(1000),
   imageUrls,
   barangay: text(100).min(1, 'Select the barangay'),
@@ -144,6 +148,23 @@ export const reportSchema = z.object({
   /** Nearby landmark, e.g. "beside the 7-Eleven on Quirino Hwy". */
   landmark: optionalText(200),
 });
+
+/**
+ * Guest mode: a report without an account. The guest's name and mobile number go on the report
+ * so the owner, finder or a shelter can reach them; there is no other way to contact a guest.
+ */
+export const guestReportSchema = reportSchema.extend({
+  reporterName: z
+    .string()
+    .trim()
+    .min(2, 'Enter your name so people know who to ask for')
+    .max(60)
+    .regex(/^[\p{L} .'-]+$/u, 'Use letters only'),
+  reporterPhone: phMobile,
+});
+
+/** A guest managing their own report from the phone that made it. */
+export const guestKeySchema = z.object({ key: z.string().regex(/^[a-f0-9]{48}$/, 'This report can only be changed from the phone that made it.') });
 
 export const matchScanSchema = z.object({
   animalType: z.enum(ANIMAL_TYPES),
@@ -192,7 +213,8 @@ export const changePasswordSchema = z.object({
   newPassword: strongPassword,
 });
 
-const resettableRole = z.enum(['user', 'shelter_admin']);
+// The Developer Console's admins recover their password the same way as the apps.
+const resettableRole = z.enum(['user', 'shelter_admin', 'developer']);
 
 export const forgotPasswordSchema = z.object({
   role: resettableRole,
@@ -237,6 +259,8 @@ export const shelterAnimalSchema = z.object({
   sex: sex.optional(),
   size: size.optional(),
   distinctMarks: optionalText(500),
+  /** Feature tags from the AI photo autofill; the server adds the basics. */
+  aiTags: z.array(z.string().trim().max(30)).max(12).optional(),
   description: optionalText(1000),
   imageUrls,
   intakeType: z.enum(['surrendered', 'recovered', 'rescued']).optional(),

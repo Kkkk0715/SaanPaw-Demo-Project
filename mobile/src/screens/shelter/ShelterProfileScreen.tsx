@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { Text, View } from 'react-native';
 import { theme } from '@/constants/theme';
@@ -21,11 +22,13 @@ import {
   Choice,
   Field,
   KeyValue,
+  ListRow,
   PasswordRules,
   PhoneField,
   Row,
   Screen,
   SectionHeader,
+  Sheet,
   Select,
 } from '@/components/ui';
 import { MapCanvas } from '@/components/map/MapCanvas';
@@ -39,6 +42,7 @@ import { PushStatusCard } from '@/components/domain/PushStatusCard';
  * The operating radius set here decides which reports reach this shelter.
  */
 export function ShelterProfileScreen() {
+  const navigation = useNavigation<any>();
   const { currentShelter, updateShelterProfile, shelterAreaReports, changeShelterPassword, shelterAnimals } = useApp();
   const occupied = shelterAnimals.filter(
     (a) => a.shelterId === currentShelter.id && (a.caseStatus === 'under_rescue' || a.caseStatus === 'inconclusive'),
@@ -64,6 +68,8 @@ export function ShelterProfileScreen() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  // The password form stays out of sight until asked for, so it is never filled in on an open screen.
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   // The shelter keeps its exact pin until the barangay is changed; only then does it move to that
   // barangay's centre. Saving a new name or photo must not move the shelter.
@@ -120,8 +126,9 @@ export function ShelterProfileScreen() {
       await changeShelterPassword(currentPassword, newPassword);
       setCurrentPassword('');
       setNewPassword('');
+      setPasswordOpen(false);
       setPasswordSaved(true);
-      setTimeout(() => setPasswordSaved(false), 2500);
+      setTimeout(() => setPasswordSaved(false), 4000);
     } catch (e) {
       setPasswordError(e instanceof Error ? e.message : 'Could not change your password.');
     } finally {
@@ -220,32 +227,58 @@ export function ShelterProfileScreen() {
       <SectionHeader title="Push notifications" />
       <PushStatusCard />
 
-      <SectionHeader title="Change password" />
+      <SectionHeader title="Security" />
       <Card>
         {passwordSaved ? (
           <Banner tone="success" icon="checkmark-circle" title="Password changed" message="Use your new password next time you sign in." />
         ) : null}
-        <Caption>Changes the password the Developer issued you when your shelter was approved.</Caption>
-        <Field
-          label="Current password"
-          value={currentPassword}
-          onChangeText={setCurrentPassword}
-          placeholder="Your current password"
-          secureTextEntry
-          icon="lock-closed-outline"
-        />
-        <Field
-          label="New password"
-          value={newPassword}
-          onChangeText={setNewPassword}
-          placeholder="Create a new password"
-          secureTextEntry
-          icon="key-outline"
-        />
-        <PasswordRules password={newPassword} />
-        {passwordError ? <Caption style={{ color: theme.colors.danger }}>{passwordError}</Caption> : null}
-        <Button label="Change password" variant="secondary" icon="key-outline" loading={changingPassword} onPress={savePassword} />
+        <Caption>Your sign-in password. The form opens in a private panel and is cleared when closed.</Caption>
+        <Button label="Change password" variant="secondary" icon="key-outline" onPress={() => setPasswordOpen(true)} />
       </Card>
+
+      <SectionHeader title="Help" />
+      <ListRow
+        icon="help-buoy"
+        title="Help & support"
+        subtitle="Ask the SaanPaw team or report a problem"
+        iconColor={theme.colors.primaryDark}
+        onPress={() => navigation.navigate('Support')}
+      />
+
+      <Sheet
+        open={passwordOpen}
+        onClose={() => {
+          setPasswordOpen(false);
+          setCurrentPassword('');
+          setNewPassword('');
+          setPasswordError(null);
+        }}
+        title="Change password"
+      >
+        <View style={{ gap: theme.spacing(1.5) }}>
+          <Caption>Changes the password you use to sign in to this shelter account.</Caption>
+          <Field
+            label="Current password"
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            placeholder="Your current password"
+            secureTextEntry
+            icon="lock-closed-outline"
+            error={passwordError && !currentPassword ? passwordError : undefined}
+          />
+          <Field
+            label="New password"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            placeholder="Create a new password"
+            secureTextEntry
+            icon="key-outline"
+            error={passwordError && currentPassword ? passwordError : undefined}
+          />
+          <PasswordRules password={newPassword} />
+          <Button label="Save new password" icon="checkmark-outline" loading={changingPassword} onPress={() => void savePassword()} />
+        </View>
+      </Sheet>
 
       <Button label="Sign out" variant="secondary" icon="log-out-outline" onPress={handleSignOut} />
     </Screen>

@@ -3,6 +3,7 @@ import { objectIdParam } from '../../middleware/security';
 import { authenticate, authorize } from '../../middleware/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { developerController } from './developer.controller';
+import adminRoutes from './admin.routes';
 
 const router = Router();
 // Every :id must look like a database id before it reaches a query.
@@ -30,5 +31,8 @@ router.patch('/system', asyncHandler(developerController.updateSystemConfig));
 router.get('/flags', asyncHandler(developerController.listFlags));
 router.patch('/flags/:id/resolve', asyncHandler(developerController.resolveFlag));
 router.delete('/reports/:kind(lost|found)/:id', asyncHandler(developerController.deleteReport));
+
+// Tickets, analytics, admin accounts, recovery, versions, backups, report search.
+router.use(adminRoutes);
 
 export default router;

@@ -21,13 +21,8 @@ const router = Router();
 type UploadPurpose = 'animal' | 'profile';
 const purposeOf = (value: unknown): UploadPurpose => (value === 'profile' ? 'profile' : 'animal');
 
-// Only the two mobile roles attach photos. Authenticate first so nobody unauthenticated can trigger a save.
-router.post(
-  '/',
-  authenticate,
-  authorize('user', 'shelter_admin'),
-  receivePhoto,
-  asyncHandler(async (req, res) => {
+/** Saves one screened photo. Also used by guest mode (public routes), behind its own limits. */
+export const savePhotoHandler = asyncHandler(async (req, res) => {
     const file = req.file;
     if (!file) throw ApiError.badRequest('Attach a photo in the "photo" field.');
     if (!looksLikeImage(file.buffer)) {
@@ -40,7 +35,7 @@ router.post(
     if (purposeOf(req.body?.purpose) === 'animal' && (await getSystemConfig()).aiModeration) {
       const verdict = await prePassAnimalPhoto(file.buffer, file.mimetype);
       if (verdict && !verdict.allowed) {
-        logger.warn(`upload pre-pass: refused photo from ${req.auth?.role} ${req.auth?.id} (${verdict.species}): ${verdict.reasoning}`);
+        logger.warn(`upload pre-pass: refused photo from ${req.auth?.role ?? 'guest'} ${req.auth?.id ?? req.ip} (${verdict.species}): ${verdict.reasoning}`);
         throw new ApiError(422, verdict.message, { species: verdict.species, reasoning: verdict.reasoning });
       }
       if (!verdict && env.gemini.apiKey) {
@@ -58,7 +53,9 @@ router.post(
     // Fingerprinted so a later report reusing this same picture can be flagged as a duplicate.
     if (purposeOf(req.body?.purpose) === 'animal') await rememberPhoto(url, req.auth?.id, file.buffer);
     res.status(201).json({ url, ...(species ? { species } : {}) });
-  }),
-);
+});
+
+// Only the two mobile roles attach photos. Authenticate first so nobody unauthenticated can trigger a save.
+router.post('/', authenticate, authorize('user', 'shelter_admin'), receivePhoto, savePhotoHandler);
 
 export default router;

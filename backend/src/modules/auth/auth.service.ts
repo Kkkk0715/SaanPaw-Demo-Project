@@ -14,9 +14,12 @@ import { OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN_MS, OTP_TOKEN_TTL_MS, OTP_TTL_MS,
 const invalidResetCode = () => ApiError.badRequest('That code is invalid or has expired. Request a new one.');
 const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 
-/** The account a password reset is for: a user by email, or a shelter by its login email. */
-async function findResettable(role: 'user' | 'shelter_admin', email: string) {
-  return role === 'user' ? User.findOne({ email }) : Shelter.findOne({ adminEmail: email });
+type ResettableRole = 'user' | 'shelter_admin' | 'developer';
+
+/** The account a password reset is for: a user by email, a shelter by its login email, or an admin. */
+async function findResettable(role: ResettableRole, email: string) {
+  if (role === 'developer') return DeveloperAccount.findOne({ email, disabled: { $ne: true } });
+  return role === 'user' ? User.findOne({ email, isGuest: { $ne: true } }) : Shelter.findOne({ adminEmail: email });
 }
 
 /**
@@ -42,6 +45,9 @@ export const authService = {
       if (!acct || !(await bcrypt.compare(password, acct.passwordHash))) {
         throw ApiError.unauthorized('Invalid developer credentials');
       }
+      if (acct.disabled) throw ApiError.forbidden('This admin account has been turned off by another administrator.');
+      acct.lastLoginAt = new Date();
+      await acct.save();
       return { token: sign({ id: String(acct._id), role: 'developer' }) };
     }
 
@@ -62,7 +68,7 @@ export const authService = {
       };
     }
 
-    const user = await User.findOne({ email: normalized });
+    const user = await User.findOne({ email: normalized, isGuest: { $ne: true } });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw ApiError.unauthorized('Incorrect email or password.');
     }
@@ -81,7 +87,7 @@ export const authService = {
    * account. Always answers the same way, so it can never be used to find out which emails have
    * accounts. The answer carries the expiry and resend wait the app counts down.
    */
-  async forgotPassword(role: 'user' | 'shelter_admin', email: string): Promise<OtpSent> {
+  async forgotPassword(role: ResettableRole, email: string): Promise<OtpSent> {
     const normalized = email.toLowerCase().trim();
     const account = await findResettable(role, normalized);
     const now = new Date();
@@ -110,7 +116,7 @@ export const authService = {
    * Forgot password, step 2: checks the code only. A right code returns a reset token; the new
    * password screen is shown only after this, and only that token can set the password.
    */
-  async verifyResetCode(role: 'user' | 'shelter_admin', email: string, code: string): Promise<{ resetToken: string }> {
+  async verifyResetCode(role: ResettableRole, email: string, code: string): Promise<{ resetToken: string }> {
     const account = await findResettable(role, email.toLowerCase().trim());
     if (!account?.resetCodeHash || !account.resetCodeExpiresAt) throw invalidResetCode();
     if ((account.resetCodeExpiresAt as Date) < new Date()) {
@@ -141,7 +147,7 @@ export const authService = {
    * app builds still send the code itself here; that keeps working for them.)
    */
   async resetPassword(
-    role: 'user' | 'shelter_admin',
+    role: ResettableRole,
     email: string,
     proof: { resetToken?: string; code?: string },
     newPassword: string,
@@ -170,8 +176,8 @@ export const authService = {
     }
 
     const newHash = await bcrypt.hash(newPassword, 10);
-    if (role === 'user') (account as InstanceType<typeof User>).passwordHash = newHash;
-    else (account as InstanceType<typeof Shelter>).adminPasswordHash = newHash;
+    if (role === 'shelter_admin') (account as InstanceType<typeof Shelter>).adminPasswordHash = newHash;
+    else (account as InstanceType<typeof User>).passwordHash = newHash;
     account.resetCodeHash = undefined;
     account.resetCodeExpiresAt = undefined;
     account.resetTokenHash = undefined;

@@ -265,3 +265,120 @@ export async function prePassAnimalPhoto(buffer: Buffer, mimeType: string): Prom
 }
 
 export const geminiConfigured = configured;
+
+// ----- Photo autofill and natural-language search -----
+
+const DESCRIBE_PROMPT = `You help people file lost and found pet reports in San Jose Del Monte, Bulacan (Philippines).
+Look at this photo and describe every dog or cat (or other domestic animal) you can see, up to 4, from the most prominent.
+For each animal give what can be seen, never invent: if something cannot be seen, use null.
+- "animalType": "dog", "cat" or "other"
+- "breed": a likely breed or "Aspin" (Asong Pinoy) / "Puspin" (Pusang Pinoy) for local mixed breeds, or null
+- "color": main fur color(s) and pattern, e.g. "brown with white chest"
+- "size": "small", "medium" or "large" (adult-size judgement), or null
+- "sex": "male", "female" or "unknown" (almost always "unknown" unless it is obvious)
+- "distinctMarks": visible distinguishing features (collar, spots, scars, ear shape, tail), or null
+- "position": where it is in the photo, e.g. "left", "center", "right", "front"
+- "description": 1-2 sentences describing ONLY physical features (fur, markings, build, collar). Never use or guess a name, never mention people, places or the background.
+- "tags": 3 to 8 short lowercase search tags about its features, e.g. ["dog","brown","white chest","short fur","red collar"]
+Respond with strict JSON only, matching exactly: {"animals": [ { ...fields above } ]}. Use {"animals": []} when there is no animal.`;
+
+export interface AnimalDescription {
+  animalType: 'dog' | 'cat' | 'other';
+  breed: string | null;
+  color: string | null;
+  size: 'small' | 'medium' | 'large' | null;
+  sex: 'male' | 'female' | 'unknown';
+  distinctMarks: string | null;
+  position: string | null;
+  description: string;
+  tags: string[];
+}
+
+const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): T | null =>
+  typeof v === 'string' && (allowed as readonly string[]).includes(v.toLowerCase()) ? (v.toLowerCase() as T) : null;
+
+/** Strips names the model may still have slipped in ("named Bantay", "called Mingming"). */
+function featuresOnly(text: string): string {
+  return text.replace(/\b(named|called|answers to)\s+["']?[A-Z][\w-]*["']?/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+/** Turns one animal from the model's answer into safe, size-limited fields. */
+function cleanAnimal(raw: unknown): AnimalDescription | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const a = raw as Record<string, unknown>;
+  const animalType = oneOf(a.animalType, ['dog', 'cat', 'other'] as const);
+  if (!animalType) return null;
+  const tags = Array.isArray(a.tags)
+    ? [...new Set(a.tags.map((t) => String(t).toLowerCase().trim().slice(0, 30)).filter(Boolean))].slice(0, 8)
+    : [];
+  return {
+    animalType,
+    breed: str(a.breed, 100),
+    color: str(a.color, 100),
+    size: oneOf(a.size, ['small', 'medium', 'large'] as const),
+    sex: oneOf(a.sex, ['male', 'female', 'unknown'] as const) ?? 'unknown',
+    distinctMarks: str(a.distinctMarks, 500),
+    position: str(a.position, 40),
+    description: featuresOnly(str(a.description, 600) ?? ''),
+    tags,
+  };
+}
+
+/**
+ * Photo autofill: what the report form should be pre-filled with. Returns [] when there is no
+ * animal, and null when Gemini is unavailable (the form then simply stays empty). Never throws.
+ */
+export async function describeAnimalPhoto(photoUrl: string): Promise<AnimalDescription[] | null> {
+  if (!configured) return null;
+  const photo = await readStoredPhoto(photoUrl);
+  if (!photo) return null;
+  const parsed = await generateJson(DESCRIBE_PROMPT, [photo], 20_000);
+  if (!parsed || !Array.isArray(parsed.animals)) return null;
+  return parsed.animals.map(cleanAnimal).filter((a): a is AnimalDescription => a !== null).slice(0, 4);
+}
+
+const SEARCH_PROMPT = (query: string, today: string, barangays: string) => `Turn a search typed into a lost-and-found pet app into filters.
+Today is ${today} (Asia/Manila). Barangays of San Jose Del Monte: ${barangays}.
+Search: """${query.replace(/"/g, "'")}"""
+Respond with strict JSON only, every field null when the search does not say it:
+{"kind": "lost" | "found" | null, "animalType": "dog" | "cat" | "other" | null, "color": string | null, "breed": string | null,
+ "size": "small" | "medium" | "large" | null, "barangay": <exact barangay name from the list> | null,
+ "dateFrom": "YYYY-MM-DD" | null, "dateTo": "YYYY-MM-DD" | null, "keywords": [<other feature words, lowercase>],
+ "summary": "<one short sentence saying what is being searched for>"}`;
+
+export interface SearchFilters {
+  kind: 'lost' | 'found' | null;
+  animalType: 'dog' | 'cat' | 'other' | null;
+  color: string | null;
+  breed: string | null;
+  size: 'small' | 'medium' | 'large' | null;
+  barangay: string | null;
+  dateFrom: string | null;
+  dateTo: string | null;
+  keywords: string[];
+  summary: string;
+}
+
+const isoDay = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+
+/** "brown aspin found near Muzon last week" -> filters. Null when Gemini is unavailable. */
+export async function parseSearchQuery(query: string, barangayNames: string[]): Promise<SearchFilters | null> {
+  if (!configured) return null;
+  const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+  const parsed = await generateJson(SEARCH_PROMPT(query.slice(0, 300), today, barangayNames.join(', ')), [], 12_000);
+  if (!parsed) return null;
+  const barangay = typeof parsed.barangay === 'string' ? barangayNames.find((b) => b.toLowerCase() === parsed.barangay!.toString().toLowerCase()) ?? null : null;
+  return {
+    kind: oneOf(parsed.kind, ['lost', 'found'] as const),
+    animalType: oneOf(parsed.animalType, ['dog', 'cat', 'other'] as const),
+    color: str(parsed.color, 60),
+    breed: str(parsed.breed, 60),
+    size: oneOf(parsed.size, ['small', 'medium', 'large'] as const),
+    barangay,
+    dateFrom: isoDay(parsed.dateFrom),
+    dateTo: isoDay(parsed.dateTo),
+    keywords: Array.isArray(parsed.keywords) ? parsed.keywords.map((k) => String(k).toLowerCase().slice(0, 30)).slice(0, 8) : [],
+    summary: str(parsed.summary, 200) ?? '',
+  };
+}

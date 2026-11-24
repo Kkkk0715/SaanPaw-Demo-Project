@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { approvalMeta, formatDistance, maskPrivate, useApp, type ProofDocument, type Shelter } from '@saanpaw/shared';
 import { Badge, Banner, Button, Modal, useConfirm } from './ui';
 import { Bone } from './Skeleton';
+import { RecoverAccountButton } from './RecoverAccount';
 
 /**
  * Full detail for one shelter plus every account-level action on it: the
@@ -158,7 +159,10 @@ export function ShelterDetailPanel({
         </Button>
       )}
 
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+      <div className="row row-wrap" style={{ borderTop: '1px solid var(--border)', paddingTop: 14, gap: 8 }}>
+        {shelter.approvalStatus !== 'pending' ? (
+          <RecoverAccountButton kind="shelter" id={shelter.id} name={shelter.name} blocked={shelter.approvalStatus !== 'approved'} />
+        ) : null}
         <Button variant="danger" onClick={askDelete}>
           Delete shelter account
         </Button>

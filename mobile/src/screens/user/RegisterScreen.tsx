@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
@@ -28,6 +28,7 @@ import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/services/api';
 import { EmailVerifier } from '@/components/domain/EmailVerifier';
 import { BirthdayField } from '@/components/domain/BirthdayField';
+import { connectFacebook, facebookAvailable } from '@/services/facebook';
 
 /** Any provider - Gmail, Yahoo, Outlook, a school or work address. */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -54,6 +55,36 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [emailToken, setEmailToken] = useState<string | null>(null);
+  const [fbAvailable, setFbAvailable] = useState(false);
+  const [facebook, setFacebook] = useState<{ name?: string; token: string } | null>(null);
+  const [fbBusy, setFbBusy] = useState(false);
+  const [fbNote, setFbNote] = useState<string | null>(null);
+  useEffect(() => {
+    void facebookAvailable().then(setFbAvailable);
+  }, []);
+
+  /** Optional: connects a Facebook account to the new one, and fills in the name if still blank. */
+  const linkFacebook = async () => {
+    setFbBusy(true);
+    setFbNote(null);
+    try {
+      const r = await connectFacebook();
+      if (r.status === 'connected' && r.token) {
+        setFacebook({ name: r.name, token: r.token });
+        const parts = (r.name ?? '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) {
+          setFirstName((v) => v || parts.slice(0, -1).join(' '));
+          setLastName((v) => v || parts[parts.length - 1]);
+        }
+      } else {
+        setFbNote(r.status === 'error' ? r.message ?? 'Facebook could not be connected.' : 'Facebook was not connected.');
+      }
+    } catch (e) {
+      setFbNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFbBusy(false);
+    }
+  };
 
   const center =
     SJDM_BARANGAYS.find((b) => b.name === barangay)?.center ?? SJDM_BARANGAYS[4].center;
@@ -91,6 +122,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           alertRadiusMeters: radius,
           location: center,
           emailVerificationToken: emailToken,
+          facebookToken: facebook?.token,
         }),
       });
       await signIn('user', email, password);
@@ -203,6 +235,22 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           radiusCenter={center}
           markers={[{ id: 'me', coordinate: center, kind: 'me', label: 'Your area' }]}
         />
+
+        {fbAvailable ? (
+          facebook ? (
+            <Banner
+              tone="success"
+              icon="logo-facebook"
+              title={`Facebook connected${facebook.name ? `: ${facebook.name}` : ''}`}
+              message="You can post your reports to Facebook straight from the report page."
+            />
+          ) : (
+            <>
+              <Button label="Connect Facebook (optional)" variant="secondary" icon="logo-facebook" loading={fbBusy} onPress={() => void linkFacebook()} />
+              {fbNote ? <Banner tone="warning" icon="alert-circle-outline" title="Facebook" message={fbNote} /> : null}
+            </>
+          )
+        ) : null}
 
         <Banner
           tone="info"

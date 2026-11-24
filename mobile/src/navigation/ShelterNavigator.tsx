@@ -16,6 +16,10 @@ import { ShelterNotificationsScreen } from '@/screens/shelter/NotificationsScree
 import { ReportDetailScreen } from '@/screens/common/ReportDetailScreen';
 import { headerStyle } from './navTheme';
 import { useNotificationTaps } from './useNotificationTaps';
+import { useReportLinks } from './useReportLinks';
+import { PublicReportScreen } from '@/screens/common/PublicReportScreen';
+import { SupportScreen } from '@/screens/common/SupportScreen';
+import { TabBackButton } from './TabBackButton';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -41,9 +45,12 @@ function ShelterTabs() {
 
   return (
     <Tab.Navigator
+      // Android's back button goes to the tab you came from, not straight out of the app.
+      backBehavior="history"
       screenOptions={({ route }) => ({
         ...headerStyle,
         headerTitleStyle: { ...theme.type.h2, color: theme.colors.text },
+        headerLeft: () => <TabBackButton home="ShelterDashboard" />,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.muted,
         tabBarStyle: {
@@ -94,6 +101,7 @@ function ShelterTabs() {
 
 export function ShelterNavigator() {
   useNotificationTaps('shelter_admin', 'Shelter');
+  useReportLinks('Shelter');
   return (
     <Stack.Navigator
       screenOptions={{ ...headerStyle, headerTitleStyle: { ...theme.type.h2, color: theme.colors.text } }}
@@ -106,6 +114,8 @@ export function ShelterNavigator() {
       {/* Opened from the bell on the dashboard (it shows the unread count). */}
       <Stack.Screen name="ShelterNotifications" component={ShelterNotificationsScreen} options={{ title: 'Notifications' }} />
       <Stack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: 'Report details' }} />
+      <Stack.Screen name="PublicReport" component={PublicReportScreen} options={{ title: 'Report' }} />
+      <Stack.Screen name="Support" component={SupportScreen} options={{ title: 'Help & support' }} />
     </Stack.Navigator>
   );
 }

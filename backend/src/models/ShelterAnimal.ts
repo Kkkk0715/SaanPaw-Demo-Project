@@ -11,6 +11,8 @@ const shelterAnimalSchema = new Schema(
     sex: { type: String, enum: ['male', 'female', 'unknown'], default: 'unknown' },
     size: { type: String, enum: ['small', 'medium', 'large'] },
     distinctMarks: { type: String, trim: true },
+    /** Search tags: AI photo tags plus the basics from the fields (see tags.service.ts). */
+    aiTags: { type: [String], default: [], index: true },
     description: { type: String, trim: true },
     imageUrls: { type: [String], default: [] },
     intakeType: { type: String, enum: ['surrendered', 'recovered', 'rescued'], default: 'surrendered' },

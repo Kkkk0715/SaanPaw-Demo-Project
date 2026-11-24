@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,11 +25,45 @@ import { confirmAsync } from '@/services/confirm';
 import { shrinkPhoto } from '@/services/photo';
 import { useAuth } from '@/context/AuthContext';
 import { PushStatusCard } from '@/components/domain/PushStatusCard';
+import { connectFacebook, disconnectFacebook, facebookAvailable } from '@/services/facebook';
 
 /** User Module - Account details, alert radius, and sign out. */
 export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
-  const { currentUser, updateUserProfile, myReports, notificationsFor, deleteOwnAccount } = useApp();
-  const { signOut } = useAuth();
+  const { currentUser, updateUserProfile, myReports, notificationsFor, deleteOwnAccount, sync } = useApp();
+  const { signOut, token } = useAuth();
+  const [fbAvailable, setFbAvailable] = useState(false);
+  const [fbBusy, setFbBusy] = useState(false);
+  const [fbNote, setFbNote] = useState<string | null>(null);
+  useEffect(() => {
+    void facebookAvailable().then(setFbAvailable);
+  }, []);
+
+  const toggleFacebook = async () => {
+    if (!token) return;
+    setFbBusy(true);
+    setFbNote(null);
+    try {
+      if (currentUser.facebookName) {
+        const ok = await confirmAsync({
+          title: 'Disconnect Facebook?',
+          message: 'SaanPaw will forget your Facebook account. You can still share reports to Facebook.',
+          confirmLabel: 'Disconnect',
+          cancelLabel: 'Cancel',
+        });
+        if (!ok) return;
+        await disconnectFacebook(token);
+      } else {
+        const r = await connectFacebook(token);
+        if (r.status === 'error') setFbNote(r.message ?? 'Facebook could not be connected.');
+        if (r.status === 'cancelled') setFbNote('Facebook was not connected.');
+      }
+      await sync.refresh();
+    } catch (e) {
+      setFbNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFbBusy(false);
+    }
+  };
 
   const [editing, setEditing] = useState(false);
   const [photo, setPhoto] = useState(currentUser.photoUrl);
@@ -254,6 +288,38 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
           iconSoft={theme.colors.infoSoft}
           onPress={() => navigation.navigate('ShelterView')}
         />
+        <ListRow
+          icon="help-buoy"
+          title="Help & support"
+          subtitle="Ask the SaanPaw team or report a problem"
+          iconColor={theme.colors.primaryDark}
+          onPress={() => navigation.navigate('Support')}
+        />
+
+        {fbAvailable || currentUser.facebookName ? (
+          <>
+            <SectionHeader title="Facebook" />
+            <Card>
+              <Row gap={1}>
+                <Ionicons name="logo-facebook" size={22} color="#1877F2" />
+                <Text style={{ ...theme.type.body, color: theme.colors.text, flex: 1 }}>
+                  {currentUser.facebookName ? `Connected as ${currentUser.facebookName}` : 'Not connected'}
+                </Text>
+              </Row>
+              <Caption>
+                Connect your Facebook account to post your reports to Facebook in one tap from the report page.
+              </Caption>
+              {fbNote ? <Caption style={{ color: theme.colors.danger }}>{fbNote}</Caption> : null}
+              <Button
+                label={currentUser.facebookName ? 'Disconnect Facebook' : 'Connect Facebook'}
+                variant={currentUser.facebookName ? 'ghost' : 'secondary'}
+                icon="logo-facebook"
+                loading={fbBusy}
+                onPress={() => void toggleFacebook()}
+              />
+            </Card>
+          </>
+        ) : null}
 
         <View style={{ height: theme.spacing(1) }} />
         <Button label="Sign out" variant="danger" icon="log-out-outline" onPress={handleSignOut} />

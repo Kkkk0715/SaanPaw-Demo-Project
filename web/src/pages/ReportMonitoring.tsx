@@ -29,6 +29,7 @@ import {
 } from '@/components/ui';
 import { ReportDetailModal } from '@/components/ReportDetailModal';
 import { FlagDetailModal } from '@/components/FlagDetailModal';
+import { ReportSearch } from '@/components/ReportSearch';
 
 /** Upheld flags at which the server deletes the account and emails the person why. */
 const BAN_THRESHOLD = 3;
@@ -38,7 +39,7 @@ const BAN_THRESHOLD = 3;
  * remove bad entries, and ban accounts that keep posting them.
  */
 export function ReportMonitoringPage() {
-  const { flags, reports, shelterAnimals, users, reportById, resolveFlag, banUser, deleteUserAccount } = useApp();
+  const { flags, shelterAnimals, users, reportById, resolveFlag, banUser, deleteUserAccount } = useApp();
   const [tab, setTab] = useState<'flagged' | 'all' | 'accounts'>('flagged');
   const [acting, setActing] = useState<ModerationFlag | null>(null);
   const [selectedReport, setSelectedReport] = useState<AnimalReport | null>(null);
@@ -70,21 +71,14 @@ export function ReportMonitoringPage() {
   const resolved = flags.filter((f) => f.resolution !== 'pending');
   // Search boxes for the long lists: a report by animal, reference, place or reporter; an account
   // by name, email or barangay.
-  const [reportQuery, setReportQuery] = useState('');
   const [accountQuery, setAccountQuery] = useState('');
   const matches = (q: string, fields: (string | undefined)[]) =>
     !q.trim() || fields.filter(Boolean).join(' ').toLowerCase().includes(q.trim().toLowerCase());
   const accountRows = [...users]
     .filter((u) => matches(accountQuery, [u.fullName, u.email, u.barangay]))
     .sort((a, b) => b.flaggedReportCount - a.flaggedReportCount);
-  const allReports = [...reports]
-    .filter((r) =>
-      matches(reportQuery, [describeAnimal(r), r.id, r.name, r.breed, r.color, r.barangay, r.address, r.reporterName]),
-    )
-    .sort((a, b) => +new Date(b.reportedAt) - +new Date(a.reportedAt));
   const pendingPage = usePagination(pending, 10, tab);
   const resolvedPage = usePagination(resolved, 10, tab);
-  const reportsPage = usePagination(allReports, 10, `${tab}|${reportQuery}`);
   const accountsPage = usePagination(accountRows, 10, `${tab}|${accountQuery}`);
 
   /** A flag's target: a citizen's lost/found report, or a shelter's own animal posting. */
@@ -172,7 +166,7 @@ export function ReportMonitoringPage() {
         onChange={setTab}
         options={[
           { label: `Flagged (${pending.length})`, value: 'flagged' },
-          { label: `All reports (${reports.length})`, value: 'all' },
+          { label: 'All reports (search)', value: 'all' },
           { label: `Accounts (${accountRows.length})`, value: 'accounts' },
         ]}
       />
@@ -338,73 +332,7 @@ export function ReportMonitoringPage() {
         </>
       ) : null}
 
-      {tab === 'all' ? (
-        <Card>
-          <CardHead
-            title={`All submissions (${allReports.length}${reportQuery.trim() ? ` of ${reports.length}` : ''})`}
-            sub="Every lost and found report in the system, newest first"
-            actions={
-              <input
-                type="search"
-                placeholder="Search animal, place, reporter, reference..."
-                value={reportQuery}
-                onChange={(e) => setReportQuery(e.target.value)}
-                className="table-search"
-                aria-label="Search reports"
-              />
-            }
-          />
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 62 }}>Photo</th>
-                <th>Reference</th>
-                <th>Animal</th>
-                <th>Kind</th>
-                <th>Report Status</th>
-                <th>Location</th>
-                <th>Reporter</th>
-                <th>Reported</th>
-                <th>Flag</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reportsPage.items.map((r) => {
-                  const kind = reportKindStyle[r.kind];
-                  const status = reportStatusMeta[r.status];
-                  return (
-                    <tr key={r.id} onClick={() => setSelectedReport(r)} style={{ cursor: 'pointer' }}>
-                      <td>
-                        <Thumb src={r.imageUrls[0]} alt={describeAnimal(r)} />
-                      </td>
-                      <td style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 12 }}>
-                        {r.id.toUpperCase()}
-                      </td>
-                      <td className="cell-title">{describeAnimal(r)}</td>
-                      <td>
-                        <Badge label={kind.label} color={kind.color} soft={kind.soft} />
-                      </td>
-                      <td>
-                        <Badge label={status.label} color={status.color} soft={status.soft} />
-                      </td>
-                      <td style={{ maxWidth: 220 }}>{reportPlace(r)}</td>
-                      <td>{r.reporterName}</td>
-                      <td style={{ color: 'var(--muted)' }}>{timeAgo(r.reportedAt)}</td>
-                      <td>
-                        {r.moderationFlagId ? (
-                          <Badge label="AI flagged" color={colors.danger} soft={colors.dangerSoft} />
-                        ) : (
-                          <span style={{ color: 'var(--muted)' }}>—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-          <Pagination {...reportsPage} />
-        </Card>
-      ) : null}
+      {tab === 'all' ? <ReportSearch onOpen={setSelectedReport} /> : null}
 
       {tab === 'accounts' ? (
         <Card>

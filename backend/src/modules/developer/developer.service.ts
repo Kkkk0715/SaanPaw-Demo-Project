@@ -30,6 +30,7 @@ import { statsService } from '../../services/stats.service';
 import { getSystemConfig, updateSystemConfig, type SystemConfigValue } from '../../services/systemConfig.service';
 import { ApiError } from '../../utils/ApiError';
 import { generateTemporaryPassword } from '../../utils/password';
+import { assertNotGuestAccount } from '../../services/guestReporter.service';
 import {
   combineName,
   serializeFlag,
@@ -116,7 +117,7 @@ export const developerService = {
     const [stats, shelters, users, lost, found, shelterAnimals, flags, systemConfig, collections] = await Promise.all([
       statsService.platformStats(),
       Shelter.find().sort({ registeredAt: -1 }).lean(),
-      User.find().sort({ joinedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
+      User.find({ isGuest: { $ne: true } }).sort({ joinedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       // Removed reports stay out of the console, matching what "Remove" promises.
       LostPetReport.find({ isHiddenByModeration: false }).sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
       FoundAnimalReport.find({ isHiddenByModeration: false }).sort({ reportedAt: -1 }).limit(OVERVIEW_LIMIT).lean(),
@@ -330,6 +331,7 @@ export const developerService = {
 
   /** Manual ban: locks the account, hides everything the user reported, and emails them why. */
   async banUser(userId: string, reason?: string) {
+    assertNotGuestAccount(await User.findById(userId, 'isGuest').lean());
     const user = await User.findByIdAndUpdate(userId, { isBanned: true }, { new: true });
     if (!user) throw ApiError.notFound('User not found');
     await Promise.all([
@@ -360,8 +362,9 @@ export const developerService = {
   },
 
   async deleteUser(userId: string, reason?: string) {
-    const existing = await User.findById(userId, 'firstName middleName lastName email').lean();
+    const existing = await User.findById(userId, 'firstName middleName lastName email isGuest').lean();
     if (!existing) throw ApiError.notFound('User not found');
+    assertNotGuestAccount(existing);
     const email = await sendEmail(
       accountActionEmail({ action: 'user_deleted', name: combineName(existing), email: existing.email, reason }),
     );

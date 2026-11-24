@@ -10,6 +10,8 @@ import type { MobileRole } from '@/context/AuthContext';
 export type NotificationTarget = { screen: string; params?: Record<string, unknown> };
 
 export function notificationTarget(role: MobileRole, type: string | undefined, reportId: string | undefined): NotificationTarget {
+  // A reply from the SaanPaw team on a Help & support request (refId is the ticket).
+  if (type === 'ticket') return { screen: 'Support', params: reportId ? { ticketId: reportId } : undefined };
   if (role === 'shelter_admin') {
     if (type === 'message') return { screen: 'Messages' };
     // An animal in care whose owner deleted their report or account - now listed as a stray.

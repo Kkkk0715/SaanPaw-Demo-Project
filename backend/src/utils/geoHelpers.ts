@@ -1,3 +1,4 @@
+import { buildTags } from '../services/tags.service';
 /**
  * Convert between MongoDB GeoJSON Point format and frontend LatLng format.
  * 
@@ -62,6 +63,7 @@ export function serializeUser(doc: any) {
     location: geoPointToLatLng(doc.homeLocation),
     alertRadiusMeters: doc.alertRadiusMeters,
     birthDate: doc.birthDate ?? undefined,
+    facebookName: doc.facebook?.id ? doc.facebook.name : undefined,
     joinedAt: doc.joinedAt?.toISOString?.(),
     flaggedReportCount: doc.flaggedReportCount,
     isBanned: doc.isBanned,
@@ -113,6 +115,8 @@ export function serializeLostReport(doc: any) {
     sex: doc.sex,
     size: doc.size,
     distinctMarks: doc.distinctMarks,
+    // Older records have no stored tags: derive the basics so they are searchable too.
+    aiTags: doc.aiTags?.length ? doc.aiTags : buildTags(doc),
     description: doc.description,
     imageUrls: doc.imageUrls || [],
     status: doc.status,
@@ -120,6 +124,7 @@ export function serializeLostReport(doc: any) {
     reporterId: String(doc.reporterId),
     reporterName: doc.reporterName,
     reporterPhone: doc.reporterPhone,
+    byGuest: doc.byGuest ? true : undefined,
     barangay: doc.barangay,
     address: doc.address,
     landmark: doc.landmark,
@@ -140,6 +145,8 @@ export function serializeFoundReport(doc: any) {
     sex: doc.sex,
     size: doc.size,
     distinctMarks: doc.distinctMarks,
+    // Older records have no stored tags: derive the basics so they are searchable too.
+    aiTags: doc.aiTags?.length ? doc.aiTags : buildTags(doc),
     description: doc.description,
     imageUrls: doc.imageUrls || [],
     status: doc.status,
@@ -147,6 +154,7 @@ export function serializeFoundReport(doc: any) {
     reporterId: String(doc.reporterId),
     reporterName: doc.reporterName,
     reporterPhone: doc.reporterPhone,
+    byGuest: doc.byGuest ? true : undefined,
     barangay: doc.barangay,
     address: doc.address,
     landmark: doc.landmark,
@@ -167,6 +175,8 @@ export function serializeShelterAnimal(doc: any) {
     sex: doc.sex,
     size: doc.size,
     distinctMarks: doc.distinctMarks,
+    // Older records have no stored tags: derive the basics so they are searchable too.
+    aiTags: doc.aiTags?.length ? doc.aiTags : buildTags(doc),
     imageUrls: doc.imageUrls || [],
     intakeType: doc.intakeType,
     intakeDate: doc.intakeDate?.toISOString?.(),

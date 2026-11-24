@@ -9,11 +9,22 @@ import {
   formatDistance,
   isWithinSJDM,
   nearestBarangay,
+  uploadImage,
   useApp,
 } from '@saanpaw/shared';
 import type { AnimalReport, AnimalType, LatLng, ReportKind } from '@saanpaw/shared';
-import { locationService } from '@/services/locationService';
+import { describeFix, locationService } from '@/services/locationService';
+import { API_BASE_URL, apiRequest } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
+import { AnimalChooser, LoadingOverlay, PhotoEditor, summarizeAnimal, type DescribedAnimal } from '@/components/domain/PhotoTools';
 import { shrinkPhoto } from '@/services/photo';
+import {
+  isPhMobile,
+  loadGuestContact,
+  rememberGuestReport,
+  saveGuestContact,
+  uploadGuestPhoto,
+} from '@/services/guestReports';
 import {
   AnimalPhoto,
   Banner,
@@ -42,9 +53,15 @@ import { AnimalTypeAndBreed, MatchCard, describeAnimal } from '@/components/doma
 export function ReportForm({
   kind,
   navigation,
+  guest = false,
 }: {
   kind: ReportKind;
   navigation: { navigate: (screen: string, params?: object) => void; goBack: () => void };
+  /**
+   * Guest mode: no account. The reporter types their name and mobile number instead, the report
+   * goes to the public guest endpoints, and the phone keeps the key to manage it later.
+   */
+  guest?: boolean;
 }) {
   const { createReport, currentUser, reportById, shelterById, shelterAnimals, matchesForReport, lookupAddress, systemConfig } =
     useApp();
@@ -80,10 +97,30 @@ export function ReportForm({
   // Remounts AnimalTypeAndBreed on 'Submit another report' so its own internal picker state clears too.
   const [formKey, setFormKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  // Guest mode: who to contact about this report (remembered on the phone for next time).
+  const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  useEffect(() => {
+    if (!guest) return;
+    void loadGuestContact().then((c) => {
+      if (!c) return;
+      setGuestName((v) => v || c.name);
+      setGuestPhone((v) => v || c.phone);
+    });
+  }, [guest]);
+
+  // ---- AI photo autofill
+  const { token } = useAuth();
+  /** Photos already sent to the server (local uri -> stored address), so submitting doesn't send them twice. */
+  const [uploaded, setUploaded] = useState<Record<string, string>>({});
+  const [aiTags, setAiTags] = useState<string[]>([]);
+  const [autofill, setAutofill] = useState<{ busy: boolean; filled?: string; note?: string }>({ busy: false });
+  const [chooser, setChooser] = useState<{ animals: DescribedAnimal[]; photo: string } | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
 
   /** Where auto-tagging got to. */
   const [geo, setGeo] = useState<
-    { state: 'idle' | 'locating' | 'tagged' | 'denied' | 'outside' | 'unavailable'; message?: string }
+    { state: 'idle' | 'locating' | 'tagged' | 'denied' | 'outside' | 'unavailable'; message?: string; note?: string }
   >({ state: 'idle' });
 
   const pinOutside = !isWithinSJDM(pin.latitude, pin.longitude);
@@ -98,16 +135,17 @@ export function ReportForm({
   const tagCurrentLocation = async (auto = false) => {
     setGeo({ state: 'locating' });
     try {
-      const position = await locationService.getCurrent();
-      if (!position) {
+      const fix = await locationService.getCurrent();
+      if (!fix) {
         setGeo({
           state: 'denied',
           message: auto
-            ? 'Location permission is off, so the pin starts at your registered barangay. Tap the map to place it exactly.'
+            ? `Location permission is off, so the pin starts at ${guest ? 'a default spot in the city' : 'your registered barangay'}. Tap the map to place it exactly.`
             : 'Location permission was denied. Enable it in your device settings, or tap the map to place the pin.',
         });
         return;
       }
+      const position = { latitude: fix.latitude, longitude: fix.longitude };
       if (geoFenceOn && !isWithinSJDM(position.latitude, position.longitude)) {
         setGeo({
           state: 'outside',
@@ -119,7 +157,8 @@ export function ReportForm({
       setPin(position);
       setBarangay(placeFor(position));
       setMapFocus({ center: position, key: Date.now() });
-      setGeo({ state: 'tagged' });
+      // Indoors the GPS is weak: say when an earlier accurate position was used instead.
+      setGeo({ state: 'tagged', note: describeFix(fix) ?? undefined });
     } catch {
       setGeo({
         state: 'unavailable',
@@ -159,25 +198,87 @@ export function ReportForm({
     return () => clearTimeout(timer);
   }, [pin, lookupAddress]);
 
-  const pickImage = async (source: 'camera' | 'library') => {
+  /**
+   * Sends the photo to the server now (it is checked for an animal there) and asks the AI to read
+   * it: the details below are filled in for the person to check and change. A photo with several
+   * animals asks which one the report is about.
+   */
+  const readPhoto = async (uri: string) => {
+    if (!token && !guest) return;
+    setAutofill({ busy: true });
+    try {
+      const remote =
+        uploaded[uri] ??
+        (guest || !token ? await uploadGuestPhoto(uri) : await uploadImage({ baseUrl: API_BASE_URL, token, role: 'user' as const }, uri));
+      setUploaded((u) => ({ ...u, [uri]: remote }));
+      const res = await apiRequest<{ available: boolean; animals: DescribedAnimal[] }>(
+        guest ? '/public/guest/describe' : '/ai/describe',
+        { method: 'POST', body: JSON.stringify({ imageUrl: remote }) },
+        guest ? undefined : token ?? undefined,
+      );
+      if (!res.available) {
+        setAutofill({ busy: false, note: 'The AI is busy right now, so please fill in the details yourself.' });
+      } else if (!res.animals.length) {
+        setAutofill({ busy: false, note: 'The AI could not see an animal clearly in this photo. Fill in the details yourself, or try a clearer photo.' });
+      } else if (res.animals.length === 1) {
+        applyAnimal(res.animals[0]);
+      } else {
+        setAutofill({ busy: false });
+        setChooser({ animals: res.animals, photo: uri });
+      }
+    } catch (e) {
+      // The server refused the photo (e.g. no animal in it): take it off so it isn't submitted.
+      setImages((prev) => prev.filter((u) => u !== uri));
+      setAutofill({ busy: false });
+      setErrors((er) => ({ ...er, images: e instanceof Error ? e.message : 'That photo could not be used. Try another one.' }));
+    }
+  };
+
+  /** Fills the form from what the AI saw; anything already typed is kept. */
+  const applyAnimal = (a: DescribedAnimal) => {
+    setChooser(null);
+    setAnimalType(a.animalType);
+    if (a.breed && !breed.trim()) setBreed(a.breed);
+    if (a.color && !color.trim()) setColor(a.color);
+    if (a.sex !== 'unknown') setSex(a.sex);
+    if (a.size) setSize(a.size);
+    if (a.distinctMarks && !marks.trim()) setMarks(a.distinctMarks);
+    // The ready-made description: physical features only, never a name - edit it freely.
+    if (a.description && !description.trim()) setDescription(a.description);
+    setAiTags(a.tags);
+    setFormKey((k) => k + 1); // the breed picker shows the new breed
+    setErrors((er) => ({ ...er, color: '' }));
+    setAutofill({ busy: false, filled: summarizeAnimal(a) });
+  };
+
+  const pickImage = async (source: 'camera' | 'library' | 'scan') => {
     const perm =
-      source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      source === 'library'
+        ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+        : await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
       setErrors((e) => ({ ...e, images: 'Permission denied. Allow photo access to attach an image.' }));
       return;
     }
+    // allowsEditing shows the phone's own crop frame, so the photo can be cropped as it is added.
     const result =
-      source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
-        : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
+      source === 'library'
+        ? await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'], allowsEditing: true })
+        : await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: true });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       const uri = await shrinkPhoto(asset.uri, asset.width);
+      const first = images.length === 0;
       setImages((prev) => [...prev, uri].slice(0, 5));
       setErrors((e) => ({ ...e, images: '' }));
+      // The first photo fills in the details automatically.
+      if (first) void readPhoto(uri);
     }
+  };
+
+  /** A photo was edited (rotated, cropped...): the new copy replaces it and is sent again later. */
+  const replacePhoto = (index: number, uri: string) => {
+    setImages((prev) => prev.map((u, i) => (i === index ? uri : u)));
   };
 
   const submit = async () => {
@@ -188,11 +289,51 @@ export function ReportForm({
     if (!color.trim()) next.color = 'Describe the fur color - this drives the match score.';
     if (!barangay) next.barangay = 'Select the barangay.';
     if (outOfArea) next.location = 'The pin is outside San Jose Del Monte.';
+    if (guest) {
+      if (guestName.trim().length < 2) next.guestName = 'Enter your name so people know who to ask for.';
+      if (!isPhMobile(guestPhone)) next.guestPhone = 'Enter your mobile number, e.g. 0917 123 4567.';
+    }
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
 
     setSubmitting(true);
     try {
+      if (guest) {
+        // Photos the AI already read were sent then; the rest go now.
+        const imageUrls: string[] = [];
+        for (const u of images) imageUrls.push(uploaded[u] ?? (await uploadGuestPhoto(u)));
+        const report = await apiRequest<AnimalReport & { notices?: string[]; guestKey: string }>(`/public/guest/reports/${kind}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            reporterName: guestName.trim(),
+            reporterPhone: guestPhone.replace(/[\s()-]/g, ''),
+            name: kind === 'lost' ? name.trim() : undefined,
+            animalType,
+            breed: breed.trim() || undefined,
+            color: color.trim(),
+            sex,
+            size,
+            distinctMarks: marks.trim() || undefined,
+            description: description.trim() || undefined,
+            imageUrls,
+            aiTags: aiTags.length ? aiTags : undefined,
+            barangay: barangay!,
+            location: pin,
+            address: address.trim() || undefined,
+            landmark: landmark.trim() || undefined,
+          }),
+        });
+        await saveGuestContact({ name: guestName.trim(), phone: guestPhone.trim() });
+        await rememberGuestReport({
+          kind,
+          id: report.id,
+          key: report.guestKey,
+          title: describeAnimal(report),
+          at: new Date().toISOString(),
+        });
+        setSubmitted({ ...report, imageUrls: images });
+        return;
+      }
       const report = await createReport({
         kind,
         name: kind === 'lost' ? name.trim() : undefined,
@@ -203,7 +344,9 @@ export function ReportForm({
         size,
         distinctMarks: marks.trim() || undefined,
         description: description.trim() || undefined,
-        imageUrls: images,
+        // Photos the AI already read were sent then; the rest go now.
+        imageUrls: images.map((u) => uploaded[u] ?? u),
+        aiTags: aiTags.length ? aiTags : undefined,
         barangay: barangay!,
         location: pin,
         address: address.trim() || undefined,
@@ -220,7 +363,7 @@ export function ReportForm({
   // ---- after submitting: confirmation plus any matches found
 
   if (submitted) {
-    const matches = matchesForReport(submitted.id);
+    const matches = guest ? [] : matchesForReport(submitted.id);
     return (
       <Screen>
         <Banner
@@ -253,7 +396,16 @@ export function ReportForm({
           </Row>
         </Card>
 
-        {kind === 'lost' ? (
+        {guest ? (
+          <Banner
+            tone="info"
+            icon="call-outline"
+            title="People will contact you by phone"
+            message={`Shelters and SaanPaw users can see your number (${guestPhone.trim()}) on this report. You can mark it as resolved or delete it from "My guest reports". Create a free account to also get alerts and see possible matches.`}
+          />
+        ) : null}
+
+        {kind === 'lost' && !guest ? (
           <>
             <SectionHeader title={`Possible matches (${matches.length})`} />
             {matches.length ? (
@@ -293,9 +445,20 @@ export function ReportForm({
         <Button
           label="View report"
           icon="document-text-outline"
-          onPress={() => navigation.navigate('ReportDetail', { reportId: submitted.id })}
+          onPress={() =>
+            guest
+              ? navigation.navigate('PublicReport', { kind: submitted.kind, id: submitted.id })
+              : navigation.navigate('ReportDetail', { reportId: submitted.id })
+          }
         />
-        <Button label="Back to dashboard" variant="secondary" onPress={() => navigation.navigate('HomeTabs')} />
+        <Button
+          label={guest ? 'Back to browsing' : 'Back to dashboard'}
+          variant="secondary"
+          onPress={() => navigation.navigate(guest ? 'GuestHome' : 'HomeTabs')}
+        />
+        {guest ? (
+          <Button label="Create a free account" variant="ghost" icon="person-add-outline" onPress={() => navigation.navigate('UserRegister')} />
+        ) : null}
         <Button
           label="Submit another report"
           variant="ghost"
@@ -314,6 +477,9 @@ export function ReportForm({
             setDescription('');
             setLandmark('');
             setErrors({});
+            setAiTags([]);
+            setUploaded({});
+            setAutofill({ busy: false });
           }}
         />
       </Screen>
@@ -335,6 +501,28 @@ export function ReportForm({
         }
       />
 
+      {guest ? (
+        <>
+          <SectionHeader title="Your contact details" />
+          <Card>
+            <Caption>
+              No account needed. Your name and mobile number are shown on the report so the owner, finder or a
+              shelter can call or text you. This phone remembers them for your next report.
+            </Caption>
+            <Field label="Your name" value={guestName} onChangeText={setGuestName} placeholder="e.g. Juan" icon="person-outline" error={errors.guestName} />
+            <Field
+              label="Mobile number"
+              value={guestPhone}
+              onChangeText={setGuestPhone}
+              placeholder="0917 123 4567"
+              keyboardType="phone-pad"
+              icon="call-outline"
+              error={errors.guestPhone}
+            />
+          </Card>
+        </>
+      ) : null}
+
       <SectionHeader title="Photos" />
       <Card>
         <Caption>
@@ -343,12 +531,15 @@ export function ReportForm({
         </Caption>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {images.map((uri, i) => (
-            <View key={uri + i}>
+            <Pressable key={uri + i} onPress={() => setEditing(i)} accessibilityLabel={`Edit photo ${i + 1}`}>
               <AnimalPhoto uri={uri} size={88} />
+              <View style={styles.editBadge}>
+                <Ionicons name="create-outline" size={12} color="#fff" />
+              </View>
               <Pressable style={styles.removePhoto} onPress={() => setImages((p) => p.filter((_, idx) => idx !== i))}>
                 <Ionicons name="close" size={13} color="#fff" />
               </Pressable>
-            </View>
+            </Pressable>
           ))}
           {images.length < 5 ? (
             <>
@@ -360,9 +551,31 @@ export function ReportForm({
                 <Ionicons name="camera-outline" size={21} color={theme.colors.primary} />
                 <Text style={styles.addPhotoText}>Camera</Text>
               </Pressable>
+              <Pressable style={styles.addPhoto} onPress={() => pickImage('scan')}>
+                <Ionicons name="scan-outline" size={21} color={theme.colors.primary} />
+                <Text style={styles.addPhotoText}>Scan poster</Text>
+              </Pressable>
             </>
           ) : null}
         </ScrollView>
+        <Caption>Tap a photo to rotate, flip or crop it. "Scan poster" takes a picture of a printed missing-pet poster or photo and lets you crop it.</Caption>
+        {autofill.filled ? (
+          <Banner
+            tone="success"
+            icon="sparkles"
+            title="Details filled in from the photo"
+            message={`The AI saw: ${autofill.filled}. Check every field below and change anything that is wrong.`}
+          />
+        ) : null}
+        {autofill.note ? <Banner tone="warning" icon="sparkles-outline" title="Fill in the details" message={autofill.note} /> : null}
+        {images.length ? (
+          <Button
+            label={autofill.filled ? 'Read the first photo again' : 'Fill in details from photo'}
+            icon="sparkles-outline"
+            variant="secondary"
+            onPress={() => void readPhoto(images[0])}
+          />
+        ) : null}
         <ErrorText error={errors.images} />
       </Card>
 
@@ -424,7 +637,7 @@ export function ReportForm({
         />
 
         <Field
-          label={kind === 'lost' ? 'Where and when was it last seen?' : 'Circumstances'}
+          label={kind === 'lost' ? 'Description - features, and where and when it was last seen' : 'Description - features and circumstances'}
           value={description}
           onChangeText={setDescription}
           placeholder={
@@ -440,10 +653,10 @@ export function ReportForm({
       <Card>
         {geo.state === 'tagged' ? (
           <Banner
-            tone="success"
+            tone={geo.note ? 'warning' : 'success'}
             icon="location"
-            title="Location tagged automatically"
-            message={`Your device placed the pin in ${barangay}. Tap the map if the animal was seen somewhere else.`}
+            title={geo.note ? 'Location tagged from your last accurate position' : 'Location tagged automatically'}
+            message={geo.note ?? `Your device placed the pin in ${barangay}. Tap the map if the animal was seen somewhere else.`}
           />
         ) : null}
         {geo.message ? (
@@ -554,6 +767,21 @@ export function ReportForm({
       />
       {errors.submit ? <Banner tone="danger" icon="warning" title="Could not submit" message={errors.submit} /> : null}
       <Button label="Cancel" variant="ghost" onPress={() => navigation.goBack()} />
+      <AnimalChooser
+        open={Boolean(chooser)}
+        animals={chooser?.animals ?? []}
+        photoUri={chooser?.photo}
+        onChoose={applyAnimal}
+        onClose={() => setChooser(null)}
+      />
+      <PhotoEditor
+        uri={editing !== null ? images[editing] ?? null : null}
+        onDone={(uri) => editing !== null && replacePhoto(editing, uri)}
+        onRemove={() => editing !== null && setImages((p) => p.filter((_, i) => i !== editing))}
+        onClose={() => setEditing(null)}
+      />
+      <LoadingOverlay visible={autofill.busy} message="Reading the photo and filling in the details…" />
+      <LoadingOverlay visible={submitting} message="Sending your report…" />
     </Screen>
   );
 }
@@ -572,6 +800,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryFaint,
   },
   addPhotoText: { fontSize: 11, fontWeight: '600', color: theme.colors.primary },
+  editBadge: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 10,
+    padding: 3,
+  },
   removePhoto: {
     position: 'absolute',
     top: -5,

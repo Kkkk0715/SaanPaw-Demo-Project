@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { theme } from '@/constants/theme';
 import { caseStatusMeta, formatDistance, reportPlace, useApp } from '@saanpaw/shared';
-import type { AnimalReport, ReportKind } from '@saanpaw/shared';
+import type { AnimalReport } from '@saanpaw/shared';
 import {
   Banner,
   Button,
@@ -17,12 +17,12 @@ import {
   Row,
   Screen,
   SectionHeader,
-  Segmented,
   Sheet,
   usePagination,
 } from '@/components/ui';
 import { ReportCard, describeAnimal } from '@/components/domain';
 import { RecoveryTracker } from '@/components/domain/RecoveryTracker';
+import { ReportFilterPanel, useReportFilters } from '@/components/domain/ReportFilters';
 
 /**
  * Shelter Admin Module - Reports inside the shelter radius.
@@ -32,7 +32,7 @@ import { RecoveryTracker } from '@/components/domain/RecoveryTracker';
 export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>) {
   const { shelterAreaReports, currentShelter, openCase, caseForReport } = useApp();
 
-  const [kind, setKind] = useState<ReportKind | 'all'>('all');
+  const f = useReportFilters();
   const [onlyUnhandled, setOnlyUnhandled] = useState<'all' | 'unhandled'>('all');
   const [responding, setResponding] = useState<AnimalReport | null>(null);
   const [note, setNote] = useState('');
@@ -41,12 +41,10 @@ export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>)
   const all = shelterAreaReports();
   const reports = useMemo(
     () =>
-      all
-        .filter((r) => (kind === 'all' ? true : r.kind === kind))
-        .filter((r) => (onlyUnhandled === 'unhandled' ? !r.caseId : true)),
-    [all, kind, onlyUnhandled],
+      f.apply(all).filter((r) => (onlyUnhandled === 'unhandled' ? !r.caseId : true)),
+    [all, f, onlyUnhandled],
   );
-  const page = usePagination(reports, undefined, `${kind}-${onlyUnhandled}`);
+  const page = usePagination(reports, undefined, `${f.resetKey}-${onlyUnhandled}`);
 
   const respond = () => {
     if (!responding) return;
@@ -64,15 +62,8 @@ export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>)
         message={`Every open lost and found report inside ${currentShelter.name}'s operating radius appears here automatically, nearest first.`}
       />
 
-      <Segmented
-        options={[
-          { label: `All (${all.length})`, value: 'all' },
-          { label: `Lost (${all.filter((r) => r.kind === 'lost').length})`, value: 'lost', color: theme.colors.danger },
-          { label: `Found (${all.filter((r) => r.kind === 'found').length})`, value: 'found', color: theme.colors.found },
-        ]}
-        value={kind}
-        onChange={(v) => setKind(v as ReportKind | 'all')}
-      />
+      {/* Search (with AI), lost/found, date range, barangay or street, animal. */}
+      <ReportFilterPanel f={f} />
 
       <Choice
         options={[
@@ -142,9 +133,13 @@ export function AnimalReportsScreen({ navigation }: NativeStackScreenProps<any>)
           <EmptyState
             icon="documents-outline"
             title="No reports match"
-            message={`Nothing open inside your ${formatDistance(currentShelter.operatingRadiusMeters)} radius with these filters. Widen the operating radius in your shelter profile to cover more of the city.`}
-            action="Shelter profile"
-            onAction={() => navigation.navigate('ShelterProfile')}
+            message={
+              f.active
+                ? 'No report matches this search. Clear the filters to see every report in your area.'
+                : `Nothing open inside your ${formatDistance(currentShelter.operatingRadiusMeters)} radius. Widen the operating radius in your shelter profile to cover more of the city.`
+            }
+            action={f.active ? 'Clear filters' : 'Shelter profile'}
+            onAction={() => (f.active ? f.clear() : navigation.navigate('ShelterProfile'))}
           />
         </Card>
       )}

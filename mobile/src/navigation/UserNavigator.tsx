@@ -15,6 +15,10 @@ import { UserNotificationsScreen } from '@/screens/user/NotificationsScreen';
 import { SearchReportsScreen } from '@/screens/user/SearchReportsScreen';
 import { UserProfileScreen } from '@/screens/user/ProfileScreen';
 import { ReportDetailScreen } from '@/screens/common/ReportDetailScreen';
+import { PublicReportScreen } from '@/screens/common/PublicReportScreen';
+import { SupportScreen } from '@/screens/common/SupportScreen';
+import { TabBackButton } from './TabBackButton';
+import { useReportLinks } from './useReportLinks';
 import { headerStyle } from './navTheme';
 import { useNotificationTaps } from './useNotificationTaps';
 
@@ -38,9 +42,11 @@ function HomeTabs() {
 
   return (
     <Tab.Navigator
+      backBehavior="history"
       screenOptions={({ route }) => ({
         ...headerStyle,
         headerTitleStyle: { ...theme.type.h2, color: theme.colors.text },
+        headerLeft: () => <TabBackButton home="Home" />,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.muted,
         tabBarStyle: {
@@ -79,6 +85,7 @@ function HomeTabs() {
 
 export function UserNavigator() {
   useNotificationTaps('user', 'User');
+  useReportLinks('User');
   return (
     <Stack.Navigator screenOptions={{ ...headerStyle, headerTitleStyle: { ...theme.type.h2, color: theme.colors.text } }}>
       <Stack.Screen name="HomeTabs" component={HomeTabs} options={{ headerShown: false }} />
@@ -88,6 +95,8 @@ export function UserNavigator() {
       <Stack.Screen name="ShelterView" component={ShelterViewScreen} options={{ title: 'Shelters' }} />
       <Stack.Screen name="ImageRecognition" component={ImageRecognitionScreen} options={{ title: 'Image Match' }} />
       <Stack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: 'Report details' }} />
+      <Stack.Screen name="PublicReport" component={PublicReportScreen} options={{ title: 'Report' }} />
+      <Stack.Screen name="Support" component={SupportScreen} options={{ title: 'Help & support' }} />
     </Stack.Navigator>
   );
 }

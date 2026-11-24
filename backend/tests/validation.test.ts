@@ -227,7 +227,9 @@ describe('changePasswordSchema', () => {
 describe('forgotPasswordSchema', () => {
   it('requires a valid email and a resettable role', () => {
     expect(() => forgotPasswordSchema.parse({ role: 'user', email: 'not-an-email' })).toThrow();
-    expect(() => forgotPasswordSchema.parse({ role: 'developer', email: 'a@b.com' })).toThrow();
+    expect(() => forgotPasswordSchema.parse({ role: 'admin', email: 'a@b.com' })).toThrow();
+    // Developer Console admins can reset their own password too.
+    expect(forgotPasswordSchema.parse({ role: 'developer', email: 'a@b.com' }).role).toBe('developer');
     expect(forgotPasswordSchema.parse({ role: 'user', email: 'A@B.COM' }).email).toBe('a@b.com');
     expect(forgotPasswordSchema.parse({ role: 'shelter_admin', email: 'shelter@gmail.com' }).role).toBe(
       'shelter_admin',

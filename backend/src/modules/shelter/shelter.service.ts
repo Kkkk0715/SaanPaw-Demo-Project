@@ -1,3 +1,4 @@
+import { buildTags } from '../../services/tags.service';
 import bcrypt from 'bcryptjs';
 import { Shelter } from '../../models/Shelter';
 import { ShelterAnimal } from '../../models/ShelterAnimal';
@@ -68,6 +69,7 @@ async function shelterAnimalFromCase(caseDoc: CaseDoc, report: ReportDoc, status
     distinctMarks: r.distinctMarks,
     description: r.description,
     imageUrls: r.imageUrls ?? [],
+    aiTags: (r.aiTags as string[] | undefined) ?? buildTags(r as never),
     intakeType: 'recovered',
     intakeDate: new Date(),
     caseStatus: status,
@@ -288,7 +290,7 @@ export const shelterService = {
   },
 
   async addShelterAnimal(shelterId: string, data: Record<string, unknown>) {
-    const animal = await ShelterAnimal.create({ ...data, shelterId });
+    const animal = await ShelterAnimal.create({ ...data, shelterId, aiTags: buildTags(data as never) });
     await matchAnimalAgainstLostReports(animal);
     const notices = await screenAnimalPosting(shelterId, animal, data);
     return { ...serializeShelterAnimal(animal), notices };
@@ -305,6 +307,7 @@ export const shelterService = {
     const animal = await ShelterAnimal.create({
       ...data,
       shelterId,
+      aiTags: buildTags(data as never),
       postedPublicly: true,
       caseStatus: 'under_rescue',
     });

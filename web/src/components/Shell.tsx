@@ -11,10 +11,14 @@ import { useConfirm } from '@/components/ui';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '▦', end: true },
+  { to: '/analytics', label: 'Analytics', icon: '📈' },
   { to: '/shelters', label: 'Shelter Approvals', icon: '⛨', badge: 'shelters' as const, end: true },
   { to: '/shelters/manage', label: 'Manage Shelters', icon: '🏠' },
   { to: '/reports', label: 'Report Monitoring', icon: '⚑', badge: 'flags' as const },
+  { to: '/support', label: 'Support Tickets', icon: '✉' },
+  { to: '/accounts', label: 'Accounts', icon: '👤' },
   { to: '/system', label: 'System Management', icon: '⚙' },
+  { to: '/versions', label: 'Versions & Backups', icon: '⟲' },
 ];
 
 const PAGE_META: Record<string, { title: string; sub: string }> = {
@@ -33,6 +37,22 @@ const PAGE_META: Record<string, { title: string; sub: string }> = {
   '/reports': {
     title: 'Report Monitoring',
     sub: 'Review AI-flagged reports, remove false entries, and ban repeat offenders',
+  },
+  '/analytics': {
+    title: 'Analytics',
+    sub: 'Number of users and report trends for any date range, by day, week or month',
+  },
+  '/support': {
+    title: 'Support Tickets',
+    sub: 'Help requests from users and shelters, answered from here',
+  },
+  '/accounts': {
+    title: 'Accounts',
+    sub: 'Find and recover user accounts, and manage who can sign in to this console',
+  },
+  '/versions': {
+    title: 'Versions & Backups',
+    sub: 'Version history of every update, settings history, and database backups with rollback',
   },
   '/system': {
     title: 'System Management',

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { developerService } from './developer.service';
+import { changeConfigWithHistory } from './admin.service';
 import { flagStatusQuerySchema, resolveFlagSchema, reviewShelterSchema, systemConfigPatchSchema } from '../../utils/validation';
 
 /** The administrator's reason for a ban or deletion (request body or ?reason=), trimmed and capped. */
@@ -48,7 +49,8 @@ export const developerController = {
     res.json(await developerService.systemConfig()),
 
   updateSystemConfig: async (req: Request, res: Response) =>
-    res.json(await developerService.updateSystemConfig(systemConfigPatchSchema.parse(req.body ?? {}))),
+    // Kept in the settings history, so the change can be rolled back from Versions & backups.
+    res.json({ config: await changeConfigWithHistory(req.auth!.id, systemConfigPatchSchema.parse(req.body ?? {})) }),
 
   listFlags: async (req: Request, res: Response) =>
     res.json(await developerService.listFlags(flagStatusQuerySchema.parse(req.query).status)),

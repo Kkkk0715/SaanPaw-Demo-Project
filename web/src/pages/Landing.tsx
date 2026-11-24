@@ -95,7 +95,7 @@ const FEATURES = [
  * (right-click > File information > Manage versions) - the link stays the same.
  * VITE_APP_DOWNLOAD_URL (set in Vercel) overrides it if ever needed.
  */
-const APP_DOWNLOAD_URL =
+export const APP_DOWNLOAD_URL =
   import.meta.env.VITE_APP_DOWNLOAD_URL ||
   'https://drive.google.com/uc?export=download&id=1zEcA9s2kjkHx6VlOSI12_jwKydOuEudD';
 

@@ -572,3 +572,121 @@ export function PasswordInput({
     </div>
   );
 }
+
+export interface TrendSeries {
+  label: string;
+  color: string;
+  values: number[];
+  /** "bar" draws columns (counts per period), "line" a line (a running total). */
+  kind?: 'bar' | 'line';
+}
+
+/**
+ * Trend over time for many periods (days, weeks or months): bars for counts, an optional line for
+ * a running total on its own right-hand scale. Axis labels are thinned so they never overlap.
+ */
+export function TrendChart({
+  labels,
+  series,
+  height = 220,
+  ariaLabel,
+}: {
+  labels: string[];
+  series: TrendSeries[];
+  height?: number;
+  ariaLabel: string;
+}) {
+  const width = 720;
+  const bars = series.filter((s) => (s.kind ?? 'bar') === 'bar');
+  const lines = series.filter((s) => s.kind === 'line');
+  const pad = { top: 16, right: lines.length ? 44 : 10, bottom: 30, left: 34 };
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const nice = (max: number) => {
+    const m = Math.max(1, max);
+    const step = m <= 5 ? 1 : m <= 10 ? 2 : Math.ceil(m / 5 / Math.pow(10, Math.floor(Math.log10(m / 5)))) * Math.pow(10, Math.floor(Math.log10(m / 5)));
+    return { top: Math.ceil(m / step) * step, step };
+  };
+  // Stacked bar height per period, so stacked series share one scale.
+  const barTotals = labels.map((_, i) => bars.reduce((n, s) => n + (s.values[i] ?? 0), 0));
+  const left = nice(Math.max(0, ...barTotals));
+  const right = nice(Math.max(0, ...lines.flatMap((s) => s.values)));
+  const yL = (v: number) => pad.top + innerH - (v / left.top) * innerH;
+  const yR = (v: number) => pad.top + innerH - (v / right.top) * innerH;
+  const slot = innerW / Math.max(1, labels.length);
+  const barW = Math.max(2, Math.min(28, slot * 0.7));
+  const every = Math.max(1, Math.ceil(labels.length / 10));
+  const ticks = Array.from({ length: left.top / left.step + 1 }, (_, i) => i * left.step);
+
+  return (
+    <figure className="chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel} style={{ width: '100%', height: 'auto' }}>
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={pad.left} x2={width - pad.right} y1={yL(t)} y2={yL(t)} stroke="var(--border)" strokeWidth={t === 0 ? 1.2 : 0.7} />
+            {bars.length ? (
+              <text x={pad.left - 6} y={yL(t) + 4} textAnchor="end" fontSize="10.5" fill="var(--muted)">
+                {t}
+              </text>
+            ) : null}
+          </g>
+        ))}
+        {lines.length
+          ? [0, right.top / 2, right.top].map((t) => (
+              <text key={t} x={width - pad.right + 6} y={yR(t) + 4} fontSize="10.5" fill={lines[0].color}>
+                {Math.round(t)}
+              </text>
+            ))
+          : null}
+        {labels.map((label, i) => {
+          let base = 0;
+          return (
+            <g key={label}>
+              {bars.map((s) => {
+                const v = s.values[i] ?? 0;
+                const yTop = yL(base + v);
+                const h = yL(base) - yTop;
+                base += v;
+                return v > 0 ? (
+                  <rect key={s.label} x={pad.left + i * slot + (slot - barW) / 2} y={yTop} width={barW} height={h} fill={s.color} rx={2}>
+                    <title>{`${label} · ${s.label}: ${v}`}</title>
+                  </rect>
+                ) : null;
+              })}
+              {i % every === 0 || i === labels.length - 1 ? (
+                <text x={pad.left + i * slot + slot / 2} y={height - 10} textAnchor="middle" fontSize="10.5" fill="var(--muted)">
+                  {label.length > 7 ? label.slice(5) : label}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+        {lines.map((s) => (
+          <g key={s.label}>
+            <polyline
+              fill="none"
+              stroke={s.color}
+              strokeWidth={2.2}
+              strokeLinejoin="round"
+              points={s.values.map((v, i) => `${pad.left + i * slot + slot / 2},${yR(v)}`).join(' ')}
+            />
+            {s.values.map((v, i) => (
+              <circle key={i} cx={pad.left + i * slot + slot / 2} cy={yR(v)} r={labels.length > 40 ? 0 : 2.6} fill={s.color}>
+                <title>{`${labels[i]} · ${s.label}: ${v}`}</title>
+              </circle>
+            ))}
+          </g>
+        ))}
+      </svg>
+      <figcaption className="chart-legend">
+        {series.map((s) => (
+          <span key={s.label}>
+            <i style={{ background: s.color }} aria-hidden />
+            {s.label}
+            {s.kind === 'line' ? ' (right scale)' : ''}
+          </span>
+        ))}
+      </figcaption>
+    </figure>
+  );
+}

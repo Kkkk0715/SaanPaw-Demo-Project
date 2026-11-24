@@ -274,7 +274,8 @@ export function NotificationRow({
     case_update: { icon: 'refresh-circle' as const, color: theme.colors.info, soft: theme.colors.infoSoft },
     message: { icon: 'chatbubble-ellipses' as const, color: theme.colors.info, soft: theme.colors.infoSoft },
     system: { icon: 'settings' as const, color: theme.colors.muted, soft: theme.colors.surfaceAlt },
-  }[item.type];
+    ticket: { icon: 'help-buoy' as const, color: theme.colors.primaryDark, soft: theme.colors.primarySoft },
+  }[item.type] ?? { icon: 'notifications' as const, color: theme.colors.muted, soft: theme.colors.surfaceAlt };
 
   return (
     <Pressable

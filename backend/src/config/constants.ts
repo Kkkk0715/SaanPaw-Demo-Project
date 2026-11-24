@@ -31,6 +31,7 @@ export const NOTIFICATION_TYPES = [
   'message',
   'status_update',
   'moderation',
+  'ticket',
 ] as const;
 
 type CaseStatusValue = (typeof ANIMAL_CASE_STATUSES)[number];

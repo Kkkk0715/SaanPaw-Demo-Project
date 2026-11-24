@@ -1,3 +1,5 @@
+import { buildTags } from '../../services/tags.service';
+import { readRegistrationToken } from '../../services/facebook.service';
 import { User } from '../../models/User';
 import { Shelter } from '../../models/Shelter';
 import { ShelterAnimal } from '../../models/ShelterAnimal';
@@ -84,6 +86,14 @@ const MATCH_RECHECK_MS = 2 * 60_000;
 /** A pair whose photo comparison could not run is tried again after this long. */
 const UNCHECKED_RETRY_MS = 6 * 60 * 60_000;
 
+
+/** Who made a guest-mode report (no account), and the hash of their private key for it. */
+export interface GuestReporter {
+  name: string;
+  phone: string;
+  keyHash: string;
+}
+
 export const userService = {
   // ----- Registration -----
   async register(input: {
@@ -98,11 +108,14 @@ export const userService = {
     alertRadiusMeters: number;
     location: { latitude: number; longitude: number };
     emailVerificationToken?: string;
+    facebookToken?: string;
   }) {
     const exists = await User.findOne({ email: input.email.toLowerCase().trim() });
     if (exists) throw ApiError.conflict('Email already registered');
     // The address must be real and theirs: they entered the code we emailed to it.
     await emailVerificationService.consumeToken(input.email, 'register_user', input.emailVerificationToken);
+    // "Connect Facebook" during registration: attached now that the account exists.
+    const facebook = input.facebookToken ? { ...readRegistrationToken(input.facebookToken), connectedAt: new Date() } : undefined;
 
     const user = await User.create({
       firstName: input.firstName,
@@ -115,6 +128,7 @@ export const userService = {
       barangay: input.barangay,
       alertRadiusMeters: input.alertRadiusMeters,
       homeLocation: latLngToGeoPoint(input.location),
+      ...(facebook ? { facebook } : {}),
     });
 
     return serializeUser(user);
@@ -171,17 +185,20 @@ export const userService = {
   },
 
   // ----- Report Lost Pet -----
-  async createLostReport(reporterId: string, data: any) {
+  async createLostReport(reporterId: string, data: any, guest?: GuestReporter) {
     const user = await User.findById(reporterId);
     if (!user) throw ApiError.notFound('User not found');
     
+    const pinBarangay = await barangayForPin(data.location.latitude, data.location.longitude);
     const report = await LostPetReport.create({
       ...data,
       // The barangay the pin is in, not whichever one the app happened to send.
-      barangay: await barangayForPin(data.location.latitude, data.location.longitude),
+      barangay: pinBarangay,
+      aiTags: buildTags({ ...data, barangay: pinBarangay }),
       reporterId,
-      reporterName: combineName(user),
-      reporterPhone: user.phone,
+      reporterName: guest?.name ?? combineName(user),
+      reporterPhone: guest ? guest.phone : user.phone,
+      ...(guest ? { byGuest: true, guestKeyHash: guest.keyHash } : {}),
       lastSeenLocation: latLngToGeoPoint(data.location),
     });
     
@@ -301,17 +318,20 @@ export const userService = {
   },
 
   // ----- Report Found Animal -----
-  async createFoundReport(reporterId: string, data: any) {
+  async createFoundReport(reporterId: string, data: any, guest?: GuestReporter) {
     const user = await User.findById(reporterId);
     if (!user) throw ApiError.notFound('User not found');
     
+    const pinBarangay = await barangayForPin(data.location.latitude, data.location.longitude);
     const report = await FoundAnimalReport.create({
       ...data,
       // The barangay the pin is in, not whichever one the app happened to send.
-      barangay: await barangayForPin(data.location.latitude, data.location.longitude),
+      barangay: pinBarangay,
+      aiTags: buildTags({ ...data, barangay: pinBarangay }),
       reporterId,
-      reporterName: combineName(user),
-      reporterPhone: user.phone,
+      reporterName: guest?.name ?? combineName(user),
+      reporterPhone: guest ? guest.phone : user.phone,
+      ...(guest ? { byGuest: true, guestKeyHash: guest.keyHash } : {}),
       foundLocation: latLngToGeoPoint(data.location),
     });
     

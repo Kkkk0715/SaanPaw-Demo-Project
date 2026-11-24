@@ -28,6 +28,8 @@ export interface AnimalDescriptor {
   sex?: AnimalSex;
   size?: AnimalSize;
   distinctMarks?: string;
+  /** Search tags: features from the AI photo autofill plus the basics (type, breed, colour, place). */
+  aiTags?: string[];
 }
 
 export interface AnimalReport extends AnimalDescriptor {
@@ -42,6 +44,8 @@ export interface AnimalReport extends AnimalDescriptor {
   reporterId: string;
   reporterName: string;
   reporterPhone?: string;
+  /** Made in guest mode (no account): reach the reporter by phone only. */
+  byGuest?: boolean;
   barangay: string;
   location: LatLng;
   /** Street-level address of the pin, e.g. "12 Quirino Hwy, Muzon". Older reports may not have one. */
@@ -135,7 +139,7 @@ export interface AnimalCase {
 export interface NotificationItem {
   id: string;
   audience: Role;
-  type: 'lost_nearby' | 'found_nearby' | 'match_found' | 'case_update' | 'message' | 'system';
+  type: 'lost_nearby' | 'found_nearby' | 'match_found' | 'case_update' | 'message' | 'system' | 'ticket';
   title: string;
   body: string;
   isRead: boolean;
@@ -233,6 +237,8 @@ export interface AppUser {
   alertRadiusMeters: number;
   /** "YYYY-MM-DD". Accounts made before the 18+ check have none. */
   birthDate?: string;
+  /** Name on the Facebook account connected to this one, if any. */
+  facebookName?: string;
   joinedAt: string;
   /** Running count used by the developer module's ban decision. */
   flaggedReportCount: number;

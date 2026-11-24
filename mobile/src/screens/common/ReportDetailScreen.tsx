@@ -16,6 +16,7 @@ import { MapCanvas } from '@/components/map/MapCanvas';
 import { describeAnimal } from '@/components/domain';
 import { useAuth } from '@/context/AuthContext';
 import { confirmAsync } from '@/services/confirm';
+import { postReportToFacebook, shareReport } from '@/services/share';
 
 /**
  * Everything about one report on a single page - what tapping a notification opens, instead of
@@ -147,6 +148,7 @@ export function ReportDetailScreen({ route, navigation }: NativeStackScreenProps
           <SectionHeader title="Reported by" />
           <Card>
             <Text style={styles.body}>{report.reporterName}</Text>
+            {report.byGuest ? <Caption>Reported without an account - call or text this number to reach them.</Caption> : null}
             {report.reporterPhone ? (
               <Button
                 label={`Call ${report.reporterPhone}`}
@@ -158,6 +160,31 @@ export function ReportDetailScreen({ route, navigation }: NativeStackScreenProps
               <Caption>No contact number on this report.</Caption>
             )}
           </Card>
+        </>
+      ) : null}
+
+      {report.status === 'active' || report.status === 'matched' ? (
+        <>
+          <SectionHeader title="Help spread the word" />
+          <Row gap={1}>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="Post to Facebook"
+                icon="logo-facebook"
+                color="#1877F2"
+                onPress={() => void postReportToFacebook(report.kind, report.id)}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="Share"
+                variant="secondary"
+                icon="share-social-outline"
+                onPress={() => void shareReport(report.kind, report.id, `${report.kind === 'lost' ? 'LOST' : 'FOUND'}: ${describeAnimal(report)}`)}
+              />
+            </View>
+          </Row>
+          <Caption>Facebook opens with the report's photo and details filled in - just tap Post.</Caption>
         </>
       ) : null}
 

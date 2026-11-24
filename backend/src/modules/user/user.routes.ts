@@ -5,6 +5,8 @@ import { blockBannedUser } from '../../middleware/blockBanned';
 import { geoFence } from '../../middleware/geoFence';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { userController } from './user.controller';
+import { requesterTicketRoutes } from '../support/ticket.routes';
+import { linkFacebook, unlinkFacebook } from '../auth/facebook.controller';
 
 const router = Router();
 // Every :id must look like a database id before it reaches a query.
@@ -16,8 +18,13 @@ router.post('/register', geoFence, asyncHandler(userController.register));
 router.use(authenticate, authorize('user'), blockBannedUser);
 
 router.get('/me', asyncHandler(userController.me));
+// Help & support tickets to the SaanPaw team.
+router.use('/tickets', requesterTicketRoutes('user', (req) => req.auth!.id));
 router.patch('/profile', geoFence, asyncHandler(userController.updateProfile));
 router.post('/account/delete', asyncHandler(userController.deleteAccount));
+// Connect / disconnect a Facebook account.
+router.post('/facebook/link', asyncHandler(linkFacebook));
+router.delete('/facebook', asyncHandler(unlinkFacebook));
 router.get('/reports/mine', asyncHandler(userController.myReports));
 router.get('/cases', asyncHandler(userController.myCases));
 

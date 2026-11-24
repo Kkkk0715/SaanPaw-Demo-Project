@@ -367,6 +367,7 @@ export interface ReportPayload {
   location: AnimalReport['location'];
   address?: string;
   landmark?: string;
+  aiTags?: string[];
 }
 
 /** What the server tells the person right after a submission, e.g. that a photo was a duplicate. */

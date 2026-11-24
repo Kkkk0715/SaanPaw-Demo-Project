@@ -8,6 +8,8 @@ import geoRoutes from '../modules/geo/geo.routes';
 import shelterRoutes from '../modules/shelter/shelter.routes';
 import uploadRoutes from '../modules/upload/upload.routes';
 import userRoutes from '../modules/user/user.routes';
+import aiRoutes from '../modules/ai/ai.routes';
+import { publicRoutes, shareRoutes } from '../modules/public/public.routes';
 
 const api = Router();
 
@@ -34,6 +36,10 @@ api.get('/config', async (_req, res, next) => {
   }
 });
 api.use('/auth', authRoutes);
+// No account needed: guest mode and shared report links.
+api.use('/public', publicRoutes);
+api.use('/share', shareRoutes);
+api.use('/ai', aiRoutes);
 api.use('/developer', developerRoutes);
 api.use('/geo', geoRoutes);
 // Maintenance mode: refuse writes from the mobile app, including from sessions signed in before it began.

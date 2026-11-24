@@ -66,7 +66,34 @@ export function RolePickerScreen({ navigation }: NativeStackScreenProps<any>) {
         </View>
 
         <View style={styles.column}>
-          <Text style={styles.prompt}>Choose your module</Text>
+          <View style={styles.guest}>
+            <Text style={styles.guestTitle}>Need to report right now?</Text>
+            <Text style={styles.guestHint}>No sign-in needed - just a photo, the place, and your number.</Text>
+            <View style={styles.quickRow}>
+              <Pressable
+                onPress={() => navigation.navigate('GuestReportLost')}
+                style={({ pressed }) => [styles.quick, { borderColor: theme.colors.danger, backgroundColor: theme.colors.dangerSoft }, pressed && styles.cardPressed]}
+                accessibilityRole="button"
+              >
+                <Ionicons name="alert-circle" size={24} color={theme.colors.danger} />
+                <Text style={[styles.quickText, { color: theme.colors.danger }]}>Lost my pet</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => navigation.navigate('GuestReportFound')}
+                style={({ pressed }) => [styles.quick, { borderColor: theme.colors.found, backgroundColor: theme.colors.foundSoft }, pressed && styles.cardPressed]}
+                accessibilityRole="button"
+              >
+                <Ionicons name="paw" size={24} color={theme.colors.found} />
+                <Text style={[styles.quickText, { color: theme.colors.found }]}>Found an animal</Text>
+              </Pressable>
+            </View>
+            <Pressable onPress={() => navigation.navigate('GuestHome')} hitSlop={6} accessibilityRole="link" style={styles.browse}>
+              <Ionicons name="eye-outline" size={15} color={theme.colors.primary} />
+              <Text style={styles.guestText}>Continue as guest - browse reports, shelters and my guest reports</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.prompt}>Or sign in</Text>
 
           {modules.map((m) => (
             <Pressable
@@ -88,6 +115,7 @@ export function RolePickerScreen({ navigation }: NativeStackScreenProps<any>) {
               </View>
             </Pressable>
           ))}
+
 
           <View style={styles.notes}>
             {notes.map((n) => (
@@ -231,6 +259,21 @@ const styles = StyleSheet.create({
   cardDesc: { ...theme.type.caption, color: theme.colors.muted, marginTop: 2 },
   chevron: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
 
+  guest: {
+    gap: theme.spacing(1),
+    padding: theme.spacing(1.75),
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.border,
+  },
+  guestTitle: { ...theme.type.h3, color: theme.colors.text, textAlign: 'center' },
+  guestHint: { ...theme.type.caption, color: theme.colors.muted, textAlign: 'center', marginTop: -4 },
+  quickRow: { flexDirection: 'row', gap: theme.spacing(1) },
+  quick: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: theme.spacing(1.5), borderRadius: theme.radius.lg, borderWidth: 1.5 },
+  quickText: { ...theme.type.h3, textAlign: 'center' },
+  browse: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 },
+  guestText: { ...theme.type.caption, fontWeight: '700', color: theme.colors.primary, textAlign: 'center', flexShrink: 1 },
   notes: { gap: theme.spacing(1), marginTop: theme.spacing(1.5), paddingHorizontal: theme.spacing(0.5) },
   note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   noteText: { flex: 1, ...theme.type.caption, fontSize: 11.5, color: theme.colors.muted },

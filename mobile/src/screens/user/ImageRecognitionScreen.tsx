@@ -1,3 +1,8 @@
+import { uploadImage } from '@saanpaw/shared';
+import { API_BASE_URL, apiRequest } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
+import { shrinkPhoto } from '@/services/photo';
+import { AnimalChooser, LoadingOverlay, summarizeAnimal, type DescribedAnimal } from '@/components/domain/PhotoTools';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,13 +49,57 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
 
   const storedMatches = linkedReport ? matchesForReport(linkedReport.id) : [];
 
-  const pick = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const { token } = useAuth();
+  const [reading, setReading] = useState(false);
+  const [readNote, setReadNote] = useState<string | null>(null);
+  const [chooser, setChooser] = useState<DescribedAnimal[] | null>(null);
+  /** The scanned photo as stored on the server, so matching doesn't upload it again. */
+  const [remoteImage, setRemoteImage] = useState<string | null>(null);
+
+  const applyAnimal = (a: DescribedAnimal) => {
+    setChooser(null);
+    setAnimalType(a.animalType);
+    if (a.color) setColor(a.color);
+    if (a.size) setSize(a.size);
+    setReadNote(`The AI saw: ${summarizeAnimal(a)}. Check the details below before matching.`);
+  };
+
+  /** Scanning a photo reads the pet's details from it (type, colour, size), still editable. */
+  const readDetails = async (uri: string) => {
+    if (!token) return;
+    setReading(true);
+    setReadNote(null);
+    try {
+      const remote = await uploadImage({ baseUrl: API_BASE_URL, token, role: 'user' }, uri);
+      setRemoteImage(remote);
+      const res = await apiRequest<{ available: boolean; animals: DescribedAnimal[] }>(
+        '/ai/describe',
+        { method: 'POST', body: JSON.stringify({ imageUrl: remote }) },
+        token,
+      );
+      if (!res.available) setReadNote('The AI is busy, so set the details below yourself.');
+      else if (!res.animals.length) setReadNote('No animal was clear in this photo. Set the details yourself or try another photo.');
+      else if (res.animals.length === 1) applyAnimal(res.animals[0]);
+      else setChooser(res.animals);
+    } catch (e) {
+      setReadNote(e instanceof Error ? e.message : 'Could not read this photo.');
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const pick = async (source: 'library' | 'camera' = 'library') => {
+    const perm = source === 'library' ? await ImagePicker.requestMediaLibraryPermissionsAsync() : await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) return;
-    const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
+    const res =
+      source === 'library'
+        ? await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'], allowsEditing: true })
+        : await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: true });
     if (!res.canceled && res.assets[0]) {
-      setImage(res.assets[0].uri);
+      const uri = await shrinkPhoto(res.assets[0].uri, res.assets[0].width);
+      setImage(uri);
       setResults(null);
+      void readDetails(uri);
     }
   };
 
@@ -65,7 +114,7 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
         size,
         // Where the pet was last seen, or (for a photo not tied to a report) where you are registered.
         location: linkedReport?.location ?? currentUser.location,
-        photoUrl: image ?? undefined,
+        photoUrl: remoteImage ?? image ?? undefined,
         lostReportId: linkedReport?.kind === 'lost' && linkedReport.reporterId === currentUser.id ? linkedReport.id : undefined,
       });
       setResults(ranked);
@@ -202,7 +251,7 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
           {image ? (
             <AnimalPhoto uri={image} size={100} />
           ) : (
-            <Pressable style={styles.dropZone} onPress={pick}>
+            <Pressable style={styles.dropZone} onPress={() => void pick()}>
               <Ionicons name="cloud-upload-outline" size={24} color={theme.colors.primary} />
               <Text style={styles.dropText}>Upload</Text>
             </Pressable>
@@ -216,11 +265,16 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
               label={image ? 'Choose a different photo' : 'Choose a photo'}
               variant="secondary"
               icon="image-outline"
-              onPress={pick}
+              onPress={() => void pick('library')}
             />
+            <Button label="Scan with camera" variant="ghost" icon="scan-outline" onPress={() => void pick('camera')} />
           </View>
         </Row>
       </Card>
+
+      {readNote ? <Banner tone="info" icon="sparkles" title="Details from the photo" message={readNote} /> : null}
+      <AnimalChooser open={Boolean(chooser)} animals={chooser ?? []} photoUri={image ?? undefined} onChoose={applyAnimal} onClose={() => setChooser(null)} />
+      <LoadingOverlay visible={reading} message="Scanning the photo for the pet's details…" />
 
       <SectionHeader title="Refine the search" />
       <Card>

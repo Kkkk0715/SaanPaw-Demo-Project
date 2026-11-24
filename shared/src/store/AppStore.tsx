@@ -192,6 +192,8 @@ export interface NewReportInput {
   location: LatLng;
   address?: string;
   landmark?: string;
+  /** Feature tags from the AI photo autofill. */
+  aiTags?: string[];
 }
 
 interface AppState {

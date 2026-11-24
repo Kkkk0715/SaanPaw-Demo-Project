@@ -15,6 +15,12 @@ import { ManageSheltersPage } from '@/pages/ManageShelters';
 import { ReportMonitoringPage } from '@/pages/ReportMonitoring';
 import { SystemManagementPage } from '@/pages/SystemManagement';
 import { LegalPage } from '@/pages/Legal';
+import { AnalyticsPage } from '@/pages/Analytics';
+import { SupportPage } from '@/pages/Support';
+import { AccountsPage } from '@/pages/Accounts';
+import { VersionsPage } from '@/pages/Versions';
+import { ForgotPasswordPage } from '@/pages/ForgotPassword';
+import { PublicReportPage } from '@/pages/PublicReport';
 import { PRIVACY_POLICY, TERMS_OF_USE } from '@saanpaw/shared';
 import { applyTokens } from '@/tokens';
 import './styles.css';
@@ -43,6 +49,8 @@ const legalRoutes = [
     path="/privacy"
     element={<LegalPage doc={PRIVACY_POLICY} other={{ to: '/terms', label: 'Terms of Use' }} />}
   />,
+  // Where report links shared on Facebook lead; no account needed.
+  <Route key="public-report" path="/r/:kind/:id" element={<PublicReportPage />} />,
 ];
 
 function Console() {
@@ -52,6 +60,7 @@ function Console() {
     return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         {legalRoutes}
         <Route path="*" element={<LandingPage />} />
       </Routes>
@@ -94,6 +103,10 @@ function Console() {
         <Route path="/shelters/manage" element={<ManageSheltersPage />} />
         <Route path="/reports" element={<ReportMonitoringPage />} />
         <Route path="/system" element={<SystemManagementPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/support" element={<SupportPage />} />
+        <Route path="/accounts" element={<AccountsPage />} />
+        <Route path="/versions" element={<VersionsPage />} />
         {legalRoutes}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

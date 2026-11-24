@@ -364,6 +364,8 @@ export const moderationService = {
   async escalateReporter(
     reporterId: string,
   ): Promise<{ banned: boolean; deleted: boolean; upheldFlags: number; email?: { sent: boolean; queued: boolean } }> {
+    // Guest reports share one built-in account: removing the report is the whole penalty.
+    if ((await User.exists({ _id: reporterId, isGuest: true }))) return { banned: false, deleted: false, upheldFlags: 0 };
     const upheld = await ModerationFlag.find({ reporterId, status: 'actioned' }).sort({ createdAt: 1 }).lean();
     const limit = env.moderation.falseReportBanThreshold;
 
