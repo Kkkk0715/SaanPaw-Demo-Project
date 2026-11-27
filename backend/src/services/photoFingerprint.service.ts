@@ -5,7 +5,7 @@ import { LostPetReport } from '../models/LostPetReport';
 import { PhotoFingerprint } from '../models/PhotoFingerprint';
 import { ShelterAnimal } from '../models/ShelterAnimal';
 import { logger } from '../utils/logger';
-import { DHASH_HEIGHT, DHASH_WIDTH, dHashFromGrid, isSamePhoto } from './photoHash';
+import { DHASH_HEIGHT, DHASH_WIDTH, dHashFromGrid, hammingDistance, isSamePhoto } from './photoHash';
 
 /** How many of the most recent fingerprints a new photo is compared with. */
 const COMPARE_WINDOW = 5000;
@@ -104,6 +104,25 @@ export async function findDuplicatePhotos(
     logger.error('fingerprint: duplicate check failed, continuing without it', err);
     return [];
   }
+}
+
+/**
+ * How alike a photo is to each of `candidateUrls`, as differing bits of their fingerprints
+ * (0 = the same picture; a re-saved or re-sent copy is a few bits; different photos ~30).
+ * Photos without a fingerprint are left out. Never throws.
+ */
+export async function photoDistances(photoUrl: string, candidateUrls: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!photoUrl || !candidateUrls.length) return out;
+  try {
+    const mine = await PhotoFingerprint.findOne({ url: photoUrl }, 'sha256 dHash').lean();
+    if (!mine) return out;
+    const others = await PhotoFingerprint.find({ url: { $in: candidateUrls } }, 'url sha256 dHash').lean();
+    for (const o of others) out.set(o.url, o.sha256 === mine.sha256 ? 0 : hammingDistance(o.dHash, mine.dHash));
+  } catch (err) {
+    logger.warn('fingerprint: photo comparison failed, continuing without it', err);
+  }
+  return out;
 }
 
 /** Removes the fingerprint when its photo is deleted, so a deleted report never counts as the "original". */

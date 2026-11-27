@@ -301,7 +301,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
     const [me, dash, reports, animals, cases, notifications, inbox, systemConfig] = await Promise.all([
 
       call<Shelter>(s, '/shelter/me'),
-      call<{ activeReports: number; reunited: number; underRescue: number }>(s, '/shelter/dashboard'),
+      call<{ activeReports: number; reunited: number; underRescue: number; areaReports?: DashboardStats['areaReports'] }>(s, '/shelter/dashboard'),
       call<ReportsEnvelope>(s, '/shelter/reports'),
       call<ShelterAnimal[]>(s, '/shelter/animals'),
       call<AnimalCase[]>(s, '/shelter/cases'),
@@ -321,6 +321,7 @@ export async function loadSnapshot(s: ApiSession): Promise<Snapshot> {
         activeReports: dash.activeReports,
         reunitedThisMonth: dash.reunited,
         underRescue: dash.underRescue,
+        areaReports: dash.areaReports,
       },
       systemConfig,
     };
@@ -472,7 +473,8 @@ export const apiActions = {
     },
   ) => {
     const photoUrl = input.photoUrl && isLocalImageUri(input.photoUrl) ? await uploadImage(s, input.photoUrl) : input.photoUrl;
-    return call<Pick<MatchSuggestion, 'candidateId' | 'candidateSource' | 'score' | 'reasons'>[]>(s, '/user/match/scan', {
+    // A finder's scan (no lost report of theirs) can also return missing-pet reports: 'lost_report'.
+    return call<(Omit<Pick<MatchSuggestion, 'candidateId' | 'candidateSource' | 'score' | 'reasons'>, 'candidateSource'> & { candidateSource: MatchSuggestion['candidateSource'] | 'lost_report' })[]>(s, '/user/match/scan', {
       method: 'POST',
       body: { ...input, photoUrl },
     });

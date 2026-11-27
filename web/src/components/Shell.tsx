@@ -10,8 +10,7 @@ import { useConfirm } from '@/components/ui';
  */
 
 const NAV = [
-  { to: '/', label: 'Dashboard', icon: '▦', end: true },
-  { to: '/analytics', label: 'Analytics', icon: '📈' },
+  { to: '/', label: 'Dashboard & Analytics', icon: '▦', end: true },
   { to: '/shelters', label: 'Shelter Approvals', icon: '⛨', badge: 'shelters' as const, end: true },
   { to: '/shelters/manage', label: 'Manage Shelters', icon: '🏠' },
   { to: '/reports', label: 'Report Monitoring', icon: '⚑', badge: 'flags' as const },
@@ -23,8 +22,8 @@ const NAV = [
 
 const PAGE_META: Record<string, { title: string; sub: string }> = {
   '/': {
-    title: 'Dashboard',
-    sub: 'Daily statistics for lost and found reports across San Jose Del Monte',
+    title: 'Dashboard & Analytics',
+    sub: 'Reports, recoveries and users across San Jose Del Monte - filter by date, report type, animal, status and barangay',
   },
   '/shelters': {
     title: 'Shelter Approval Management',
@@ -37,10 +36,6 @@ const PAGE_META: Record<string, { title: string; sub: string }> = {
   '/reports': {
     title: 'Report Monitoring',
     sub: 'Review AI-flagged reports, remove false entries, and ban repeat offenders',
-  },
-  '/analytics': {
-    title: 'Analytics',
-    sub: 'Number of users and report trends for any date range, by day, week or month',
   },
   '/support': {
     title: 'Support Tickets',

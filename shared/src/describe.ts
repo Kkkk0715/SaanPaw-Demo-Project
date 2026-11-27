@@ -15,16 +15,18 @@ export function timeAgo(iso: string): string {
 }
 
 /**
- * What to call a report. Lost pets have a name; found animals get described.
+ * What to call a report: by its features ("Brown and white dog"), never by name alone - many pets
+ * share a name, so a name tells a finder nothing. A lost pet's name, when given, follows in brackets.
  * "other" means nothing to a reader, so the breed stands in for it.
  */
 export function describeAnimal(
   report: Pick<AnimalReport, 'name' | 'color' | 'breed' | 'animalType'>,
 ): string {
-  if (report.name) return report.name;
   const noun = report.animalType === 'other' ? (report.breed ?? 'animal') : report.animalType;
   const colour = report.color?.trim();
-  return colour ? `${colour} ${noun}` : `Unidentified ${noun}`;
+  const features = colour ? `${colour[0].toUpperCase()}${colour.slice(1)} ${noun}` : `Unidentified ${noun}`;
+  const name = report.name?.trim();
+  return name ? `${features} (${name})` : features;
 }
 
 /**

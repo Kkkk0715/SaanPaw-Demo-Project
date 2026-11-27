@@ -49,7 +49,21 @@ router.patch('/tickets/:id', asyncHandler(async (req, res) => res.json(await tic
 router.get(
   '/analytics',
   asyncHandler(async (req, res) =>
-    res.json(await admin.analytics(z.object({ from: isoDay.optional(), to: isoDay.optional(), interval: z.enum(['day', 'week', 'month']).optional() }).parse(req.query))),
+    res.json(
+      await admin.analytics(
+        z
+          .object({
+            from: isoDay.optional(),
+            to: isoDay.optional(),
+            interval: z.enum(['day', 'week', 'month']).optional(),
+            kind: z.enum(['lost', 'found']).optional(),
+            animalType: z.enum(ANIMAL_TYPES).optional(),
+            barangay: z.string().trim().min(1).max(80).optional(),
+            status: z.enum(REPORT_STATUSES).optional(),
+          })
+          .parse(req.query),
+      ),
+    ),
   ),
 );
 

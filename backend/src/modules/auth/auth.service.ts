@@ -78,6 +78,20 @@ export const authService = {
     return { token: sign({ id: String(user._id), role: 'user' }) };
   },
 
+  /**
+   * A user session after "Continue with Facebook / Google": the same checks as a password sign-in
+   * (maintenance, banned), without the password.
+   */
+  async sessionForUser(userId: string) {
+    if ((await getSystemConfig()).maintenanceMode) {
+      throw new ApiError(503, 'SaanPaw is temporarily down for maintenance. Please try again shortly.');
+    }
+    const user = await User.findOne({ _id: userId, isGuest: { $ne: true } });
+    if (!user) throw ApiError.unauthorized('That account no longer exists.');
+    if (user.isBanned) throw ApiError.forbidden('This account has been banned. Check your email for the reason.');
+    return { token: sign({ id: String(user._id), role: 'user' }) };
+  },
+
   hashPassword(plain: string) {
     return bcrypt.hash(plain, 10);
   },

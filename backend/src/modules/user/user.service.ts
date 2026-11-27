@@ -1,5 +1,6 @@
 import { buildTags } from '../../services/tags.service';
 import { readRegistrationToken } from '../../services/facebook.service';
+import { PROVIDER_LABEL, readSocialRegistration } from '../../services/social.service';
 import { User } from '../../models/User';
 import { Shelter } from '../../models/Shelter';
 import { ShelterAnimal } from '../../models/ShelterAnimal';
@@ -109,13 +110,28 @@ export const userService = {
     location: { latitude: number; longitude: number };
     emailVerificationToken?: string;
     facebookToken?: string;
+    socialToken?: string;
   }) {
-    const exists = await User.findOne({ email: input.email.toLowerCase().trim() });
+    const email = input.email.toLowerCase().trim();
+    const exists = await User.findOne({ email });
     if (exists) throw ApiError.conflict('Email already registered');
-    // The address must be real and theirs: they entered the code we emailed to it.
-    await emailVerificationService.consumeToken(input.email, 'register_user', input.emailVerificationToken);
-    // "Connect Facebook" during registration: attached now that the account exists.
-    const facebook = input.facebookToken ? { ...readRegistrationToken(input.facebookToken), connectedAt: new Date() } : undefined;
+
+    // Signed up with "Continue with Facebook / Google": that account is connected to the new one.
+    const social = input.socialToken ? readSocialRegistration(input.socialToken) : null;
+    if (social && (await User.exists({ [`${social.provider}.id`]: social.id }))) {
+      throw ApiError.conflict(`This ${PROVIDER_LABEL[social.provider]} account already has a SaanPaw account. Sign in with it instead.`);
+    }
+    // The address must be real and theirs: they entered the code we emailed to it - unless Google
+    // has already verified this exact address.
+    const verifiedByGoogle = Boolean(social?.provider === 'google' && social.emailVerified && social.email === email);
+    if (!verifiedByGoogle) await emailVerificationService.consumeToken(input.email, 'register_user', input.emailVerificationToken);
+
+    // Older app builds: "Connect Facebook" during registration.
+    const legacyFacebook = input.facebookToken ? { ...readRegistrationToken(input.facebookToken), connectedAt: new Date() } : undefined;
+    const facebook =
+      social?.provider === 'facebook' ? { id: social.id, name: social.name, connectedAt: new Date() } : legacyFacebook;
+    const google =
+      social?.provider === 'google' ? { id: social.id, name: social.name, email: social.email, connectedAt: new Date() } : undefined;
 
     const user = await User.create({
       firstName: input.firstName,
@@ -129,6 +145,7 @@ export const userService = {
       alertRadiusMeters: input.alertRadiusMeters,
       homeLocation: latLngToGeoPoint(input.location),
       ...(facebook ? { facebook } : {}),
+      ...(google ? { google } : {}),
     });
 
     return serializeUser(user);
@@ -180,8 +197,16 @@ export const userService = {
   },
 
   // ----- Dashboard -----
-  getDashboard() {
-    return statsService.platformStats();
+  /** City-wide counters, plus the reports inside this user's alert radius around their home. */
+  async getDashboard(userId?: string) {
+    const [city, user] = await Promise.all([
+      statsService.platformStats(),
+      userId ? User.findById(userId, 'homeLocation alertRadiusMeters').lean() : null,
+    ]);
+    const home = user?.homeLocation?.coordinates as number[] | undefined;
+    if (!home || home.length !== 2) return city;
+    const areaReports = await statsService.areaReports(home[0], home[1], user!.alertRadiusMeters ?? 2000);
+    return { ...city, areaReports };
   },
 
   // ----- Report Lost Pet -----
@@ -510,14 +535,19 @@ export const userService = {
       lostReportId?: string;
     },
   ) {
-    const ranked = await findMatches({
-      animalType: input.animalType as any,
-      color: input.color,
-      breed: input.breed,
-      size: input.size,
-      location: input.location,
-      imageUrl: input.photoUrl,
-    });
+    // Scanning for one of your own lost pets: look at found reports and shelter animals. Scanning a
+    // stray you found (no lost report of yours): open lost reports too, to find its owner.
+    const ranked = await findMatches(
+      {
+        animalType: input.animalType as any,
+        color: input.color,
+        breed: input.breed,
+        size: input.size,
+        location: input.location,
+        imageUrl: input.photoUrl,
+      },
+      { includeLost: !input.lostReportId, excludeReporterId: userId },
+    );
 
     // A scan for one of the owner's own lost reports is saved as that report's possible matches,
     // so what the scan found is still listed (and counted) after leaving the screen.

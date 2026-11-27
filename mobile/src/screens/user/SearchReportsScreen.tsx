@@ -14,7 +14,7 @@ import {
   usePagination,
 } from '@/components/ui';
 import { ReportCard } from '@/components/domain';
-import { ReportFilterPanel, useReportFilters } from '@/components/domain/ReportFilters';
+import { ReportFilterPanel, aiScore, useReportFilters } from '@/components/domain/ReportFilters';
 import { useNavigation } from '@react-navigation/native';
 
 type Sort = 'recent' | 'nearest';
@@ -34,7 +34,12 @@ export function SearchReportsScreen() {
       f
         .apply(reports.filter((r) => r.status !== 'closed'))
         .map((r) => ({ ...r, distance: distanceMeters(currentUser.location, r.location) }))
-        .sort((a, b) => (sort === 'nearest' ? a.distance - b.distance : +new Date(b.reportedAt) - +new Date(a.reportedAt))),
+        // An AI search keeps its best-match order first; nearest / newest decides among equals.
+        .sort(
+          (a, b) =>
+            aiScore(b, f.ai) - aiScore(a, f.ai) ||
+            (sort === 'nearest' ? a.distance - b.distance : +new Date(b.reportedAt) - +new Date(a.reportedAt)),
+        ),
     [reports, f, sort, currentUser.location],
   );
 

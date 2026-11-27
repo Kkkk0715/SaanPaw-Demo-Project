@@ -5,6 +5,7 @@ import { readRegistrationToken, readState, signRegistrationToken } from '../src/
 import { createTicketSchema, ticketPatchSchema, ticketReplySchema } from '../src/modules/support/ticket.routes';
 import { guestKeySchema, guestReportSchema } from '../src/utils/validation';
 import { hashGuestKey, newGuestKey } from '../src/services/guestReporter.service';
+import { readLoginTicket, readSocialRegistration, signLoginTicket, signSocialRegistration } from '../src/services/social.service';
 
 describe('buildTags', () => {
   it('combines AI tags with the report fields, lower-cased and de-duplicated', () => {
@@ -105,5 +106,23 @@ describe('guest reports', () => {
     expect(hash).not.toBe(key);
     expect(hashGuestKey(key)).toBe(hash);
     expect(hashGuestKey(newGuestKey().key)).not.toBe(hash);
+  });
+});
+
+describe('Continue with Google / Facebook', () => {
+  const profile = { provider: 'google' as const, id: '123', name: 'Juan Dela Cruz', email: 'juan@gmail.com', emailVerified: true };
+
+  it('carries the provider profile into registration, and nothing else is accepted there', () => {
+    const t = signSocialRegistration(profile);
+    expect(readSocialRegistration(t).email).toBe('juan@gmail.com');
+    expect(readSocialRegistration(t).emailVerified).toBe(true);
+    expect(() => readSocialRegistration(signLoginTicket('u1'))).toThrow();
+  });
+
+  it('a sign-in ticket works once', () => {
+    const ticket = signLoginTicket('u1');
+    expect(readLoginTicket(ticket)).toBe('u1');
+    expect(() => readLoginTicket(ticket)).toThrow();
+    expect(() => readLoginTicket(signSocialRegistration(profile))).toThrow();
   });
 });

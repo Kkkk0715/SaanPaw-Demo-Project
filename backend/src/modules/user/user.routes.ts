@@ -7,6 +7,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { userController } from './user.controller';
 import { requesterTicketRoutes } from '../support/ticket.routes';
 import { linkFacebook, unlinkFacebook } from '../auth/facebook.controller';
+import { linkSocial, unlinkSocial } from '../auth/social.controller';
 
 const router = Router();
 // Every :id must look like a database id before it reaches a query.
@@ -25,6 +26,8 @@ router.post('/account/delete', asyncHandler(userController.deleteAccount));
 // Connect / disconnect a Facebook account.
 router.post('/facebook/link', asyncHandler(linkFacebook));
 router.delete('/facebook', asyncHandler(unlinkFacebook));
+router.post('/social/:provider(facebook|google)/link', asyncHandler(linkSocial));
+router.delete('/social/:provider(facebook|google)', asyncHandler(unlinkSocial));
 router.get('/reports/mine', asyncHandler(userController.myReports));
 router.get('/cases', asyncHandler(userController.myCases));
 

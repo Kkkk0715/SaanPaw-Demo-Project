@@ -32,8 +32,8 @@ export const userController = {
 
   myCases: async (req: Request, res: Response) => res.json(await userService.listMyCases(uid(req))),
 
-  dashboard: async (_req: Request, res: Response) =>
-    res.json(await userService.getDashboard()),
+  dashboard: async (req: Request, res: Response) =>
+    res.json(await userService.getDashboard(uid(req))),
 
   createLostReport: async (req: Request, res: Response) =>
     res.status(201).json(await userService.createLostReport(uid(req), reportSchema.parse(req.body))),

@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { formatDistance, reportsPerDay, useApp } from '@saanpaw/shared';
+import { AreaTotals } from '@/components/domain/AreaTotals';
 import { theme } from '@/constants/theme';
 import { BarChart, BreakdownBars, Card, EmptyState, Row, Screen, SectionHeader } from '@/components/ui';
 import { ReportCard } from '@/components/domain';
@@ -58,6 +59,13 @@ export function UserDashboardScreen({ navigation }: BottomTabScreenProps<any>) {
       </SafeAreaView>
 
       <View style={styles.body}>
+        <AreaTotals
+          title={`Reports in your area · ${currentUser.barangay}`}
+          counts={stats.areaReports}
+          reports={reports}
+          center={currentUser.location}
+          radiusMeters={currentUser.alertRadiusMeters}
+        />
         <Card>
           <Text style={styles.chartTitle}>San Jose Del Monte · last 7 days</Text>
           <BarChart

@@ -5,16 +5,20 @@ import { Shelter } from '../models/Shelter';
 import { ShelterAnimal } from '../models/ShelterAnimal';
 import { geoPointToLatLng, type LatLng } from '../utils/geoHelpers';
 import { compareAnimalPhotos, geminiConfigured, geminiHasCapacity } from './gemini.service';
+import { photoDistances } from './photoFingerprint.service';
 import { notify } from './pushNotification.service';
 import { logger } from '../utils/logger';
 
 export type AnimalType = (typeof ANIMAL_TYPES)[number];
-type CandidateSource = 'found_report' | 'shelter_animal';
+/** lost_report: only for a photo scan by someone who found an animal (looking for its owner). */
+type CandidateSource = 'found_report' | 'shelter_animal' | 'lost_report';
 
 /** The subset `attributeScore` actually reads - both match directions' candidates satisfy this. */
 interface ScorableCandidate {
   animalType: AnimalType;
   color?: string | null;
+  /** Colour words and features the AI saw in the photo, also compared for colour. */
+  aiTags?: string[] | null;
   breed?: string | null;
   size?: string | null;
   location?: LatLng;
@@ -34,6 +38,32 @@ export interface MatchInput {
   location: LatLng;
   imageUrl?: string;
 }
+
+export interface FindOptions {
+  /** Also look through open lost reports (a finder scanning a stray to find its owner). */
+  includeLost?: boolean;
+  /** Never suggest this person's own reports back to them. */
+  excludeReporterId?: string;
+}
+
+/** Fingerprints this many bits apart or closer are the same picture (re-saved, resized, cropped a little). */
+const SAME_PHOTO_BITS = 8;
+/** Closer than this is very likely the same animal in the same scene (another shot from the same moment). */
+const SIMILAR_PHOTO_BITS = 16;
+
+/** Colour words that mean the same fur, so "ginger" finds "orange" and "itim" finds "black". */
+const COLOR_FAMILIES = [
+  ['black', 'itim'],
+  ['white', 'puti'],
+  ['brown', 'chocolate', 'tan', 'kayumanggi', 'brownish'],
+  ['orange', 'ginger', 'kahel'],
+  ['gray', 'grey', 'abo', 'silver'],
+  ['yellow', 'cream', 'dilaw', 'golden', 'gold', 'beige'],
+  ['tricolor', 'calico', 'tricolour'],
+  ['brindle'],
+  ['tabby'],
+];
+const colorFamily = (w: string) => COLOR_FAMILIES.findIndex((f) => f.includes(w));
 
 export interface RankedMatch {
   candidateId: string;
@@ -95,9 +125,11 @@ export function attributeScore(input: MatchInput, candidate: ScorableCandidate):
   const reasons: string[] = [`Species match (${input.animalType})`];
   let score = 0.35;
 
-  const colorWords = (input.color ?? '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2);
-  const candidateColor = (candidate.color ?? '').toLowerCase();
-  const overlap = colorWords.filter((w) => candidateColor.includes(w));
+  const colorWords = (input.color ?? '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2 && w !== 'and' && w !== 'with');
+  const candidateWords = [candidate.color ?? '', ...(candidate.aiTags ?? [])].join(' ').toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  const candidateFamilies = new Set(candidateWords.map(colorFamily).filter((i) => i >= 0));
+  // The same word, or a word for the same colour ("ginger" for "orange").
+  const overlap = colorWords.filter((w) => candidateWords.includes(w) || (colorFamily(w) >= 0 && candidateFamilies.has(colorFamily(w))));
   if (overlap.length) {
     score += Math.min(0.3, 0.15 * overlap.length);
     reasons.push(`Fur color overlap on "${overlap.join(', ')}"`);
@@ -129,8 +161,8 @@ export function attributeScore(input: MatchInput, candidate: ScorableCandidate):
   return { score: Math.min(0.99, score), reasons };
 }
 
-async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
-  const [foundReports, shelterAnimals] = await Promise.all([
+async function gatherCandidates(animalType: AnimalType, opts: FindOptions = {}): Promise<Candidate[]> {
+  const [foundReports, shelterAnimals, lostReports] = await Promise.all([
     FoundAnimalReport.find({
       animalType,
       // A found report already suggested for someone else's pet is still unclaimed.
@@ -147,6 +179,17 @@ async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
     })
       .limit(200)
       .lean(),
+    opts.includeLost
+      ? LostPetReport.find({
+          animalType,
+          status: { $in: ['active', 'matched'] },
+          isHiddenByModeration: false,
+          ...(opts.excludeReporterId ? { reporterId: { $ne: opts.excludeReporterId } } : {}),
+        })
+          .sort({ reportedAt: -1 })
+          .limit(200)
+          .lean()
+      : Promise.resolve([] as any[]),
   ]);
 
   const shelterIds = [...new Set(shelterAnimals.map((a) => String(a.shelterId)))];
@@ -160,8 +203,21 @@ async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
     color: r.color,
     breed: r.breed,
     size: r.size,
+    aiTags: (r as any).aiTags,
     imageUrls: r.imageUrls,
     location: geoPointToLatLng(r.foundLocation as any),
+  }));
+
+  const fromLost: Candidate[] = lostReports.map((r: any) => ({
+    id: String(r._id),
+    source: 'lost_report',
+    animalType: r.animalType as AnimalType,
+    color: r.color,
+    breed: r.breed,
+    size: r.size,
+    aiTags: r.aiTags,
+    imageUrls: r.imageUrls,
+    location: geoPointToLatLng(r.lastSeenLocation as any),
   }));
 
   const fromAnimals: Candidate[] = shelterAnimals.map((a) => ({
@@ -171,11 +227,24 @@ async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
     color: a.color,
     breed: a.breed,
     size: a.size,
+    aiTags: (a as any).aiTags,
     imageUrls: a.imageUrls,
     location: shelterLocation.get(String(a.shelterId)),
   }));
 
-  return [...fromReports, ...fromAnimals];
+  return [...fromReports, ...fromAnimals, ...fromLost];
+}
+
+/** The closest fingerprint distance between the photo and each candidate's photos. */
+async function photoCloseness(imageUrl: string | undefined, candidates: Candidate[]): Promise<Map<Candidate, number>> {
+  const out = new Map<Candidate, number>();
+  if (!imageUrl) return out;
+  const distances = await photoDistances(imageUrl, candidates.flatMap((c) => c.imageUrls ?? []));
+  for (const c of candidates) {
+    const best = Math.min(...(c.imageUrls ?? []).map((u) => distances.get(u) ?? Infinity));
+    if (Number.isFinite(best)) out.set(c, best);
+  }
+  return out;
 }
 
 /**
@@ -184,20 +253,37 @@ async function gatherCandidates(animalType: AnimalType): Promise<Candidate[]> {
  * once Gemini is configured, its score replaces the heuristic one for whichever candidates it
  * successfully compares, with the heuristic score as the fallback for the rest.
  */
-export async function findMatches(input: MatchInput, opts: MatchOptions = {}): Promise<RankedMatch[]> {
-  const candidates = await gatherCandidates(input.animalType);
+export async function findMatches(input: MatchInput, opts: MatchOptions & FindOptions = {}): Promise<RankedMatch[]> {
+  const candidates = await gatherCandidates(input.animalType, opts);
+  const closeness = await photoCloseness(input.imageUrl, candidates);
 
+  // The same picture is the strongest evidence there is: those always come first, and the
+  // photo fingerprint (free) decides them without spending an AI comparison.
   const shortlisted = candidates
     .map((c) => {
       const attr = attributeScore(input, c);
-      return attr && { candidate: c, ...attr };
+      if (!attr) return null;
+      const d = closeness.get(c) ?? Infinity;
+      const boost = d <= SAME_PHOTO_BITS ? 1 : d <= SIMILAR_PHOTO_BITS ? 0.2 : 0;
+      return { candidate: c, score: attr.score, reasons: attr.reasons, distance: d, rank: attr.score + boost };
     })
-    .filter((x): x is { candidate: Candidate; score: number; reasons: string[] } => Boolean(x))
-    .sort((a, b) => b.score - a.score)
+    .filter((x): x is { candidate: Candidate; score: number; reasons: string[]; distance: number; rank: number } => Boolean(x))
+    .sort((a, b) => b.rank - a.rank)
     .slice(0, SHORTLIST_SIZE);
 
+  let compares = 0;
   const ranked = await Promise.all(
-    shortlisted.map(async ({ candidate, score, reasons }, i) => {
+    shortlisted.map(async ({ candidate, score, reasons, distance }) => {
+      if (distance <= SAME_PHOTO_BITS) {
+        return {
+          candidateId: candidate.id,
+          candidateSource: candidate.source,
+          score: 0.99,
+          reasons: ['Same photo as this record', ...reasons],
+          keep: true,
+        };
+      }
+      const i = compares++;
       const candidatePhoto = candidate.imageUrls?.[0];
       const visionResult =
         !opts.attributesOnly && input.imageUrl && candidatePhoto && i < GEMINI_COMPARE_LIMIT
@@ -205,12 +291,14 @@ export async function findMatches(input: MatchInput, opts: MatchOptions = {}): P
           : null;
       const vision = visionResult ? visionResult.score : null;
 
+      const similar = distance <= SIMILAR_PHOTO_BITS;
+      const extra = similar ? ['Photo looks almost the same'] : [];
       return {
         candidateId: candidate.id,
         candidateSource: candidate.source,
-        score: combineScores(score, vision),
-        reasons: visionResult?.reasoning ? [visionResult.reasoning, ...reasons] : reasons,
-        keep: keep(score, vision),
+        score: Math.min(0.99, combineScores(score, vision) + (similar ? 0.15 : 0)),
+        reasons: visionResult?.reasoning ? [visionResult.reasoning, ...extra, ...reasons] : [...extra, ...reasons],
+        keep: similar || keep(score, vision),
       };
     }),
   );
@@ -263,8 +351,9 @@ export async function evaluateNewCandidates(
   alreadyEvaluated: Set<string>,
   photoBudget = 1,
 ): Promise<EvaluatedMatch[]> {
-  const scored = (await gatherCandidates(input.animalType))
-    .filter((c) => !alreadyEvaluated.has(`${c.source}:${c.id}`))
+  const fresh = (await gatherCandidates(input.animalType)).filter((c) => !alreadyEvaluated.has(`${c.source}:${c.id}`));
+  const closeness = await photoCloseness(input.imageUrl, fresh);
+  const scored = fresh
     .map((c) => ({ candidate: c, attr: attributeScore(input, c) }))
     .filter((x): x is { candidate: Candidate; attr: { score: number; reasons: string[] } } => Boolean(x.attr))
     .sort(
@@ -283,6 +372,16 @@ export async function evaluateNewCandidates(
 
   const results = await Promise.all(
     plan.map(async ({ candidate, attr, compare }): Promise<EvaluatedMatch | null> => {
+      const distance = closeness.get(candidate) ?? Infinity;
+      if (distance <= SAME_PHOTO_BITS) {
+        return {
+          candidateId: candidate.id,
+          candidateSource: candidate.source,
+          score: 0.99,
+          reasons: ['Same photo as this record', ...attr.reasons],
+          verdict: 'suggested',
+        };
+      }
       const vision = compare ? await compareAnimalPhotos(input.imageUrl!, candidate.imageUrls[0]) : null;
       const base = { candidateId: candidate.id, candidateSource: candidate.source };
       if (vision) {

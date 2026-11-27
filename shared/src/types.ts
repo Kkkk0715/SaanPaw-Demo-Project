@@ -239,6 +239,8 @@ export interface AppUser {
   birthDate?: string;
   /** Name on the Facebook account connected to this one, if any. */
   facebookName?: string;
+  /** Name (or address) on the connected Google account, if any. */
+  googleName?: string;
   joinedAt: string;
   /** Running count used by the developer module's ban decision. */
   flaggedReportCount: number;
@@ -252,6 +254,11 @@ export interface DashboardStats {
   reunitedThisMonth: number;
   underRescue: number;
   sheltersOnline: number;
+  /**
+   * Reports inside the signed-in user's alert radius (around their home) or the shelter's
+   * operating radius, counted on the server: every report ever filed there, and how many are open.
+   */
+  areaReports?: { total: number; lost: number; found: number; open: number; recovered: number; radiusMeters: number };
 }
 
 /** A proof-of-credentials file a shelter submitted with its application. */

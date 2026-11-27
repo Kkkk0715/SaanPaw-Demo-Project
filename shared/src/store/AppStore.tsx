@@ -258,7 +258,7 @@ interface AppState {
     location: LatLng;
     photoUrl?: string;
     lostReportId?: string;
-  }) => Promise<{ candidateId: string; candidateSource: 'found_report' | 'shelter_animal'; score: number; reasons: string[] }[]>;
+  }) => Promise<{ candidateId: string; candidateSource: 'found_report' | 'shelter_animal' | 'lost_report'; score: number; reasons: string[] }[]>;
 
   // ---- actions
   /**

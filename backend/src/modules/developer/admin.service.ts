@@ -79,7 +79,18 @@ function buckets(from: Date, to: Date, interval: Interval): string[] {
   return out;
 }
 
-export async function analytics(q: { from?: string; to?: string; interval?: Interval }) {
+export interface AnalyticsQuery {
+  from?: string;
+  to?: string;
+  interval?: Interval;
+  /** Report filters: they narrow every report number and chart (not the account numbers). */
+  kind?: 'lost' | 'found';
+  animalType?: string;
+  barangay?: string;
+  status?: string;
+}
+
+export async function analytics(q: AnalyticsQuery) {
   const to = q.to ? manilaDay(q.to, true) : new Date();
   const from = q.from ? manilaDay(q.from) : new Date(to.getTime() - 29 * 86_400_000);
   if (from > to) throw ApiError.badRequest('The start date must be before the end date.');
@@ -88,30 +99,48 @@ export async function analytics(q: { from?: string; to?: string; interval?: Inte
   const interval: Interval = q.interval ?? (days > 120 ? 'month' : days > 45 ? 'week' : 'day');
 
   const range = { $gte: from, $lte: to };
-  const [users, shelters, lost, found, recovered, totalUsers, totalShelters, approvedShelters, bannedUsers] = await Promise.all([
+  // The same report filter for lost and found; a kind filter simply leaves the other kind out.
+  const filter: Record<string, unknown> = {
+    ...(q.animalType ? { animalType: q.animalType } : {}),
+    ...(q.barangay ? { barangay: q.barangay } : {}),
+  };
+  const withStatus = { ...filter, ...(q.status ? { status: q.status } : {}) };
+  const models = [
+    { kind: 'lost' as const, model: LostPetReport },
+    { kind: 'found' as const, model: FoundAnimalReport },
+  ].filter((m) => !q.kind || m.kind === q.kind);
+  const none = () => Promise.resolve(new Map<string, number>());
+  const bucketFor = (kind: 'lost' | 'found') => {
+    const m = models.find((x) => x.kind === kind);
+    return m ? countBy(m.model, 'reportedAt', from, to, interval, withStatus) : none();
+  };
+  const groupAll = (field: string, match: Record<string, unknown>) =>
+    Promise.all(models.map((m) => (m.model as any).aggregate([{ $match: match }, { $group: { _id: `$${field}`, n: { $sum: 1 } } }])));
+  const countAll = async (match: Record<string, unknown>) =>
+    (await Promise.all(models.map((m) => (m.model as any).countDocuments(match)))).reduce((n: number, c: number) => n + c, 0);
+
+  const inRange = { reportedAt: range, ...withStatus };
+  const [users, shelters, lost, found, recoveredByBucket, totalUsers, totalShelters, approvedShelters, bannedUsers] = await Promise.all([
     countBy(User, 'joinedAt', from, to, interval, { isGuest: { $ne: true } }),
     countBy(Shelter, 'registeredAt', from, to, interval),
-    countBy(LostPetReport, 'reportedAt', from, to, interval),
-    countBy(FoundAnimalReport, 'reportedAt', from, to, interval),
-    countBy(AnimalCase, 'updatedAt', from, to, interval, { status: { $in: ['recovered', 'reunited', 'adopted'] } }),
+    bucketFor('lost'),
+    bucketFor('found'),
+    // Reports marked recovered in the range (by when they were last updated), with the same filters.
+    Promise.all(models.map((m) => countBy(m.model, 'updatedAt', from, to, interval, { ...filter, status: 'recovered' }))),
     User.countDocuments({ isGuest: { $ne: true } }),
     Shelter.countDocuments(),
     Shelter.countDocuments({ approvalStatus: 'approved' }),
-    User.countDocuments({ isBanned: true }),
+    User.countDocuments({ isBanned: true, isGuest: { $ne: true } }),
   ]);
-  const [newUsers, newShelters, lostInRange, foundInRange, byType, byBarangay] = await Promise.all([
+  const [newUsers, newShelters, lostInRange, foundInRange, totalReports, byType, byBarangay, byStatus] = await Promise.all([
     User.countDocuments({ joinedAt: range, isGuest: { $ne: true } }),
     Shelter.countDocuments({ registeredAt: range }),
-    LostPetReport.countDocuments({ reportedAt: range }),
-    FoundAnimalReport.countDocuments({ reportedAt: range }),
-    Promise.all([
-      LostPetReport.aggregate([{ $match: { reportedAt: range } }, { $group: { _id: '$animalType', n: { $sum: 1 } } }]),
-      FoundAnimalReport.aggregate([{ $match: { reportedAt: range } }, { $group: { _id: '$animalType', n: { $sum: 1 } } }]),
-    ]),
-    Promise.all([
-      LostPetReport.aggregate([{ $match: { reportedAt: range } }, { $group: { _id: '$barangay', n: { $sum: 1 } } }]),
-      FoundAnimalReport.aggregate([{ $match: { reportedAt: range } }, { $group: { _id: '$barangay', n: { $sum: 1 } } }]),
-    ]),
+    !q.kind || q.kind === 'lost' ? LostPetReport.countDocuments(inRange) : 0,
+    !q.kind || q.kind === 'found' ? FoundAnimalReport.countDocuments(inRange) : 0,
+    countAll(withStatus),
+    groupAll('animalType', inRange),
+    groupAll('barangay', inRange),
+    groupAll('status', { reportedAt: range, ...filter }),
   ]);
   const merge = (lists: { _id: string; n: number }[][]) => {
     const m = new Map<string, number>();
@@ -131,7 +160,7 @@ export async function analytics(q: { from?: string; to?: string; interval?: Inte
       newShelters: shelters.get(label) ?? 0,
       lost: lost.get(label) ?? 0,
       found: found.get(label) ?? 0,
-      recovered: recovered.get(label) ?? 0,
+      recovered: recoveredByBucket.reduce((n, m) => n + (m.get(label) ?? 0), 0),
     };
   });
 
@@ -139,7 +168,8 @@ export async function analytics(q: { from?: string; to?: string; interval?: Inte
     from: from.toISOString(),
     to: to.toISOString(),
     interval,
-    totals: { users: totalUsers, bannedUsers, shelters: totalShelters, approvedShelters },
+    filters: { kind: q.kind ?? null, animalType: q.animalType ?? null, barangay: q.barangay ?? null, status: q.status ?? null },
+    totals: { users: totalUsers, bannedUsers, shelters: totalShelters, approvedShelters, reports: totalReports },
     inRange: {
       newUsers,
       newShelters,
@@ -149,6 +179,7 @@ export async function analytics(q: { from?: string; to?: string; interval?: Inte
     },
     series,
     byAnimalType: merge(byType as never),
+    byStatus: merge(byStatus as never),
     topBarangays: merge(byBarangay as never).slice(0, 8),
   };
 }
@@ -342,15 +373,29 @@ export async function rollbackRelease(developerId: string, id: string) {
   }
   const release = await Release.findById(id);
   if (!release?.deploymentUrl) throw ApiError.badRequest('This version has no deployment to roll back to.');
+  if (release.environment && release.environment !== 'production') {
+    throw ApiError.badRequest('Only production versions can be restored. This one was a preview deployment.');
+  }
+  if (process.env.VERCEL_URL && release.deploymentUrl === process.env.VERCEL_URL) {
+    throw ApiError.badRequest('This is the version running right now.');
+  }
   const team = process.env.VERCEL_TEAM_ID ? `?teamId=${encodeURIComponent(process.env.VERCEL_TEAM_ID)}` : '';
   const headers = { Authorization: `Bearer ${token}` };
   const dep = await fetch(`https://api.vercel.com/v13/deployments/${encodeURIComponent(release.deploymentUrl)}${team}`, { headers });
   if (!dep.ok) throw new ApiError(502, `Vercel could not find that deployment (${dep.status}).`);
   const { id: deploymentId } = (await dep.json()) as { id: string };
-  const res = await fetch(`https://api.vercel.com/v1/projects/${encodeURIComponent(projectId)}/rollback/${deploymentId}${team}`, {
-    method: 'POST',
-    headers,
-  });
+  const reason = `description=${encodeURIComponent(`Rolled back from the SaanPaw console by ${(await adminEmail(developerId)).email}`)}`;
+  const res = await fetch(
+    `https://api.vercel.com/v1/projects/${encodeURIComponent(projectId)}/rollback/${deploymentId}${team ? `${team}&${reason}` : `?${reason}`}`,
+    { method: 'POST', headers },
+  );
+  if (res.status === 402) {
+    // Vercel's free (Hobby) plan only allows going back to the deployment right before the current one.
+    throw new ApiError(
+      402,
+      'Vercel\'s free plan only allows rolling back to the version just before the current one. Pick that one, or in Vercel open Deployments, choose the version and use "Redeploy".',
+    );
+  }
   if (!res.ok) throw new ApiError(502, `Vercel refused the rollback (${res.status}): ${(await res.text()).slice(0, 200)}`);
   release.rolledBackAt = new Date();
   release.createdByEmail = release.createdByEmail ?? (await adminEmail(developerId)).email;

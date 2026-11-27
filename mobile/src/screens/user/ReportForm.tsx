@@ -19,7 +19,6 @@ import { useAuth } from '@/context/AuthContext';
 import { AnimalChooser, LoadingOverlay, PhotoEditor, summarizeAnimal, type DescribedAnimal } from '@/components/domain/PhotoTools';
 import { shrinkPhoto } from '@/services/photo';
 import {
-  isPhMobile,
   loadGuestContact,
   rememberGuestReport,
   saveGuestContact,
@@ -34,6 +33,7 @@ import {
   Choice,
   ErrorText,
   Field,
+  PhoneField,
   Row,
   Screen,
   SectionHeader,
@@ -285,13 +285,12 @@ export function ReportForm({
     if (submitting) return;
     const next: Record<string, string> = {};
     if (!images.length) next.images = 'Attach at least one photo - matching is image-based.';
-    if (kind === 'lost' && !name.trim()) next.name = "Enter your pet's name.";
     if (!color.trim()) next.color = 'Describe the fur color - this drives the match score.';
     if (!barangay) next.barangay = 'Select the barangay.';
     if (outOfArea) next.location = 'The pin is outside San Jose Del Monte.';
     if (guest) {
       if (guestName.trim().length < 2) next.guestName = 'Enter your name so people know who to ask for.';
-      if (!isPhMobile(guestPhone)) next.guestPhone = 'Enter your mobile number, e.g. 0917 123 4567.';
+      if (!/^\+639\d{9}$/.test(guestPhone)) next.guestPhone = 'Enter a complete 11-digit mobile number, e.g. 09171234567.';
     }
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
@@ -306,7 +305,7 @@ export function ReportForm({
           method: 'POST',
           body: JSON.stringify({
             reporterName: guestName.trim(),
-            reporterPhone: guestPhone.replace(/[\s()-]/g, ''),
+            reporterPhone: guestPhone,
             name: kind === 'lost' ? name.trim() : undefined,
             animalType,
             breed: breed.trim() || undefined,
@@ -323,7 +322,7 @@ export function ReportForm({
             landmark: landmark.trim() || undefined,
           }),
         });
-        await saveGuestContact({ name: guestName.trim(), phone: guestPhone.trim() });
+        await saveGuestContact({ name: guestName.trim(), phone: guestPhone });
         await rememberGuestReport({
           kind,
           id: report.id,
@@ -372,7 +371,7 @@ export function ReportForm({
           title="Report submitted"
           message={
             kind === 'lost'
-              ? `${submitted.name} is now visible to every shelter whose operating radius covers ${submitted.barangay}, and to nearby users.`
+              ? `Your report (${describeAnimal(submitted)}) is now visible to every shelter whose operating radius covers ${submitted.barangay}, and to nearby users.`
               : `Thank you. Shelters covering ${submitted.barangay} have been alerted, and owners searching for a matching pet will see this report.`
           }
         />
@@ -401,7 +400,7 @@ export function ReportForm({
             tone="info"
             icon="call-outline"
             title="People will contact you by phone"
-            message={`Shelters and SaanPaw users can see your number (${guestPhone.trim()}) on this report. You can mark it as resolved or delete it from "My guest reports". Create a free account to also get alerts and see possible matches.`}
+            message={`Shelters and SaanPaw users can see your number (0${guestPhone.slice(3)}) on this report. You can mark it as resolved or delete it from "My guest reports". Create a free account to also get alerts and see possible matches.`}
           />
         ) : null}
 
@@ -509,16 +508,17 @@ export function ReportForm({
               No account needed. Your name and mobile number are shown on the report so the owner, finder or a
               shelter can call or text you. This phone remembers them for your next report.
             </Caption>
-            <Field label="Your name" value={guestName} onChangeText={setGuestName} placeholder="e.g. Juan" icon="person-outline" error={errors.guestName} />
             <Field
-              label="Mobile number"
-              value={guestPhone}
-              onChangeText={setGuestPhone}
-              placeholder="0917 123 4567"
-              keyboardType="phone-pad"
-              icon="call-outline"
-              error={errors.guestPhone}
+              label="Your name"
+              value={guestName}
+              onChangeText={setGuestName}
+              placeholder="e.g. Juan"
+              icon="person-outline"
+              maxLength={60}
+              error={errors.guestName}
             />
+            {/* The same 11-digit Philippine mobile field as registration: it can't take more digits. */}
+            <PhoneField value={guestPhone} onChangeText={setGuestPhone} error={errors.guestPhone} />
           </Card>
         </>
       ) : null}
@@ -582,7 +582,16 @@ export function ReportForm({
       <SectionHeader title="Animal details" />
       <Card>
         {kind === 'lost' ? (
-          <Field label="Pet name" value={name} onChangeText={setName} placeholder="e.g. Bruno" icon="pricetag-outline" error={errors.name} />
+          <Field
+            label="Pet name (optional)"
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g. Bruno"
+            icon="pricetag-outline"
+            maxLength={40}
+            hint="Many pets share a name, so reports are described and matched by features (colour, markings, size), not by name."
+            error={errors.name}
+          />
         ) : null}
 
         <Choice

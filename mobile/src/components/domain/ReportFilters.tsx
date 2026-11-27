@@ -18,20 +18,61 @@ export interface AiFilters {
   breed: string | null;
   size: 'small' | 'medium' | 'large' | null;
   barangay: string | null;
+  /** Every barangay the place could mean ("francisco" -> all Francisco Homes). Newer servers only. */
+  barangays?: string[];
+  /** The place words as typed, also matched against addresses and landmarks. */
+  place?: string | null;
+  colors?: string[];
   dateFrom: string | null;
   dateTo: string | null;
   keywords: string[];
   summary: string;
 }
 
-/** Everything a report is searched on: its fields, place and AI tags. */
+/**
+ * Everything a report is searched on: its features, place and AI tags. Not the pet's name - names
+ * are too common to find the right animal by ("Brownie" would also bring up every brown dog).
+ */
 export const haystack = (r: AnimalReport) =>
-  [r.name, r.animalType, r.breed, r.color, r.size, r.description, r.distinctMarks, r.barangay, r.address, r.landmark, ...(r.aiTags ?? [])]
+  [r.animalType, r.breed, r.color, r.size, r.description, r.distinctMarks, r.barangay, r.address, r.landmark, ...(r.aiTags ?? [])]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
 
 const words = (s?: string | null) => (s ?? '').toLowerCase().split(/[^a-z0-9ñ]+/).filter((w) => w.length > 2);
+
+/** Colour words that mean the same fur, in English and Filipino. */
+const COLOR_FAMILIES = [
+  ['black', 'itim'],
+  ['white', 'puti'],
+  ['brown', 'chocolate', 'tan', 'kayumanggi', 'brownish'],
+  ['orange', 'ginger', 'kahel'],
+  ['gray', 'grey', 'abo', 'silver'],
+  ['yellow', 'cream', 'dilaw', 'golden', 'gold', 'beige'],
+  ['tricolor', 'calico', 'tricolour'],
+  ['brindle'],
+  ['tabby'],
+];
+const colorFamily = (c: string) => COLOR_FAMILIES.find((f) => f.some((w) => c.includes(w))) ?? [c];
+/** Where an animal's colour is written: its colour field, markings and AI tags (not the free text). */
+const colorText = (r: AnimalReport) => [r.color, r.distinctMarks, ...(r.aiTags ?? [])].filter(Boolean).join(' ').toLowerCase();
+
+/**
+ * How well a report fits what the AI understood, for ranking (0 = only the must-haves).
+ * Breed, size and extra features make a report rank higher; they never hide it.
+ */
+export function aiScore(r: AnimalReport, ai: AiFilters | null): number {
+  if (!ai) return 0;
+  const text = haystack(r);
+  let score = 0;
+  for (const w of words(ai.breed)) if (text.includes(w)) score += 2;
+  if (ai.size && r.size === ai.size) score += 1;
+  for (const k of ai.keywords) if (words(k).some((w) => text.includes(w))) score += 1;
+  const colors = ai.colors?.length ? ai.colors : words(ai.color);
+  // The exact colour scores above a colour mixed with others ("black" over "black and white").
+  if (colors.length && (r.color ?? '').toLowerCase().trim() === colors.join(' and ')) score += 1;
+  return score;
+}
 
 /**
  * Search and filter state for a list of reports: text (matches fields and AI tags), lost/found,
@@ -53,8 +94,10 @@ export function useReportFilters() {
     const since = when === 'any' ? 0 : Date.now() - WINDOW_DAYS[when] * 86_400_000;
     const aiFrom = ai?.dateFrom ? +new Date(`${ai.dateFrom}T00:00:00+08:00`) : 0;
     const aiTo = ai?.dateTo ? +new Date(`${ai.dateTo}T23:59:59+08:00`) : Infinity;
-    const aiTerms = ai ? [words(ai.color), words(ai.breed), ai.keywords.flatMap((k) => words(k))].filter((g) => g.length) : [];
-    return <T extends AnimalReport>(list: T[]): T[] =>
+    const aiColors = ai ? (ai.colors?.length ? ai.colors : words(ai.color)).map(colorFamily) : [];
+    const aiBarangays = ai?.barangays?.length ? ai.barangays : ai?.barangay ? [ai.barangay] : [];
+    const aiPlace = ai?.place?.trim().toLowerCase() || '';
+    const filtered = <T extends AnimalReport>(list: T[]): T[] =>
       list.filter((r) => {
         if (kind !== 'all' && r.kind !== kind) return false;
         if (animalType !== 'any' && r.animalType !== animalType) return false;
@@ -65,16 +108,31 @@ export function useReportFilters() {
         const text = haystack(r);
         if (q && !q.split(/\s+/).every((w) => text.includes(w))) return false;
         if (ai) {
+          // Must-haves: lost/found and the animal when said, the place, the dates and the colours.
           if (ai.kind && r.kind !== ai.kind) return false;
           if (ai.animalType && r.animalType !== ai.animalType) return false;
-          if (ai.barangay && r.barangay !== ai.barangay) return false;
-          if (ai.size && r.size && r.size !== ai.size) return false;
+          if (aiBarangays.length || aiPlace) {
+            const inBarangay = aiBarangays.includes(r.barangay);
+            const where = [r.barangay, r.address, r.landmark].filter(Boolean).join(' ').toLowerCase();
+            const inPlace = Boolean(aiPlace) && words(aiPlace).some((w) => where.includes(w));
+            if (!inBarangay && !inPlace) return false;
+          }
           if (at < aiFrom || at > aiTo) return false;
-          // Each thing the search described (colour, breed, other features) must show up somewhere.
-          if (!aiTerms.every((group) => group.some((w) => text.includes(w)))) return false;
+          // Every colour asked for, on the animal itself (its colour, markings or tags).
+          const fur = colorText(r);
+          if (!aiColors.every((family) => family.some((w) => fur.includes(w)))) return false;
         }
         return true;
       });
+    // With an AI search, the closest matches come first (breed, size, features), newest among equals.
+    return <T extends AnimalReport>(list: T[]): T[] => {
+      const out = filtered(list);
+      if (!ai) return out;
+      return out
+        .map((r) => ({ r, s: aiScore(r, ai) }))
+        .sort((a, b) => b.s - a.s || +new Date(b.r.reportedAt) - +new Date(a.r.reportedAt))
+        .map((x) => x.r);
+    };
   }, [query, kind, animalType, barangay, place, when, ai]);
 
   const active = Boolean(query || kind !== 'all' || animalType !== 'any' || barangay || place || when !== 'any' || ai);
@@ -141,7 +199,7 @@ export function ReportFilterPanel({ f, showKind = true }: { f: ReportFilterState
         placeholder="e.g. brown aspin with white paws near Muzon"
         icon="search-outline"
         autoCapitalize="none"
-        hint="Matches names, breed, colour, markings, place and AI tags."
+        hint="Matches breed, colour, markings, size, place and AI tags."
       />
       <Row gap={1} style={{ flexWrap: 'wrap' }}>
         <Button label={aiBusy ? 'Asking AI…' : 'Search with AI'} icon="sparkles-outline" variant="secondary" full={false} loading={aiBusy} onPress={() => void askAi()} />

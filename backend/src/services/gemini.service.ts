@@ -339,13 +339,21 @@ export async function describeAnimalPhoto(photoUrl: string): Promise<AnimalDescr
 }
 
 const SEARCH_PROMPT = (query: string, today: string, barangays: string) => `Turn a search typed into a lost-and-found pet app into filters.
+The search may be in English, Filipino/Tagalog or Taglish: translate it (aso = dog, pusa = cat, itim = black, puti = white,
+kayumanggi/brown, dilaw = yellow, nawawala = lost, nakita/napulot = found).
 Today is ${today} (Asia/Manila). Barangays of San Jose Del Monte: ${barangays}.
 Search: """${query.replace(/"/g, "'")}"""
-Respond with strict JSON only, every field null when the search does not say it:
-{"kind": "lost" | "found" | null, "animalType": "dog" | "cat" | "other" | null, "color": string | null, "breed": string | null,
- "size": "small" | "medium" | "large" | null, "barangay": <exact barangay name from the list> | null,
- "dateFrom": "YYYY-MM-DD" | null, "dateTo": "YYYY-MM-DD" | null, "keywords": [<other feature words, lowercase>],
- "summary": "<one short sentence saying what is being searched for>"}`;
+Rules:
+- "kind" only when the search clearly says lost (nawawala, missing) or found (nakita, stray, napulot). "Looking for" / "hanap" alone is NOT a kind: null.
+- "colors": the fur colours named, in English, lowercase (e.g. ["black"], ["orange","white"]).
+- "place": the place words exactly as typed (e.g. "francisco", "muzon", "near the church"), else null.
+- "barangays": EVERY barangay from the list the place could mean (e.g. "francisco" means all four "Francisco Homes-..." barangays); [] if none.
+- "keywords": only distinctive physical features or accessories (e.g. "collar", "white paws", "limp"). Never filler words, the animal type, colours, places or dates.
+Respond with strict JSON only, every field null (or []) when the search does not say it:
+{"kind": "lost" | "found" | null, "animalType": "dog" | "cat" | "other" | null, "colors": [string], "breed": string | null,
+ "size": "small" | "medium" | "large" | null, "place": string | null, "barangays": [<exact barangay names from the list>],
+ "dateFrom": "YYYY-MM-DD" | null, "dateTo": "YYYY-MM-DD" | null, "keywords": [string],
+ "summary": "<one short sentence, in English, saying what is being searched for>"}`;
 
 export interface SearchFilters {
   kind: 'lost' | 'found' | null;
@@ -353,7 +361,14 @@ export interface SearchFilters {
   color: string | null;
   breed: string | null;
   size: 'small' | 'medium' | 'large' | null;
+  /** One barangay when the place means exactly one (kept for older app builds). */
   barangay: string | null;
+  /** Every barangay the place could mean ("francisco" -> all four Francisco Homes barangays). */
+  barangays: string[];
+  /** The place words as typed, also matched against street addresses and landmarks. */
+  place: string | null;
+  /** Fur colours named, in English. */
+  colors: string[];
   dateFrom: string | null;
   dateTo: string | null;
   keywords: string[];
@@ -368,14 +383,33 @@ export async function parseSearchQuery(query: string, barangayNames: string[]): 
   const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
   const parsed = await generateJson(SEARCH_PROMPT(query.slice(0, 300), today, barangayNames.join(', ')), [], 12_000);
   if (!parsed) return null;
-  const barangay = typeof parsed.barangay === 'string' ? barangayNames.find((b) => b.toLowerCase() === parsed.barangay!.toString().toLowerCase()) ?? null : null;
+  const place = str(parsed.place, 60)?.toLowerCase().trim() || null;
+  const named = new Set<string>();
+  const exact = (v: unknown) => (typeof v === 'string' ? barangayNames.find((b) => b.toLowerCase() === v.toLowerCase()) : undefined);
+  for (const b of Array.isArray(parsed.barangays) ? parsed.barangays : [parsed.barangay]) {
+    const hit = exact(b);
+    if (hit) named.add(hit);
+  }
+  // Every barangay whose name contains what was typed: "francisco" -> all Francisco Homes.
+  if (place) {
+    const words = place.split(/[^a-zñ0-9]+/).filter((w) => w.length > 2 && !['near', 'the', 'sa', 'malapit', 'brgy', 'barangay'].includes(w));
+    for (const b of barangayNames) if (words.some((w) => b.toLowerCase().includes(w))) named.add(b);
+  }
+  const barangays = [...named];
+  const colors = (Array.isArray(parsed.colors) ? parsed.colors : parsed.color ? [parsed.color] : [])
+    .map((c) => String(c).toLowerCase().trim().slice(0, 20))
+    .filter(Boolean)
+    .slice(0, 4);
   return {
     kind: oneOf(parsed.kind, ['lost', 'found'] as const),
     animalType: oneOf(parsed.animalType, ['dog', 'cat', 'other'] as const),
-    color: str(parsed.color, 60),
+    color: colors.length ? colors.join(' and ') : null,
+    colors,
     breed: str(parsed.breed, 60),
     size: oneOf(parsed.size, ['small', 'medium', 'large'] as const),
-    barangay,
+    barangay: barangays.length === 1 ? barangays[0] : null,
+    barangays,
+    place,
     dateFrom: isoDay(parsed.dateFrom),
     dateTo: isoDay(parsed.dateTo),
     keywords: Array.isArray(parsed.keywords) ? parsed.keywords.map((k) => String(k).toLowerCase().slice(0, 30)).slice(0, 8) : [],

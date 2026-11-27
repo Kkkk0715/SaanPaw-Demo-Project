@@ -64,6 +64,7 @@ export function serializeUser(doc: any) {
     alertRadiusMeters: doc.alertRadiusMeters,
     birthDate: doc.birthDate ?? undefined,
     facebookName: doc.facebook?.id ? doc.facebook.name : undefined,
+    googleName: doc.google?.id ? doc.google.name || doc.google.email : undefined,
     joinedAt: doc.joinedAt?.toISOString?.(),
     flaggedReportCount: doc.flaggedReportCount,
     isBanned: doc.isBanned,

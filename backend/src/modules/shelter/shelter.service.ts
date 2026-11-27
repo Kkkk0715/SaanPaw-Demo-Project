@@ -16,6 +16,7 @@ import { notify } from '../../services/pushNotification.service';
 import { alertOwnersOfNewMatches, findMatchingLostReports, type AnimalType } from '../../services/matching.service';
 import { moderationService } from '../../services/moderation.service';
 import { geolocationService } from '../../services/geolocation.service';
+import { statsService } from '../../services/stats.service';
 import { geoPointToLatLng } from '../../utils/geoHelpers';
 import { ApiError } from '../../utils/ApiError';
 import { logger } from '../../utils/logger';
@@ -259,7 +260,7 @@ export const shelterService = {
     // Only reports inside this shelter's operating radius count as its active reports.
     // A shelter's reunions and ongoing recoveries are both its own animals and the cases it opened
     // from residents' reports - counting only the animals left Reunited at 0 for report cases.
-    const [lostActive, foundActive, reunitedAnimals, recoveringAnimals, reunitedCases, recoveringCases] = await Promise.all([
+    const [lostActive, foundActive, reunitedAnimals, recoveringAnimals, reunitedCases, recoveringCases, areaReports] = await Promise.all([
       LostPetReport.countDocuments({ ...open, ...geolocationService.withinFilter('lastSeenLocation', lng, lat, radius) }),
       FoundAnimalReport.countDocuments({ ...open, ...geolocationService.withinFilter('foundLocation', lng, lat, radius) }),
       ShelterAnimal.countDocuments({ shelterId, caseStatus: 'reunited' }),
@@ -267,8 +268,11 @@ export const shelterService = {
       // Report cases now have a Shelter Animals record (counted above); only older ones without one count here.
       AnimalCase.countDocuments({ shelterId, status: 'reunited', shelterAnimalId: null }),
       AnimalCase.countDocuments({ shelterId, status: 'under_rescue' }),
+      // Every report ever filed inside the operating radius, for the "total in your area" number.
+      statsService.areaReports(lng, lat, radius),
     ]);
     return {
+      areaReports,
       activeReports: lostActive + foundActive,
       reunited: reunitedAnimals + reunitedCases,
       underRescue: recoveringAnimals + recoveringCases,

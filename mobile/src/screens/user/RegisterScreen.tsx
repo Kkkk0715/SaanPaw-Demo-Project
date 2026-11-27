@@ -28,7 +28,8 @@ import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/services/api';
 import { EmailVerifier } from '@/components/domain/EmailVerifier';
 import { BirthdayField } from '@/components/domain/BirthdayField';
-import { connectFacebook, facebookAvailable } from '@/services/facebook';
+import { PROVIDER_LABEL, type Provider, type SocialResult } from '@/services/facebook';
+import { SocialButtons } from '@/components/domain/SocialButtons';
 
 /** Any provider - Gmail, Yahoo, Outlook, a school or work address. */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -38,8 +39,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
  * The radius picked here is the circle the smart alert system uses to decide
  * which reports reach this user.
  */
-export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) {
-  const { signIn } = useAuth();
+export function UserRegisterScreen({ navigation, route }: NativeStackScreenProps<any>) {
+  const { signIn, signInWithTicket } = useAuth();
   const bottomInset = useBottomInset();
 
   const [firstName, setFirstName] = useState('');
@@ -55,36 +56,50 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [emailToken, setEmailToken] = useState<string | null>(null);
-  const [fbAvailable, setFbAvailable] = useState(false);
-  const [facebook, setFacebook] = useState<{ name?: string; token: string } | null>(null);
-  const [fbBusy, setFbBusy] = useState(false);
-  const [fbNote, setFbNote] = useState<string | null>(null);
-  useEffect(() => {
-    void facebookAvailable().then(setFbAvailable);
-  }, []);
+  /** Signed up with Google or Facebook: that account is connected to the new one. */
+  const [social, setSocial] = useState<{ provider: Provider; token: string; name?: string; email?: string; emailVerified: boolean } | null>(null);
+  const [socialNote, setSocialNote] = useState<string | null>(null);
 
-  /** Optional: connects a Facebook account to the new one, and fills in the name if still blank. */
-  const linkFacebook = async () => {
-    setFbBusy(true);
-    setFbNote(null);
-    try {
-      const r = await connectFacebook();
-      if (r.status === 'connected' && r.token) {
-        setFacebook({ name: r.name, token: r.token });
-        const parts = (r.name ?? '').trim().split(/\s+/).filter(Boolean);
-        if (parts.length >= 2) {
-          setFirstName((v) => v || parts.slice(0, -1).join(' '));
-          setLastName((v) => v || parts[parts.length - 1]);
-        }
-      } else {
-        setFbNote(r.status === 'error' ? r.message ?? 'Facebook could not be connected.' : 'Facebook was not connected.');
-      }
-    } catch (e) {
-      setFbNote(e instanceof Error ? e.message : String(e));
-    } finally {
-      setFbBusy(false);
-    }
+  /** Fills in what the provider shared (only fields still blank) and remembers the connection. */
+  const applySocial = (r: SocialResult) => {
+    if (!r.token) return;
+    setSocial({ provider: r.provider, token: r.token, name: r.name, email: r.email, emailVerified: Boolean(r.emailVerified) });
+    const parts = (r.name ?? '').trim().split(/\s+/).filter(Boolean);
+    const first = r.firstName ?? (parts.length >= 2 ? parts.slice(0, -1).join(' ') : parts[0]);
+    const last = r.lastName ?? (parts.length >= 2 ? parts[parts.length - 1] : undefined);
+    if (first) setFirstName((v) => v || first);
+    if (last) setLastName((v) => v || last);
+    if (r.email) setEmail((v) => v || r.email!);
+    setSocialNote(
+      r.status === 'not_registered'
+        ? `No SaanPaw account uses this ${PROVIDER_LABEL[r.provider]} account yet, so finish signing up below.`
+        : null,
+    );
   };
+
+  // Came from "Continue with Google / Facebook" on the sign-in screen.
+  useEffect(() => {
+    const fromLogin = (route.params as { social?: SocialResult } | undefined)?.social;
+    if (fromLogin) applySocial(fromLogin);
+  }, [route.params]);
+
+  const onSocial = async (r: SocialResult) => {
+    // Already has an account: just sign in.
+    if (r.status === 'signed_in' && r.ticket) {
+      try {
+        await signInWithTicket(r.ticket);
+      } catch (e) {
+        setSubmitError(e instanceof Error ? e.message : 'Sign in failed.');
+      }
+      return;
+    }
+    applySocial(r);
+  };
+
+  /** Google already confirmed this exact address, so no emailed code is needed. */
+  const emailConfirmedBySocial = Boolean(
+    social?.emailVerified && social.email && social.email.toLowerCase() === email.trim().toLowerCase(),
+  );
 
   const center =
     SJDM_BARANGAYS.find((b) => b.name === barangay)?.center ?? SJDM_BARANGAYS[4].center;
@@ -99,7 +114,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
     else if (age === null) next.birthDate = 'Enter a valid birthday.';
     else if (age < MIN_USER_AGE) next.birthDate = `You must be at least ${MIN_USER_AGE} years old to register.`;
     if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Enter a valid email address.';
-    else if (!emailToken) next.emailCode = 'Verify your email: send the code and enter it here.';
+    else if (!emailToken && !emailConfirmedBySocial) next.emailCode = 'Verify your email: send the code and enter it here.';
     if (phone.length !== 13) next.phone = 'Enter a complete mobile number.';
     if (!passwordMeetsRules(password)) next.password = 'Your password does not meet all the requirements below yet.';
     if (!barangay) next.barangay = 'Select your barangay.';
@@ -122,7 +137,7 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           alertRadiusMeters: radius,
           location: center,
           emailVerificationToken: emailToken,
-          facebookToken: facebook?.token,
+          socialToken: social?.token,
         }),
       });
       await signIn('user', email, password);
@@ -148,6 +163,19 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
         {submitError ? (
           <Banner tone="danger" icon="alert-circle" title="Could not create account" message={submitError} />
         ) : null}
+        {social ? (
+          <Banner
+            tone="success"
+            icon={social.provider === 'google' ? 'logo-google' : 'logo-facebook'}
+            title={`Signing up with ${PROVIDER_LABEL[social.provider]}${social.name ? `: ${social.name}` : ''}`}
+            message={
+              socialNote ??
+              `Your details were filled in from ${PROVIDER_LABEL[social.provider]} - check them, then add the rest. Next time just tap "Continue with ${PROVIDER_LABEL[social.provider]}" to sign in.`
+            }
+          />
+        ) : (
+          <SocialButtons intent="register" onResult={onSocial} dividerLabel="or fill in the form" />
+        )}
         <Field
           label="First name"
           value={firstName}
@@ -185,14 +213,18 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           hint="Any email provider works - Gmail, Yahoo, Outlook and others. We send a code to check it is yours."
           error={errors.email}
         />
-        <EmailVerifier
-          email={email}
-          purpose="register_user"
-          token={emailToken}
-          onVerified={setEmailToken}
-          onCodeSent={() => setErrors(({ email: _email, emailCode: _code, ...rest }) => rest)}
-          error={errors.emailCode}
-        />
+        {emailConfirmedBySocial ? (
+          <Banner tone="success" icon="checkmark-circle" title="Email confirmed by Google" message="No code needed for this address." />
+        ) : (
+          <EmailVerifier
+            email={email}
+            purpose="register_user"
+            token={emailToken}
+            onVerified={setEmailToken}
+            onCodeSent={() => setErrors(({ email: _email, emailCode: _code, ...rest }) => rest)}
+            error={errors.emailCode}
+          />
+        )}
         <PhoneField
           value={phone}
           onChangeText={setPhone}
@@ -235,22 +267,6 @@ export function UserRegisterScreen({ navigation }: NativeStackScreenProps<any>) 
           radiusCenter={center}
           markers={[{ id: 'me', coordinate: center, kind: 'me', label: 'Your area' }]}
         />
-
-        {fbAvailable ? (
-          facebook ? (
-            <Banner
-              tone="success"
-              icon="logo-facebook"
-              title={`Facebook connected${facebook.name ? `: ${facebook.name}` : ''}`}
-              message="You can post your reports to Facebook straight from the report page."
-            />
-          ) : (
-            <>
-              <Button label="Connect Facebook (optional)" variant="secondary" icon="logo-facebook" loading={fbBusy} onPress={() => void linkFacebook()} />
-              {fbNote ? <Banner tone="warning" icon="alert-circle-outline" title="Facebook" message={fbNote} /> : null}
-            </>
-          )
-        ) : null}
 
         <Banner
           tone="info"

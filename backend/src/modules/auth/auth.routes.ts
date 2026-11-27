@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authController } from './auth.controller';
 import { facebookCallback, facebookStatus, startFacebookRegistration } from './facebook.controller';
+import { exchangeTicket, socialCallback, socialStatus, startSocial } from './social.controller';
 
 const router = Router();
 
@@ -21,5 +22,11 @@ router.post('/email-code/verify', asyncHandler(authController.verifyEmailCode));
 router.get('/facebook/status', facebookStatus);
 router.post('/facebook/start', asyncHandler(startFacebookRegistration));
 router.get('/facebook/callback', asyncHandler(facebookCallback));
+
+// Continue with Facebook / Google: sign in or sign up (intent: 'login' | 'register').
+router.get('/social/status', socialStatus);
+router.post('/social/exchange', asyncHandler(exchangeTicket));
+router.post('/:provider(facebook|google)/start', asyncHandler(startSocial));
+router.get('/:provider(google)/callback', asyncHandler(socialCallback));
 
 export default router;

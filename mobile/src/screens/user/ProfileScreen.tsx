@@ -25,45 +25,51 @@ import { confirmAsync } from '@/services/confirm';
 import { shrinkPhoto } from '@/services/photo';
 import { useAuth } from '@/context/AuthContext';
 import { PushStatusCard } from '@/components/domain/PushStatusCard';
-import { connectFacebook, disconnectFacebook, facebookAvailable } from '@/services/facebook';
+import { PROVIDER_LABEL, connectProvider, disconnectProvider, socialAvailability, type Provider } from '@/services/facebook';
 
 /** User Module - Account details, alert radius, and sign out. */
 export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
   const { currentUser, updateUserProfile, myReports, notificationsFor, deleteOwnAccount, sync } = useApp();
   const { signOut, token } = useAuth();
-  const [fbAvailable, setFbAvailable] = useState(false);
-  const [fbBusy, setFbBusy] = useState(false);
-  const [fbNote, setFbNote] = useState<string | null>(null);
+  // Google and Facebook accounts connected for "Continue with ..." sign-in (and Facebook sharing).
+  const [available, setAvailable] = useState<Record<Provider, boolean>>({ facebook: false, google: false });
+  const [socialBusy, setSocialBusy] = useState<Provider | null>(null);
+  const [socialNote, setSocialNote] = useState<string | null>(null);
   useEffect(() => {
-    void facebookAvailable().then(setFbAvailable);
+    void socialAvailability().then(setAvailable);
   }, []);
+  const connectedName: Record<Provider, string | undefined> = {
+    facebook: currentUser.facebookName,
+    google: currentUser.googleName,
+  };
 
-  const toggleFacebook = async () => {
+  const toggleProvider = async (p: Provider) => {
     if (!token) return;
-    setFbBusy(true);
-    setFbNote(null);
+    setSocialBusy(p);
+    setSocialNote(null);
     try {
-      if (currentUser.facebookName) {
+      if (connectedName[p]) {
         const ok = await confirmAsync({
-          title: 'Disconnect Facebook?',
-          message: 'SaanPaw will forget your Facebook account. You can still share reports to Facebook.',
+          title: `Disconnect ${PROVIDER_LABEL[p]}?`,
+          message: `You won't be able to sign in with ${PROVIDER_LABEL[p]} any more; your email and password still work.`,
           confirmLabel: 'Disconnect',
           cancelLabel: 'Cancel',
         });
         if (!ok) return;
-        await disconnectFacebook(token);
+        await disconnectProvider(p, token);
       } else {
-        const r = await connectFacebook(token);
-        if (r.status === 'error') setFbNote(r.message ?? 'Facebook could not be connected.');
-        if (r.status === 'cancelled') setFbNote('Facebook was not connected.');
+        const r = await connectProvider(p, token);
+        if (r.status === 'error') setSocialNote(r.message ?? `${PROVIDER_LABEL[p]} could not be connected.`);
+        if (r.status === 'cancelled') setSocialNote(`${PROVIDER_LABEL[p]} was not connected.`);
       }
       await sync.refresh();
     } catch (e) {
-      setFbNote(e instanceof Error ? e.message : String(e));
+      setSocialNote(e instanceof Error ? e.message : String(e));
     } finally {
-      setFbBusy(false);
+      setSocialBusy(null);
     }
   };
+  const providersShown = (['google', 'facebook'] as Provider[]).filter((p) => available[p] || connectedName[p]);
 
   const [editing, setEditing] = useState(false);
   const [photo, setPhoto] = useState(currentUser.photoUrl);
@@ -296,27 +302,30 @@ export function UserProfileScreen({ navigation }: BottomTabScreenProps<any>) {
           onPress={() => navigation.navigate('Support')}
         />
 
-        {fbAvailable || currentUser.facebookName ? (
+        {providersShown.length ? (
           <>
-            <SectionHeader title="Facebook" />
+            <SectionHeader title="Sign-in accounts" />
             <Card>
-              <Row gap={1}>
-                <Ionicons name="logo-facebook" size={22} color="#1877F2" />
-                <Text style={{ ...theme.type.body, color: theme.colors.text, flex: 1 }}>
-                  {currentUser.facebookName ? `Connected as ${currentUser.facebookName}` : 'Not connected'}
-                </Text>
-              </Row>
-              <Caption>
-                Connect your Facebook account to post your reports to Facebook in one tap from the report page.
-              </Caption>
-              {fbNote ? <Caption style={{ color: theme.colors.danger }}>{fbNote}</Caption> : null}
-              <Button
-                label={currentUser.facebookName ? 'Disconnect Facebook' : 'Connect Facebook'}
-                variant={currentUser.facebookName ? 'ghost' : 'secondary'}
-                icon="logo-facebook"
-                loading={fbBusy}
-                onPress={() => void toggleFacebook()}
-              />
+              <Caption>Connect Google or Facebook to sign in with one tap. Your email and password keep working too.</Caption>
+              {providersShown.map((p) => (
+                <View key={p} style={{ gap: 6 }}>
+                  <Row gap={1}>
+                    <Ionicons name={p === 'google' ? 'logo-google' : 'logo-facebook'} size={22} color={p === 'google' ? '#DB4437' : '#1877F2'} />
+                    <Text style={{ ...theme.type.body, color: theme.colors.text, flex: 1 }}>
+                      {connectedName[p] ? `${PROVIDER_LABEL[p]}: ${connectedName[p]}` : `${PROVIDER_LABEL[p]}: not connected`}
+                    </Text>
+                  </Row>
+                  <Button
+                    label={connectedName[p] ? `Disconnect ${PROVIDER_LABEL[p]}` : `Connect ${PROVIDER_LABEL[p]}`}
+                    variant={connectedName[p] ? 'ghost' : 'secondary'}
+                    icon={p === 'google' ? 'logo-google' : 'logo-facebook'}
+                    loading={socialBusy === p}
+                    disabled={Boolean(socialBusy && socialBusy !== p)}
+                    onPress={() => void toggleProvider(p)}
+                  />
+                </View>
+              ))}
+              {socialNote ? <Caption style={{ color: theme.colors.danger }}>{socialNote}</Caption> : null}
             </Card>
           </>
         ) : null}

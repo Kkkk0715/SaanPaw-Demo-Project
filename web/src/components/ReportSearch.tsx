@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { SJDM_BARANGAY_NAMES, colors, describeAnimal, reportKindStyle, reportPlace, reportStatusMeta, timeAgo, type AnimalReport } from '@saanpaw/shared';
+import { SJDM_BARANGAY_NAMES, colors, describeAnimal, reportKindStyle, reportPlace, reportStatusMeta, resolveImageUrl, timeAgo, type AnimalReport } from '@saanpaw/shared';
+import { API_BASE_URL } from '@/lib/api';
 import { Badge, Banner, Card, CardHead, EmptyState, Thumb } from './ui';
 import { useApi } from '@/lib/useApi';
 
@@ -40,7 +41,8 @@ export function ReportSearch({ onOpen }: { onOpen: (r: AnimalReport) => void }) 
       api<Page>(`/developer/reports?${params}`)
         .then((d) => {
           if (cancelled) return;
-          setData(d);
+          // Photos are stored as /uploads/... on the API: give them the server's address to show.
+          setData({ ...d, items: d.items.map((r) => ({ ...r, imageUrls: (r.imageUrls ?? []).map((u) => resolveImageUrl(u, API_BASE_URL)) })) });
           setError(null);
         })
         .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))

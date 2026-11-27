@@ -15,7 +15,6 @@ import { ManageSheltersPage } from '@/pages/ManageShelters';
 import { ReportMonitoringPage } from '@/pages/ReportMonitoring';
 import { SystemManagementPage } from '@/pages/SystemManagement';
 import { LegalPage } from '@/pages/Legal';
-import { AnalyticsPage } from '@/pages/Analytics';
 import { SupportPage } from '@/pages/Support';
 import { AccountsPage } from '@/pages/Accounts';
 import { VersionsPage } from '@/pages/Versions';
@@ -103,7 +102,8 @@ function Console() {
         <Route path="/shelters/manage" element={<ManageSheltersPage />} />
         <Route path="/reports" element={<ReportMonitoringPage />} />
         <Route path="/system" element={<SystemManagementPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
+        {/* Analytics is part of the Dashboard now; old links still land there. */}
+        <Route path="/analytics" element={<Navigate to="/" replace />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/versions" element={<VersionsPage />} />

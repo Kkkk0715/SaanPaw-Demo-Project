@@ -109,6 +109,8 @@ export const registerUserSchema = z.object({
   emailVerificationToken: z.string().trim().max(200).optional(),
   /** From "Connect Facebook" on the registration form. */
   facebookToken: z.string().trim().max(1000).optional(),
+  /** From "Continue with Facebook / Google" (sign-up): connects that account to the new one. */
+  socialToken: z.string().trim().max(2000).optional(),
 });
 
 export const registerShelterSchema = z.object({

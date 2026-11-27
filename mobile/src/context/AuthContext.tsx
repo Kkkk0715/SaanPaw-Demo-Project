@@ -31,6 +31,8 @@ interface AuthState {
   token: string | null;
   loading: boolean;
   signIn: (role: MobileRole, email: string, password: string) => Promise<void>;
+  /** After "Continue with Facebook / Google": swaps the one-use ticket for a user session. */
+  signInWithTicket: (ticket: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -108,6 +110,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await tokenStorage.set(TOKEN_KEY, response.token);
         setToken(response.token);
         setRole(r);
+      },
+      signInWithTicket: async (ticket) => {
+        const response = await apiRequest<{ token: string }>('/auth/social/exchange', {
+          method: 'POST',
+          body: JSON.stringify({ ticket }),
+        });
+        await AsyncStorage.setItem(SESSION_KEY, 'user');
+        await tokenStorage.set(TOKEN_KEY, response.token);
+        setToken(response.token);
+        setRole('user');
       },
       signOut: async () => {
         await AsyncStorage.removeItem(SESSION_KEY);

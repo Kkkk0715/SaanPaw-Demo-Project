@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { caseStatusMeta, countBy, formatDistance, reportPlace, reportsPerDay, useApp } from '@saanpaw/shared';
+import { AreaTotals } from '@/components/domain/AreaTotals';
 import { theme } from '@/constants/theme';
 import { Avatar, BarChart, BreakdownBars, Card, ListRow, Row, Screen, SectionHeader } from '@/components/ui';
 import { MapCanvas, type MapMarker } from '@/components/map/MapCanvas';
@@ -10,7 +11,7 @@ import { ReportCard, describeAnimal } from '@/components/domain';
 
 /** Shelter Admin Module - Dashboard. Active reports, ongoing recoveries, occupancy - as charts. */
 export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<any>) {
-  const { currentShelter, shelterAreaReports, shelterAnimals, cases, notificationsFor, conversations } =
+  const { currentShelter, shelterAreaReports, shelterAnimals, cases, notificationsFor, conversations, stats, reports } =
     useApp();
 
   const areaReports = shelterAreaReports();
@@ -140,6 +141,14 @@ export function ShelterDashboardScreen({ navigation }: NativeStackScreenProps<an
             />
           </View>
         </Card>
+
+        <AreaTotals
+          title="Reports in your operating area"
+          counts={stats.areaReports}
+          reports={reports}
+          center={currentShelter.location}
+          radiusMeters={currentShelter.operatingRadiusMeters}
+        />
 
         <Card>
           <Text style={styles.occTitle}>Reports in your radius · last 7 days</Text>

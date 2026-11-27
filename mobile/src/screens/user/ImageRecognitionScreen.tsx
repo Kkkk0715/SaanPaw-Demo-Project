@@ -125,14 +125,16 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
     }
   };
 
-  const describe = (id: string, source: 'found_report' | 'shelter_animal') => {
-    if (source === 'found_report') {
+  const describe = (id: string, source: 'found_report' | 'shelter_animal' | 'lost_report') => {
+    if (source === 'found_report' || source === 'lost_report') {
       const r = reportById(id);
+      const lost = source === 'lost_report';
       return {
-        title: r ? describeAnimal(r) : 'Found report',
-        subtitle: r ? `${r.barangay} · found ${timeAgo(r.reportedAt)} · ${r.reporterName}` : '',
+        title: r ? describeAnimal(r) : lost ? 'Lost pet report' : 'Found report',
+        subtitle: r ? `${r.barangay} · ${lost ? 'lost' : 'found'} ${timeAgo(r.reportedAt)} · ${r.reporterName}` : '',
         image: r?.imageUrls[0],
-        label: 'Found report',
+        // A finder's scan can turn up someone's missing pet: that's the owner to contact.
+        label: lost ? 'Missing pet - possible owner' : 'Found report',
         shelterId: undefined as string | undefined,
       };
     }
@@ -148,7 +150,7 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
   };
 
   const renderMatch = (
-    m: { candidateId: string; candidateSource: 'found_report' | 'shelter_animal'; score: number; reasons: string[] },
+    m: { candidateId: string; candidateSource: 'found_report' | 'shelter_animal' | 'lost_report'; score: number; reasons: string[] },
     key: string,
   ) => {
     const d = describe(m.candidateId, m.candidateSource);
@@ -207,7 +209,11 @@ export function ImageRecognitionScreen({ route, navigation }: NativeStackScreenP
         tone="success"
         icon="sparkles"
         title="Image recognition matching"
-        message="Your photo is compared against every open found report and every animal currently in shelter care within San Jose Del Monte."
+        message={
+          linkedReport
+            ? 'Your photo is compared against every open found report and every animal currently in shelter care within San Jose Del Monte.'
+            : 'Found a stray? Your photo is compared against every missing-pet report, every open found report and every animal in shelter care in San Jose Del Monte. The same photo is always found first.'
+        }
       />
 
       {linkedReport ? (

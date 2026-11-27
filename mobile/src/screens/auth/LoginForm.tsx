@@ -13,6 +13,8 @@ import {
   useBottomInset,
 } from '@/components/ui';
 import { DEMO_ACCOUNTS, DEMO_MODE, useAuth, type MobileRole } from '@/context/AuthContext';
+import { SocialButtons } from '@/components/domain/SocialButtons';
+import type { SocialResult } from '@/services/facebook';
 
 /** One login form for both modules. Only the wording differs. */
 export function LoginForm({
@@ -26,7 +28,7 @@ export function LoginForm({
   subtitle: string;
   footer?: React.ReactNode;
 }) {
-  const { signIn } = useAuth();
+  const { signIn, signInWithTicket } = useAuth();
   const navigation = useNavigation<any>();
   const bottomInset = useBottomInset();
   const demo = DEMO_ACCOUNTS[role];
@@ -53,6 +55,19 @@ export function LoginForm({
     }
   };
 
+  /** Continue with Facebook / Google (residents only): sign in, or sign up with the details filled in. */
+  const onSocial = async (r: SocialResult) => {
+    if (r.status === 'signed_in' && r.ticket) {
+      try {
+        await signInWithTicket(r.ticket);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Sign in failed.');
+      }
+      return;
+    }
+    if (r.token) navigation.navigate('UserRegister', { social: r });
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.colors.background }}
@@ -65,6 +80,8 @@ export function LoginForm({
 
         <View style={{ padding: theme.spacing(2.5), gap: theme.spacing(2), width: '100%', maxWidth: COLUMN, alignSelf: 'center' }}>
           {error ? <Banner tone="danger" icon="alert-circle" title="Cannot sign in" message={error} /> : null}
+
+          {role === 'user' && !DEMO_MODE ? <SocialButtons intent="login" onResult={onSocial} dividerLabel="or sign in with email" /> : null}
 
           <Field
             label="Email address"

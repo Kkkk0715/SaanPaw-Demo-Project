@@ -92,6 +92,7 @@ export function createApp() {
   // Email codes: each send is an email, and each guess is a try at a 6-digit code.
   const failedOnly = (max: number, message: string) =>
     rateLimit({ windowMs: 15 * 60_000, max, skipSuccessfulRequests: true, message: { error: message, details: null } });
+  app.use('/api/v1/auth/social/exchange', failedOnly(20, 'Too many sign-in attempts. Try again in a few minutes.'));
   app.use('/api/v1/auth/email-code/verify', failedOnly(10, 'Too many wrong codes. Request a new code and try again.'));
   app.use('/api/v1/auth/verify-reset-code', failedOnly(10, 'Too many wrong codes. Request a new code and try again.'));
   app.use('/api/v1/user/account/delete', failedOnly(5, 'Too many wrong passwords. Try again in 15 minutes.'));

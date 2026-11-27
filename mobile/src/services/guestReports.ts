@@ -30,7 +30,12 @@ export const isPhMobile = (value: string) => /^(\+?63|0)?9\d{9}$/.test(value.rep
 export async function loadGuestContact(): Promise<GuestContact | null> {
   try {
     const raw = await AsyncStorage.getItem(CONTACT_KEY);
-    return raw ? (JSON.parse(raw) as GuestContact) : null;
+    if (!raw) return null;
+    const c = JSON.parse(raw) as GuestContact;
+    // Stored as +639XXXXXXXXX (older versions kept what was typed): anything else is dropped.
+    const digits = String(c.phone ?? '').replace(/\D/g, '');
+    const national = digits.startsWith('63') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;
+    return { name: String(c.name ?? '').slice(0, 60), phone: /^9\d{9}$/.test(national) ? `+63${national}` : '' };
   } catch {
     return null;
   }

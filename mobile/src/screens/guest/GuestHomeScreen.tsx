@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { resolveImageUrl, type AnimalReport, type Shelter } from '@saanpaw/shared';
 import { theme } from '@/constants/theme';
-import { Banner, Button, Caption, Card, EmptyState, ErrorText, Field, Row, Screen, Segmented } from '@/components/ui';
+import { Banner, Button, Caption, Card, EmptyState, ErrorText, Field, Pager, Row, Screen, Segmented, usePagination } from '@/components/ui';
 import { ReportCard, ShelterCard } from '@/components/domain';
 import { API_BASE_URL, apiRequest } from '@/services/api';
 import { confirmAsync } from '@/services/confirm';
@@ -14,6 +14,20 @@ import { deleteGuestReport, listGuestReports, setGuestReportStatus, type SavedGu
 
 type Tab = 'reports' | 'shelters';
 type KindFilter = 'all' | 'lost' | 'found';
+type Order = 'newest' | 'oldest' | 'barangay';
+const PAGE = 10;
+
+/** "Today", "Yesterday", "This week", "This month", or the month and year, for the list headings. */
+function whenGroup(iso: string): string {
+  const d = new Date(iso);
+  const days = Math.floor((Date.now() - +d) / 86_400_000);
+  const sameDay = new Date().toDateString() === d.toDateString();
+  if (sameDay) return 'Today';
+  if (days < 2) return 'Yesterday';
+  if (days < 7) return 'This week';
+  if (days < 30) return 'This month';
+  return d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+}
 
 const withPhotos = <T extends { imageUrls?: string[]; photoUrl?: string }>(item: T): T => ({
   ...item,
@@ -29,6 +43,8 @@ const withPhotos = <T extends { imageUrls?: string[]; photoUrl?: string }>(item:
 export function GuestHomeScreen({ navigation }: NativeStackScreenProps<any>) {
   const [tab, setTab] = useState<Tab>('reports');
   const [kind, setKind] = useState<KindFilter>('all');
+  const [order, setOrder] = useState<Order>('newest');
+  const scrollRef = useRef<ScrollView>(null);
   const [query, setQuery] = useState('');
   const [reports, setReports] = useState<AnimalReport[] | null>(null);
   const [shelters, setShelters] = useState<Shelter[] | null>(null);
@@ -67,6 +83,41 @@ export function GuestHomeScreen({ navigation }: NativeStackScreenProps<any>) {
       }),
     [reports, kind, q],
   );
+  const counts = useMemo(
+    () => ({
+      lost: (reports ?? []).filter((r) => r.kind === 'lost').length,
+      found: (reports ?? []).filter((r) => r.kind === 'found').length,
+    }),
+    [reports],
+  );
+  // Sorted, split into pages, and each page cut into headed groups (by when, or by barangay).
+  const sorted = useMemo(
+    () =>
+      [...shownReports].sort((a, b) =>
+      order === 'barangay'
+        ? a.barangay.localeCompare(b.barangay) || +new Date(b.reportedAt) - +new Date(a.reportedAt)
+        : order === 'oldest'
+          ? +new Date(a.reportedAt) - +new Date(b.reportedAt)
+          : +new Date(b.reportedAt) - +new Date(a.reportedAt),
+      ),
+    [shownReports, order],
+  );
+  const page = usePagination<AnimalReport>(sorted, PAGE, `${kind}|${q}|${order}`);
+  const groups = useMemo(() => {
+    const out: { title: string; items: AnimalReport[] }[] = [];
+    for (const r of page.items) {
+      const title = order === 'barangay' ? `Brgy. ${r.barangay}` : whenGroup(r.reportedAt);
+      const last = out[out.length - 1];
+      if (last && last.title === title) last.items.push(r);
+      else out.push({ title, items: [r] });
+    }
+    return out;
+  }, [page.items, order]);
+  /** Next / previous page: back to the top of the list. */
+  const goToPage = (p: number) => {
+    page.setPage(p);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
   const shownShelters = useMemo(
     () => (shelters ?? []).filter((s) => !q || `${s.name} ${s.address} ${s.barangay}`.toLowerCase().includes(q)),
     [shelters, q],
@@ -77,6 +128,7 @@ export function GuestHomeScreen({ navigation }: NativeStackScreenProps<any>) {
   return (
     <Screen scroll={false} padded={false}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.body}
         keyboardShouldPersistTaps="handled"
         refreshControl={
@@ -139,15 +191,26 @@ export function GuestHomeScreen({ navigation }: NativeStackScreenProps<any>) {
           placeholder={tab === 'reports' ? 'e.g. brown dog Muzon' : 'Shelter name or barangay'}
         />
         {tab === 'reports' ? (
-          <Segmented
-            options={[
-              { label: 'All', value: 'all' },
-              { label: 'Lost', value: 'lost' },
-              { label: 'Found', value: 'found' },
-            ]}
-            value={kind}
-            onChange={setKind}
-          />
+          <>
+            <Segmented
+              options={[
+                { label: `All (${counts.lost + counts.found})`, value: 'all' },
+                { label: `Lost (${counts.lost})`, value: 'lost', color: theme.colors.danger },
+                { label: `Found (${counts.found})`, value: 'found', color: theme.colors.found },
+              ]}
+              value={kind}
+              onChange={setKind}
+            />
+            <Segmented
+              options={[
+                { label: 'Newest', value: 'newest' },
+                { label: 'Oldest', value: 'oldest' },
+                { label: 'By barangay', value: 'barangay' },
+              ]}
+              value={order}
+              onChange={setOrder}
+            />
+          </>
         ) : null}
         <ErrorText error={error} />
 
@@ -157,11 +220,21 @@ export function GuestHomeScreen({ navigation }: NativeStackScreenProps<any>) {
           shownReports.length ? (
             <>
               <Caption>
-                {shownReports.length} open {shownReports.length === 1 ? 'report' : 'reports'}
+                {shownReports.length} open {kind === 'lost' ? 'lost-pet ' : kind === 'found' ? 'found-animal ' : ''}
+                {shownReports.length === 1 ? 'report' : 'reports'} ·{' '}
+                {order === 'barangay' ? 'grouped by barangay' : order === 'oldest' ? 'oldest first' : 'newest first'}
               </Caption>
-              {shownReports.map((r) => (
-                <ReportCard key={`${r.kind}-${r.id}`} report={r} onPress={() => navigation.navigate('PublicReport', { kind: r.kind, id: r.id })} />
+              {groups.map((g) => (
+                <View key={g.title} style={{ gap: theme.spacing(1) }}>
+                  <Text style={styles.groupTitle}>
+                    {g.title} · {g.items.length}
+                  </Text>
+                  {g.items.map((r) => (
+                    <ReportCard key={`${r.kind}-${r.id}`} report={r} onPress={() => navigation.navigate('PublicReport', { kind: r.kind, id: r.id })} />
+                  ))}
+                </View>
               ))}
+              <Pager {...page} setPage={goToPage} />
             </>
           ) : (
             <Card>
@@ -330,6 +403,7 @@ export function GuestNeedAccountScreen({ navigation }: NativeStackScreenProps<an
 const styles = StyleSheet.create({
   body: { padding: theme.spacing(2), gap: theme.spacing(1.5), paddingBottom: theme.spacing(6), width: '100%', maxWidth: 520, alignSelf: 'center' },
   heading: { ...theme.type.h2, color: theme.colors.text },
+  groupTitle: { ...theme.type.h3, color: theme.colors.muted, marginTop: theme.spacing(0.5) },
   subheading: { ...theme.type.h3, color: theme.colors.text },
   quick: {
     flex: 1,

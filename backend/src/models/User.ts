@@ -27,8 +27,15 @@ const userSchema = new Schema(
     expoPushToken: { type: String },
     /** Connected Facebook account (Facebook Login), shown on the profile; used for nothing else. */
     facebook: {
-      id: { type: String },
+      id: { type: String, index: true, sparse: true },
       name: { type: String },
+      connectedAt: { type: Date },
+    },
+    /** Connected Google account: "Continue with Google" signs in with it. */
+    google: {
+      id: { type: String, index: true, sparse: true },
+      name: { type: String },
+      email: { type: String },
       connectedAt: { type: Date },
     },
     /** The one built-in account that owns reports made without an account (guest mode). */
