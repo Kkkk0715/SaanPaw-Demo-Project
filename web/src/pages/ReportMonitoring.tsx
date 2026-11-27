@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
+  SJDM_BARANGAY_NAMES,
   colors,
   describeAnimal,
   flagReasonLabel,
@@ -30,6 +31,7 @@ import {
 import { ReportDetailModal } from '@/components/ReportDetailModal';
 import { FlagDetailModal } from '@/components/FlagDetailModal';
 import { ReportSearch } from '@/components/ReportSearch';
+import { inDateRange, matchesText } from '@/lib/filters';
 
 /** Upheld flags at which the server deletes the account and emails the person why. */
 const BAN_THRESHOLD = 3;
@@ -67,19 +69,99 @@ export function ReportMonitoringPage() {
   });
   const { ask, dialog } = useConfirm();
 
-  const pending = flags.filter((f) => f.resolution === 'pending');
-  const resolved = flags.filter((f) => f.resolution !== 'pending');
-  // Search boxes for the long lists: a report by animal, reference, place or reporter; an account
-  // by name, email or barangay.
+  // ---- Flag filters (both the "awaiting review" and "resolved" lists)
+  const [flagQuery, setFlagQuery] = useState('');
+  const [flagReason, setFlagReason] = useState<'' | ModerationFlag['reason']>('');
+  const [flagType, setFlagType] = useState<'' | ModerationFlag['reportType']>('');
+  const [minConfidence, setMinConfidence] = useState(0);
+  const [flagFrom, setFlagFrom] = useState('');
+  const [flagTo, setFlagTo] = useState('');
+  const [outcome, setOutcome] = useState<'' | Exclude<ModerationFlag['resolution'], 'pending'>>('');
+  const [flagSort, setFlagSort] = useState<'newest' | 'oldest' | 'confidence'>('newest');
+  const flagFiltersOn = Boolean(flagQuery || flagReason || flagType || minConfidence || flagFrom || flagTo || outcome);
+  const clearFlagFilters = () => {
+    setFlagQuery('');
+    setFlagReason('');
+    setFlagType('');
+    setMinConfidence(0);
+    setFlagFrom('');
+    setFlagTo('');
+    setOutcome('');
+  };
+  const filteredFlags: ModerationFlag[] = useMemo(
+    () =>
+      flags
+        .filter((f) => {
+          const item = f.reportType === 'shelter_animal' ? shelterAnimals.find((a) => a.id === f.reportId) : reportById(f.reportId);
+          return (
+            matchesText(flagQuery, [f.reporterName, f.detail, f.reportId, item ? describeAnimal(item) : '', (item as AnimalReport | undefined)?.barangay]) &&
+            (!flagReason || f.reason === flagReason) &&
+            (!flagType || f.reportType === flagType) &&
+            f.confidence >= minConfidence &&
+            inDateRange(f.flaggedAt, flagFrom, flagTo)
+          );
+        })
+        .sort((a, b) =>
+          flagSort === 'confidence'
+            ? b.confidence - a.confidence
+            : flagSort === 'oldest'
+              ? +new Date(a.flaggedAt) - +new Date(b.flaggedAt)
+              : +new Date(b.flaggedAt) - +new Date(a.flaggedAt),
+        ),
+    [flags, shelterAnimals, reportById, flagQuery, flagReason, flagType, minConfidence, flagFrom, flagTo, flagSort],
+  );
+  const allPending = flags.filter((f) => f.resolution === 'pending');
+  const pending = filteredFlags.filter((f) => f.resolution === 'pending');
+  const resolved = filteredFlags.filter((f) => f.resolution !== 'pending' && (!outcome || f.resolution === outcome));
+  const flagKey = `${tab}|${flagQuery}|${flagReason}|${flagType}|${minConfidence}|${flagFrom}|${flagTo}|${outcome}|${flagSort}`;
+
+  // ---- Account filters
   const [accountQuery, setAccountQuery] = useState('');
-  const matches = (q: string, fields: (string | undefined)[]) =>
-    !q.trim() || fields.filter(Boolean).join(' ').toLowerCase().includes(q.trim().toLowerCase());
+  const [accountStatus, setAccountStatus] = useState<'' | 'active' | 'banned'>('');
+  const [accountFlags, setAccountFlags] = useState<'' | 'none' | 'some' | 'threshold'>('');
+  const [accountBarangay, setAccountBarangay] = useState('');
+  const [joinedFrom, setJoinedFrom] = useState('');
+  const [joinedTo, setJoinedTo] = useState('');
+  const [accountSort, setAccountSort] = useState<'flags' | 'newest' | 'oldest' | 'name'>('flags');
+  const accountFiltersOn = Boolean(accountQuery || accountStatus || accountFlags || accountBarangay || joinedFrom || joinedTo);
+  const clearAccountFilters = () => {
+    setAccountQuery('');
+    setAccountStatus('');
+    setAccountFlags('');
+    setAccountBarangay('');
+    setJoinedFrom('');
+    setJoinedTo('');
+  };
   const accountRows = [...users]
-    .filter((u) => matches(accountQuery, [u.fullName, u.email, u.barangay]))
-    .sort((a, b) => b.flaggedReportCount - a.flaggedReportCount);
-  const pendingPage = usePagination(pending, 10, tab);
-  const resolvedPage = usePagination(resolved, 10, tab);
-  const accountsPage = usePagination(accountRows, 10, `${tab}|${accountQuery}`);
+    .filter(
+      (u) =>
+        matchesText(accountQuery, [u.fullName, u.email, u.barangay, u.phone]) &&
+        (!accountStatus || (accountStatus === 'banned' ? u.isBanned : !u.isBanned)) &&
+        (!accountFlags ||
+          (accountFlags === 'none'
+            ? u.flaggedReportCount === 0
+            : accountFlags === 'threshold'
+              ? u.flaggedReportCount >= BAN_THRESHOLD
+              : u.flaggedReportCount > 0)) &&
+        (!accountBarangay || u.barangay === accountBarangay) &&
+        inDateRange(u.joinedAt, joinedFrom, joinedTo),
+    )
+    .sort((a, b) =>
+      accountSort === 'newest'
+        ? +new Date(b.joinedAt) - +new Date(a.joinedAt)
+        : accountSort === 'oldest'
+          ? +new Date(a.joinedAt) - +new Date(b.joinedAt)
+          : accountSort === 'name'
+            ? a.fullName.localeCompare(b.fullName)
+            : b.flaggedReportCount - a.flaggedReportCount,
+    );
+  const pendingPage = usePagination(pending, 10, flagKey);
+  const resolvedPage = usePagination(resolved, 10, flagKey);
+  const accountsPage = usePagination(
+    accountRows,
+    10,
+    `${tab}|${accountQuery}|${accountStatus}|${accountFlags}|${accountBarangay}|${joinedFrom}|${joinedTo}|${accountSort}`,
+  );
 
   /** A flag's target: a citizen's lost/found report, or a shelter's own animal posting. */
   const flaggedItem = (f: ModerationFlag): AnimalReport | ShelterAnimal | undefined =>
@@ -165,16 +247,90 @@ export function ReportMonitoringPage() {
         value={tab}
         onChange={setTab}
         options={[
-          { label: `Flagged (${pending.length})`, value: 'flagged' },
+          { label: `Flagged (${allPending.length})`, value: 'flagged' },
           { label: 'All reports (search)', value: 'all' },
-          { label: `Accounts (${accountRows.length})`, value: 'accounts' },
+          { label: `Accounts (${users.length})`, value: 'accounts' },
         ]}
       />
 
       {tab === 'flagged' ? (
         <>
           <Card>
-            <CardHead title={`Awaiting review (${pending.length})`} />
+            <div className="card-pad filter-bar" style={{ paddingTop: 16 }}>
+              <label className="mini-field" style={{ flex: '1 1 220px' }}>
+                Search
+                <input
+                  type="search"
+                  placeholder="Animal, reporter, detail, barangay..."
+                  value={flagQuery}
+                  onChange={(e) => setFlagQuery(e.target.value)}
+                />
+              </label>
+              <label className="mini-field">
+                Reason
+                <select value={flagReason} onChange={(e) => setFlagReason(e.target.value as typeof flagReason)}>
+                  <option value="">Any reason</option>
+                  {(Object.keys(flagReasonLabel) as ModerationFlag['reason'][]).map((r) => (
+                    <option key={r} value={r}>
+                      {flagReasonLabel[r]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="mini-field">
+                Type
+                <select value={flagType} onChange={(e) => setFlagType(e.target.value as typeof flagType)}>
+                  <option value="">Any type</option>
+                  <option value="lost">Lost report</option>
+                  <option value="found">Found report</option>
+                  <option value="shelter_animal">Shelter posting</option>
+                </select>
+              </label>
+              <label className="mini-field">
+                AI confidence
+                <select value={minConfidence} onChange={(e) => setMinConfidence(Number(e.target.value))}>
+                  <option value={0}>Any</option>
+                  <option value={0.5}>50% or more</option>
+                  <option value={0.7}>70% or more</option>
+                  <option value={0.9}>90% or more</option>
+                </select>
+              </label>
+              <label className="mini-field">
+                Flagged from
+                <input type="date" value={flagFrom} max={flagTo || undefined} onChange={(e) => setFlagFrom(e.target.value)} />
+              </label>
+              <label className="mini-field">
+                To
+                <input type="date" value={flagTo} min={flagFrom || undefined} onChange={(e) => setFlagTo(e.target.value)} />
+              </label>
+              <label className="mini-field">
+                Outcome (resolved)
+                <select value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)}>
+                  <option value="">Any outcome</option>
+                  <option value="dismissed">Dismissed</option>
+                  <option value="removed">Removed</option>
+                  <option value="account_banned">Account banned</option>
+                </select>
+              </label>
+              <label className="mini-field">
+                Sort by
+                <select value={flagSort} onChange={(e) => setFlagSort(e.target.value as typeof flagSort)}>
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="confidence">Highest AI confidence</option>
+                </select>
+              </label>
+              {flagFiltersOn ? (
+                <button className="btn btn-ghost btn-sm" onClick={clearFlagFilters}>
+                  Clear filters
+                </button>
+              ) : null}
+            </div>
+          </Card>
+          <Card>
+            <CardHead
+              title={flagFiltersOn ? `Awaiting review (${pending.length} of ${allPending.length})` : `Awaiting review (${pending.length})`}
+            />
             {pending.length ? (
               <table>
                 <thead>
@@ -239,8 +395,10 @@ export function ReportMonitoringPage() {
                 </tbody>
               </table>
             ) : (
-              <EmptyState title="Nothing to review">
-                The AI moderation pass has not flagged any open reports.
+              <EmptyState title={flagFiltersOn && allPending.length ? 'No flags match' : 'Nothing to review'}>
+                {flagFiltersOn && allPending.length
+                  ? 'Change or clear the filters above.'
+                  : 'The AI moderation pass has not flagged any open reports.'}
               </EmptyState>
             )}
             <Pagination {...pendingPage} />
@@ -342,7 +500,7 @@ export function ReportMonitoringPage() {
             actions={
               <input
                 type="search"
-                placeholder="Search name, email, barangay..."
+                placeholder="Search name, email, phone, barangay..."
                 value={accountQuery}
                 onChange={(e) => setAccountQuery(e.target.value)}
                 className="table-search"
@@ -350,6 +508,58 @@ export function ReportMonitoringPage() {
               />
             }
           />
+          <div className="card-pad filter-bar">
+            <label className="mini-field">
+              Status
+              <select value={accountStatus} onChange={(e) => setAccountStatus(e.target.value as typeof accountStatus)}>
+                <option value="">Any status</option>
+                <option value="active">Active</option>
+                <option value="banned">Banned</option>
+              </select>
+            </label>
+            <label className="mini-field">
+              Upheld flags
+              <select value={accountFlags} onChange={(e) => setAccountFlags(e.target.value as typeof accountFlags)}>
+                <option value="">Any</option>
+                <option value="none">None</option>
+                <option value="some">At least 1</option>
+                <option value="threshold">{BAN_THRESHOLD} or more (ban threshold)</option>
+              </select>
+            </label>
+            <label className="mini-field">
+              Barangay
+              <select value={accountBarangay} onChange={(e) => setAccountBarangay(e.target.value)}>
+                <option value="">All barangays</option>
+                {SJDM_BARANGAY_NAMES.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mini-field">
+              Joined from
+              <input type="date" value={joinedFrom} max={joinedTo || undefined} onChange={(e) => setJoinedFrom(e.target.value)} />
+            </label>
+            <label className="mini-field">
+              To
+              <input type="date" value={joinedTo} min={joinedFrom || undefined} onChange={(e) => setJoinedTo(e.target.value)} />
+            </label>
+            <label className="mini-field">
+              Sort by
+              <select value={accountSort} onChange={(e) => setAccountSort(e.target.value as typeof accountSort)}>
+                <option value="flags">Most upheld flags</option>
+                <option value="newest">Newest joined</option>
+                <option value="oldest">Oldest joined</option>
+                <option value="name">Name A-Z</option>
+              </select>
+            </label>
+            {accountFiltersOn ? (
+              <button className="btn btn-ghost btn-sm" onClick={clearAccountFilters}>
+                Clear filters
+              </button>
+            ) : null}
+          </div>
           {accountRows.length ? (
             <table>
               <thead>
@@ -416,8 +626,8 @@ export function ReportMonitoringPage() {
               </tbody>
             </table>
           ) : (
-            <EmptyState title="No registered accounts">
-              No user has registered yet.
+            <EmptyState title={users.length ? 'No accounts match' : 'No registered accounts'}>
+              {users.length ? 'Change or clear the filters above.' : 'No user has registered yet.'}
             </EmptyState>
           )}
           <Pagination {...accountsPage} />
